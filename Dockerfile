@@ -8,6 +8,7 @@ RUN dotnet build ./tools/TomTmdlBridge/TomTmdlBridge.csproj -c Release
 FROM node:20-slim AS node-builder
 WORKDIR /app
 COPY package.json package-lock.json* ./
+COPY scripts/ scripts/
 RUN npm install
 COPY . .
 # Copy the compiled .NET bridge from the previous stage
@@ -28,6 +29,7 @@ RUN apt-get update && apt-get install -y wget \
 
 WORKDIR /app
 COPY package.json package-lock.json* ./
+COPY scripts/ scripts/
 RUN npm install --production
 COPY --from=node-builder /app/dist ./dist
 # If you are using a server file or Start server, copy it too
