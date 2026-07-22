@@ -13,4 +13,9 @@ export default defineConfig({
     server: { entry: "server" },
   },
   nitro: false,
+  vite: {
+    preview: {
+      allowedHosts: true,
+    },
+  },
 });
