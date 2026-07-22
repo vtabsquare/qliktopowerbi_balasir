@@ -1,0 +1,21 @@
+{
+  "version": 2,
+  "dgSpecHash": "JnIhh0qukoQ=",
+  "success": true,
+  "projectFilePath": "C:\\Users\\91733\\Downloads\\qlik to pbi deploy\\qlik-shine-bridge\\tools\\TomTmdlBridge\\TomTmdlBridge.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\91733\\.nuget\\packages\\microsoft.analysisservices\\19.114.8\\microsoft.analysisservices.19.114.8.nupkg.sha512",
+    "C:\\Users\\91733\\.nuget\\packages\\microsoft.identity.client\\4.83.3\\microsoft.identity.client.4.83.3.nupkg.sha512",
+    "C:\\Users\\91733\\.nuget\\packages\\microsoft.identity.client.broker\\4.83.3\\microsoft.identity.client.broker.4.83.3.nupkg.sha512",
+    "C:\\Users\\91733\\.nuget\\packages\\microsoft.identity.client.nativeinterop\\0.20.4\\microsoft.identity.client.nativeinterop.0.20.4.nupkg.sha512",
+    "C:\\Users\\91733\\.nuget\\packages\\microsoft.identitymodel.abstractions\\8.14.0\\microsoft.identitymodel.abstractions.8.14.0.nupkg.sha512",
+    "C:\\Users\\91733\\.nuget\\packages\\system.diagnostics.diagnosticsource\\6.0.1\\system.diagnostics.diagnosticsource.6.0.1.nupkg.sha512",
+    "C:\\Users\\91733\\.nuget\\packages\\system.runtime.compilerservices.unsafe\\6.0.0\\system.runtime.compilerservices.unsafe.6.0.0.nupkg.sha512",
+    "C:\\Users\\91733\\.nuget\\packages\\system.valuetuple\\4.5.0\\system.valuetuple.4.5.0.nupkg.sha512",
+    "C:\\Users\\91733\\.nuget\\packages\\microsoft.netcore.app.ref\\8.0.29\\microsoft.netcore.app.ref.8.0.29.nupkg.sha512",
+    "C:\\Users\\91733\\.nuget\\packages\\microsoft.windowsdesktop.app.ref\\8.0.29\\microsoft.windowsdesktop.app.ref.8.0.29.nupkg.sha512",
+    "C:\\Users\\91733\\.nuget\\packages\\microsoft.aspnetcore.app.ref\\8.0.29\\microsoft.aspnetcore.app.ref.8.0.29.nupkg.sha512",
+    "C:\\Users\\91733\\.nuget\\packages\\microsoft.netcore.app.host.win-x64\\8.0.29\\microsoft.netcore.app.host.win-x64.8.0.29.nupkg.sha512"
+  ],
+  "logs": []
+}

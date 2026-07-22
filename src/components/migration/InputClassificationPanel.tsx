@@ -1,0 +1,18 @@
+import { AlertTriangle, CheckCircle2, Route, ShieldAlert } from "lucide-react";
+import type { UploadClassificationResult } from "@/lib/migration/input-classifier";
+
+export function InputClassificationPanel({ result }: { result: UploadClassificationResult }) {
+  return <div className="surface-card p-6 space-y-5 border border-primary/20">
+    <div className="flex items-start gap-3"><div className="grid h-11 w-11 place-items-center rounded-xl bg-primary/10 text-primary"><Route className="h-5 w-5" /></div><div><h3 className="font-display text-xl font-semibold">Input Analysis and Migration Route</h3><p className="text-sm text-muted-foreground">The upload was classified before the existing migration pipeline was executed.</p></div></div>
+    <div className="grid gap-3 md:grid-cols-4">
+      {[['Platform', result.platform], ['Package type', result.packageType], ['Completeness', result.completeness], ['Classification confidence', `${result.confidence}%`]].map(([k,v]) => <div key={k} className="rounded-xl border border-border bg-surface/50 p-4"><div className="text-xs uppercase tracking-wider text-muted-foreground">{k}</div><div className="mt-1 font-semibold break-words">{v}</div></div>)}
+    </div>
+    <div className="rounded-xl border border-border p-4"><div className="font-semibold">Recommended route: {result.selectedRoute}</div><div className="text-sm text-muted-foreground mt-1">{result.routeReason}</div></div>
+    <div className="grid gap-3 md:grid-cols-3">{result.readiness.map(r => <div key={r.key} className="rounded-xl border border-border p-3"><div className="flex justify-between text-sm font-semibold"><span>{r.label}</span><span>{r.score}%</span></div><div className="mt-2 h-2 rounded-full bg-muted overflow-hidden"><div className="h-full bg-primary" style={{width:`${r.score}%`}} /></div><div className="mt-2 text-xs text-muted-foreground">{r.reason}</div></div>)}</div>
+    <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-b border-border text-left text-muted-foreground"><th className="py-2 pr-3">File</th><th className="py-2 pr-3">Role</th><th className="py-2 pr-3">Platform</th><th className="py-2">Status</th></tr></thead><tbody>{result.detectedArtifacts.slice(0,50).map(a => <tr key={a.path} className="border-b border-border/60"><td className="py-2 pr-3 font-medium">{a.path}</td><td className="py-2 pr-3">{a.role}</td><td className="py-2 pr-3">{a.platform}</td><td className="py-2">{a.parsed ? <span className="inline-flex gap-1 items-center text-emerald-600"><CheckCircle2 className="h-4 w-4"/>Detected</span> : <span className="inline-flex gap-1 items-center text-amber-600"><AlertTriangle className="h-4 w-4"/>Inventory only</span>}</td></tr>)}</tbody></table></div>
+    {(result.missingInputs.length > 0 || result.warnings.length > 0 || result.blockingIssues.length > 0) && <div className="grid gap-3 md:grid-cols-2">
+      <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4"><div className="font-semibold flex items-center gap-2"><AlertTriangle className="h-4 w-4"/>Missing inputs / warnings</div><ul className="mt-2 space-y-1 text-sm text-muted-foreground">{[...result.missingInputs, ...result.warnings].map(x => <li key={x}>• {x}</li>)}</ul></div>
+      <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4"><div className="font-semibold flex items-center gap-2"><ShieldAlert className="h-4 w-4"/>Export gates</div><div className="mt-2 text-sm text-muted-foreground">{result.blockingIssues.length ? result.blockingIssues.map(x => <div key={x}>• {x}</div>) : "No classification-level blocker. Downstream M, DAX, model and reconciliation gates still apply."}</div></div>
+    </div>}
+  </div>;
+}
