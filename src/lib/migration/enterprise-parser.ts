@@ -1046,7 +1046,7 @@ function physicalStatus(ref: string, mapped: string, ct: string, explicitStatus 
   return (unsupported || stillQlikLogical || dbIncomplete) ? 'Needs review' : 'Mapped';
 }
 
-export function buildSourceMappings(operations: Operation[], updates: Record<string, { mappedRef?: string; connectorType?: string; status?: string; notes?: string }> = {}): SourceMap[] {
+export function buildSourceMappings(operations: Operation[], updates: Record<string, { mappedRef?: string; connectorType?: string; status?: string; notes?: string }> = {}, files: ProjectFile[] = []): SourceMap[] {
   const resolver = new QvdLineageResolver(operations);
   const rows: SourceMap[] = [];
   const seen = new Set<string>();
@@ -1066,7 +1066,27 @@ export function buildSourceMappings(operations: Operation[], updates: Record<str
       rows.push({ originalRef: ref, mappedRef: u.mappedRef || upstream || ref, connectorType: u.connectorType || 'QVD bypassed via lineage', status: u.status || 'Bypassed', notes: u.notes || notes || 'QVD is not loaded directly. Power Query rebuilds this step from the producer table and original source lineage.', table, sourceRole: role, effectiveRef: upstream || ref, qvdProducerTable: producerTable, bypassQvd: true });
       return;
     }
-    const mapped = (u.mappedRef || effectiveRef || ref).trim();
+    let mapped = (u.mappedRef || effectiveRef || ref).trim();
+    
+    // Auto-detect from uploaded files if no manual update has been made
+    if (!u.mappedRef && !bypass) {
+      const originalBasename = (ref.split(/[/\\]/).pop() || '').split('?')[0];
+      if (originalBasename) {
+        const baseNameNoExt = originalBasename.split('.').slice(0, -1).join('.').toLowerCase() || originalBasename.toLowerCase();
+        for (const f of files) {
+          if (f.isText && f.path.toLowerCase().endsWith('.qvs')) continue; // Skip script files
+          const fBasename = (f.path.split(/[/\\]/).pop() || '').split('?')[0];
+          const fBaseNameNoExt = fBasename.split('.').slice(0, -1).join('.').toLowerCase() || fBasename.toLowerCase();
+          
+          if (fBaseNameNoExt && (fBaseNameNoExt === baseNameNoExt || table.toLowerCase().startsWith(fBaseNameNoExt) || fBaseNameNoExt.startsWith(table.toLowerCase()))) {
+            const dir = ref.substring(0, ref.length - originalBasename.length);
+            mapped = dir + fBasename;
+            break;
+          }
+        }
+      }
+    }
+    
     let ct = u.connectorType || connector(mapped) || connector(ref);
     if (['Unknown','QVD - map to supported source'].includes(ct) && mapped && mapped !== ref) ct = connector(mapped);
     const status = physicalStatus(ref, mapped, ct, u.status || '');
@@ -4355,7 +4375,7 @@ export function runEnterpriseAnalysis(files: ProjectFile[], mappingUpdates: Reco
   const logicDecisions = buildQlikLogicDecisions(files, ops);
   const profiles = detectTables(ops);
   const reconstruction = buildQlikReconstructionPlan(ops, profiles, parsed.variables);
-  const maps = buildSourceMappings(ops, mappingUpdates);
+  const maps = buildSourceMappings(ops, mappingUpdates, files);
   const sourceCatalog = buildSourceCatalog(maps, ops, parsed.connections);
   const rawSamples = buildRawSampleRows(files, maps, ops);
   let executionSourcePlan = buildSourceStagingPlan(ops, maps, files);

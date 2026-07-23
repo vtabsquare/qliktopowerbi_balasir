@@ -47,7 +47,7 @@ interface MappingRow {
 }
 
 const CONNECTOR_OPTIONS = [
-  "CSV/Text","Excel","SQL Server","PostgreSQL","MySQL","SharePoint","Parquet","JSON","XML","Web/API","Folder",
+  "CSV/Text","Excel","SQL Server","PostgreSQL","MySQL","Database/SQL","SharePoint","Parquet","JSON","XML","Web/API","Folder",
   "QVD bypassed via lineage","QVD - map to supported source","Unknown",
 ];
 const STATUS_OPTIONS = ["Mapped","Needs review","Bypassed"];
