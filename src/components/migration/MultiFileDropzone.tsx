@@ -176,7 +176,10 @@ export function autoAssignSourceAndEtl(files: ExtractedFile[]): AutoAssignedFile
   const qvsFiles = scriptCandidates.filter((file) => file.extension?.toLowerCase() === ".qvs");
   const candidates = qvsFiles.length > 0 ? qvsFiles : scriptCandidates;
 
-  if (candidates.length === 0) return { sources: [], etls: [] };
+  if (candidates.length === 0) {
+    if (assignableFiles.length === 1) return { sources: [assignableFiles[0]], etls: [assignableFiles[0]] };
+    return { sources: [], etls: [] };
+  }
   if (candidates.length === 1) return { sources: [candidates[0]], etls: [candidates[0]] };
 
   const sources = candidates.filter((file) => {

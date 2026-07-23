@@ -604,7 +604,7 @@ function parseLoad(raw: string, resolved: string, file: string, start: number, e
     if (m) { prefixes.push('CONCATENATE'); concatTarget = cleanName(m[1] || ''); body = m[2].trim(); continue; }
     break;
   }
-  if (!/^(LOAD|SELECT)\b/i.test(body)) return null;
+  if (!/^(LOAD|SQL\s+SELECT|SELECT)\b/i.test(body)) return null;
   if (!table) table = joinTarget ? `JoinPayload_${String(idx).padStart(5,'0')}` : concatTarget ? `ConcatenatePayload_${String(idx).padStart(5,'0')}` : `Anonymous_${String(idx).padStart(5,'0')}`;
   let role = 'load', opType = 'load';
   if (prefixes.some(p => p.includes('MAPPING'))) { role = 'mapping'; opType = 'mapping_load'; }
