@@ -4,17 +4,8 @@ WORKDIR /app
 COPY tools/TomTmdlBridge/ ./tools/TomTmdlBridge/
 RUN dotnet build ./tools/TomTmdlBridge/TomTmdlBridge.csproj -c Release
 
-# Production Stage (Node + .NET Runtime)
+# Production Stage (Node only - deliberately missing .NET SDK)
 FROM node:22-slim
-# Install .NET Runtime (required to run the DLL)
-RUN apt-get update && apt-get install -y wget \
-    && wget https://packages.microsoft.com/config/debian/12/packages-microsoft-prod.deb -O packages-microsoft-prod.deb \
-    && dpkg -i packages-microsoft-prod.deb \
-    && rm packages-microsoft-prod.deb \
-    && apt-get update \
-    && apt-get install -y dotnet-sdk-8.0 \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 # Install Node dependencies
