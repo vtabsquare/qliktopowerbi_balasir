@@ -5,7 +5,7 @@ COPY tools/TomTmdlBridge/ ./tools/TomTmdlBridge/
 RUN dotnet build ./tools/TomTmdlBridge/TomTmdlBridge.csproj -c Release
 
 # Production Stage (Node + .NET Runtime)
-FROM node:20-slim
+FROM node:22-slim
 # Install .NET Runtime (required to run the DLL)
 RUN apt-get update && apt-get install -y wget \
     && wget https://packages.microsoft.com/config/debian/12/packages-microsoft-prod.deb -O packages-microsoft-prod.deb \
