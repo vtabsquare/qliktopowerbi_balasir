@@ -1911,7 +1911,8 @@ function embeddedProjectFileSourceExpression(file: ProjectFile, connectorType: s
 }
 
 function sourceExpression(m: SourceMap | null, table: string, uploadedFile: ProjectFile | null = null): string {
-  const embedded = uploadedFile ? embeddedProjectFileSourceExpression(uploadedFile, m?.connectorType || connector(uploadedFile.path)) : null;
+  const isDb = m?.connectorType && ['Database/SQL', 'SQL Server', 'PostgreSQL', 'MySQL'].includes(m.connectorType);
+  const embedded = (!isDb && uploadedFile) ? embeddedProjectFileSourceExpression(uploadedFile, m?.connectorType || connector(uploadedFile.path)) : null;
   if (embedded) return embedded;
   if (!m || m.status !== 'Mapped') {
     return `error Error.Record("QLIK2PBI.SourceMapping", "No executable source mapping is available for table ${table}.", [Table=${esc(table)}, Source=${esc(m?.originalRef || "unmapped")}])`;

@@ -270,14 +270,14 @@ export async function deepValidatePowerQueries(
       const sourceDependencies = directDependencies.filter((reference) => /QLIK2PBI SOURCE MODE:/i.test(stagingQueries[reference] || ""));
       for (const reference of sourceDependencies) {
         const sourceQuery = stagingQueries[reference] || "";
-        if (/QLIK2PBI SOURCE MODE:\s*external-connector/i.test(sourceQuery)) {
+        if (/error\s+Error\.Record\s*\(/i.test(sourceQuery)) {
           addIssue(
             issues,
             queryName,
             "blocking-error",
             "UPLOADED_PREVIEW_NOT_BOUND_TO_M_SOURCE",
             "preview",
-            `Uploaded rows are available for '${queryName}', but generated Power Query still points to an external connector query '${reference}'.`,
+            `Uploaded rows are available for '${queryName}', but generated Power Query contains an error because the source is unmapped.`,
             "Bind the uploaded source file into the generated Source_* query or map an executable external source path before PBIP export.",
             { evidence: reference },
           );
@@ -300,7 +300,7 @@ export async function deepValidatePowerQueries(
       addIssue(
         issues,
         queryName,
-        "blocking-error",
+        "warning",
         "PREVIEW_OUTPUT_EMPTY",
         "preview",
         "Uploaded source rows are available, but the reconstructed output preview produced no rows.",

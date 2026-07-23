@@ -2272,6 +2272,16 @@ export function EnterpriseAnalysisPanel({ files, onAnalysisComplete }: { files: 
   const [columnTypeEdits, setColumnTypeEdits] = useState<Record<string, string>>({});
   const [applyingTypes, setApplyingTypes] = useState(false);
 
+  useEffect(() => {
+    setAnalysis(null);
+    setError(null);
+    setActiveTab("summary");
+    setCompletedStages(new Set());
+    setMappingRows([]);
+    setMappingUpdates({});
+    setColumnTypeEdits({});
+  }, [files]);
+
   const runAnalysis = useCallback(async (mupdates = mappingUpdates, typeEdits = columnTypeEdits) => {
     const projectFiles = toProjectFiles(files);
     if (!projectFiles.length) { setError("No text files could be extracted from the uploaded files."); return; }
