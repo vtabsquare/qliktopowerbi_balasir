@@ -19,6 +19,8 @@ export default defineConfig({
   vite: {
     preview: {
       allowedHosts: ["qlik-to-pbi-bridge.onrender.com"],
+      host: "0.0.0.0",
+      port: process.env.PORT ? parseInt(process.env.PORT) : 3000,
     },
   },
 });
