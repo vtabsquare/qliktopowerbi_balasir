@@ -13,9 +13,12 @@ export default defineConfig({
     server: { entry: "server" },
   },
   nitro: false,
+  preview: {
+    allowedHosts: ["qlik-to-pbi-bridge.onrender.com"],
+  },
   vite: {
     preview: {
-      allowedHosts: true,
+      allowedHosts: ["qlik-to-pbi-bridge.onrender.com"],
     },
   },
 });
