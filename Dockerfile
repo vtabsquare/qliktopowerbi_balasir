@@ -30,7 +30,8 @@ RUN apt-get update && apt-get install -y wget \
 WORKDIR /app
 COPY package.json package-lock.json* ./
 COPY scripts/ scripts/
-RUN npm install --production
+RUN npm install
+COPY vite.config.ts tsconfig.json components.json ./
 COPY --from=node-builder /app/dist ./dist
 # If you are using a server file or Start server, copy it too
 # COPY --from=node-builder /app/server.js ./server.js (modify as needed)
