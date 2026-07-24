@@ -1865,6 +1865,9 @@ function dbSourceExpression(mappedRef: string, connectorType: string): string {
       }
       return `${dbFunc}(${esc(server)}, ${esc(database)}){[Item=${esc(table)}]}[Data]`;
     }
+    if (connectorType === 'PostgreSQL') {
+       return `${dbFunc}(${esc(server)}, ${esc(database)}){[Schema=${esc(schema.toLowerCase())},Item=${esc(table.toLowerCase())}]}[Data]`;
+    }
     return `${dbFunc}(${esc(server)}, ${esc(database)}){[Schema=${esc(schema)},Item=${esc(table)}]}[Data]`;
   }
   return `${dbFunc}(${esc(server)}, ${esc(database)})`;
