@@ -1323,7 +1323,7 @@ function inferDataType(columnName: string, expression = ''): string {
   const name = cleanName(columnName).toLowerCase();
   const expr = (expression || '').toLowerCase();
   if (/monthname\s*\(/.test(expr) || /quartername\s*\(/.test(expr) || /^(monthyear|monthname|quartername)$/.test(name)) return 'Text';
-  if (/(name|type|code|category|subcategory|brand|segment|band|status|city|country|region|currency|description|desc|address|email|phone)$/.test(name)) return 'Text';
+  if (/(name|type|code|category|subcategory|brand|segment|band|status|city|country|region|currency|description|desc|address|email|phone|channel)$/.test(name)) return 'Text';
   if (name === 'year' || name === 'month' || name === 'quarter' || name === 'week' || /(year|month|quarter|week)$/.test(name)) return 'Whole Number';
   if (/(date|dt$|datetime|timestamp|created|modified|shipdate|orderdate|hiredate)/.test(name) || expr.includes('date#') || expr.includes('date(')) {
     return /(time|timestamp|datetime)/.test(name) ? 'Date/Time' : 'Date';
