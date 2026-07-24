@@ -1835,7 +1835,7 @@ function inlineExpression(op: Operation): string {
   return `#table(\n        {${cols.map(esc).join(', ')}},\n        {\n        ${rows.join(',\n        ')}\n        }\n    )`;
 }
 
-function dbSourceExpression(mappedRef: string, connectorType: string): string | { dbExpr: string; navExpr: string } {
+function dbSourceExpression(mappedRef: string, connectorType: string): string | { dbExpr: string; navExpr: (dbStep: string) => string } {
   const parts: Record<string, string> = {};
   for (const piece of (mappedRef || '').split(/;|\n/)) {
     if (piece.includes('=')) { const [k, v] = piece.split('=', 2); parts[k.trim().toLowerCase()] = v.trim().replace(/^["']|["']$/g, ''); }
@@ -1858,14 +1858,22 @@ function dbSourceExpression(mappedRef: string, connectorType: string): string | 
 
   if (query) return `${dbFunc}(${esc(server)}, ${esc(database)}, [Query=${esc(query)}])`;
   if (table) {
+    const sEsc = esc(schema);
+    const tEsc = esc(table);
+    
+    // Robust fallback navigation that tries exact match first (for query folding), then case-insensitive lookup
+    const buildNav = (dbStep: string, skipSchema: boolean) => 
+      skipSchema
+        ? `let _exact = try ${dbStep}{[Item=${tEsc}]}[Data] otherwise null in if _exact <> null then _exact else Table.SelectRows(${dbStep}, each Text.Lower(Record.FieldOrDefault(_, "Item", "")) = Text.Lower(${tEsc})){0}[Data]`
+        : `let _exact = try ${dbStep}{[Schema=${sEsc},Item=${tEsc}]}[Data] otherwise null in if _exact <> null then _exact else Table.SelectRows(${dbStep}, each Text.Lower(Record.FieldOrDefault(_, "Schema", "")) = Text.Lower(${sEsc}) and Text.Lower(Record.FieldOrDefault(_, "Item", "")) = Text.Lower(${tEsc})){0}[Data]`;
+
     if (connectorType === 'MySQL') {
-      // For MySQL, Schema is optional — if provided use {[Schema=...,Item=...]}, otherwise {[Item=...]}
       if (schema && schema !== 'dbo') {
-        return { dbExpr: `${dbFunc}(${esc(server)}, ${esc(database)})`, navExpr: `{[Schema=${esc(schema)},Item=${esc(table)}]}[Data]` };
+        return { dbExpr: `${dbFunc}(${esc(server)}, ${esc(database)})`, navExpr: (dbStep) => buildNav(dbStep, false) };
       }
-      return { dbExpr: `${dbFunc}(${esc(server)}, ${esc(database)})`, navExpr: `{[Item=${esc(table)}]}[Data]` };
+      return { dbExpr: `${dbFunc}(${esc(server)}, ${esc(database)})`, navExpr: (dbStep) => buildNav(dbStep, true) };
     }
-    return { dbExpr: `${dbFunc}(${esc(server)}, ${esc(database)})`, navExpr: `{[Schema=${esc(schema)},Item=${esc(table)}]}[Data]` };
+    return { dbExpr: `${dbFunc}(${esc(server)}, ${esc(database)})`, navExpr: (dbStep) => buildNav(dbStep, false) };
   }
   return `${dbFunc}(${esc(server)}, ${esc(database)})`;
 }
@@ -1944,7 +1952,7 @@ function embeddedProjectFileSourceExpression(file: ProjectFile, connectorType: s
   return `let\n            _binary = ${binary},\n            _rows = Csv.Document(_binary, [Delimiter=${esc(delimiter)}, Encoding=65001, QuoteStyle=QuoteStyle.Csv]),\n            _table = Table.PromoteHeaders(_rows, [PromoteAllScalars=true])\n        in\n            _table`;
 }
 
-function sourceExpression(m: SourceMap | null, table: string, uploadedFile: ProjectFile | null = null): string | { dbExpr: string; navExpr: string } {
+function sourceExpression(m: SourceMap | null, table: string, uploadedFile: ProjectFile | null = null): string | { dbExpr: string; navExpr: (dbStep: string) => string } {
   const isDb = m?.connectorType && ['Database/SQL', 'SQL Server', 'PostgreSQL', 'MySQL'].includes(m.connectorType);
   const embedded = (!isDb && uploadedFile) ? embeddedProjectFileSourceExpression(uploadedFile, m?.connectorType || connector(uploadedFile.path)) : null;
   if (embedded) return embedded;
@@ -2034,7 +2042,7 @@ function buildSourceStagingPlan(
       if (typeof srcExpr === "string") {
         queryBody = `    Source = ${srcExpr}\nin\n    Source`;
       } else {
-        queryBody = `    Source = ${srcExpr.dbExpr},\n    Navigation = Source${srcExpr.navExpr}\nin\n    Navigation`;
+        queryBody = `    Source = ${srcExpr.dbExpr},\n    Navigation = ${srcExpr.navExpr("Source")}\nin\n    Navigation`;
       }
       const rawQuery = `let
     // QLIK2PBI SOURCE MODE: ${sourceModeByQuery[queryName]}
@@ -2631,10 +2639,10 @@ class MBuilder {
   }
   private addStep(name: string, expr: string): string { this.assignments.push([name, expr || '#table({}, {}']); return name; }
 
-  private applySourceExpression(srcExpr: string | { dbExpr: string; navExpr: string }): string {
+  private applySourceExpression(srcExpr: string | { dbExpr: string; navExpr: (dbStep: string) => string }): string {
     if (typeof srcExpr === 'string') return this.addStep(this.nextStep("Source"), srcExpr);
     const dbStep = this.addStep(this.nextStep("Source"), srcExpr.dbExpr);
-    return this.addStep(this.nextStep("Navigation"), `${dbStep}${srcExpr.navExpr}`);
+    return this.addStep(this.nextStep("Navigation"), srcExpr.navExpr(dbStep));
   }
 
   private render(finalStep: string): string {
