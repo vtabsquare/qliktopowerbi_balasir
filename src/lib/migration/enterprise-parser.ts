@@ -1835,7 +1835,7 @@ function inlineExpression(op: Operation): string {
   return `#table(\n        {${cols.map(esc).join(', ')}},\n        {\n        ${rows.join(',\n        ')}\n        }\n    )`;
 }
 
-function dbSourceExpression(mappedRef: string, connectorType: string): string {
+function dbSourceExpression(mappedRef: string, connectorType: string): string | { dbExpr: string; navExpr: string } {
   const parts: Record<string, string> = {};
   for (const piece of (mappedRef || '').split(/;|\n/)) {
     if (piece.includes('=')) { const [k, v] = piece.split('=', 2); parts[k.trim().toLowerCase()] = v.trim().replace(/^["']|["']$/g, ''); }
@@ -1861,14 +1861,11 @@ function dbSourceExpression(mappedRef: string, connectorType: string): string {
     if (connectorType === 'MySQL') {
       // For MySQL, Schema is optional — if provided use {[Schema=...,Item=...]}, otherwise {[Item=...]}
       if (schema && schema !== 'dbo') {
-        return `${dbFunc}(${esc(server)}, ${esc(database)}){[Schema=${esc(schema)},Item=${esc(table)}]}[Data]`;
+        return { dbExpr: `${dbFunc}(${esc(server)}, ${esc(database)})`, navExpr: `{[Schema=${esc(schema)},Item=${esc(table)}]}[Data]` };
       }
-      return `${dbFunc}(${esc(server)}, ${esc(database)}){[Item=${esc(table)}]}[Data]`;
+      return { dbExpr: `${dbFunc}(${esc(server)}, ${esc(database)})`, navExpr: `{[Item=${esc(table)}]}[Data]` };
     }
-    if (connectorType === 'PostgreSQL') {
-       return `${dbFunc}(${esc(server)}, ${esc(database)}){[Schema=${esc(schema.toLowerCase())},Item=${esc(table.toLowerCase())}]}[Data]`;
-    }
-    return `${dbFunc}(${esc(server)}, ${esc(database)}){[Schema=${esc(schema)},Item=${esc(table)}]}[Data]`;
+    return { dbExpr: `${dbFunc}(${esc(server)}, ${esc(database)})`, navExpr: `{[Schema=${esc(schema)},Item=${esc(table)}]}[Data]` };
   }
   return `${dbFunc}(${esc(server)}, ${esc(database)})`;
 }
@@ -1947,7 +1944,7 @@ function embeddedProjectFileSourceExpression(file: ProjectFile, connectorType: s
   return `let\n            _binary = ${binary},\n            _rows = Csv.Document(_binary, [Delimiter=${esc(delimiter)}, Encoding=65001, QuoteStyle=QuoteStyle.Csv]),\n            _table = Table.PromoteHeaders(_rows, [PromoteAllScalars=true])\n        in\n            _table`;
 }
 
-function sourceExpression(m: SourceMap | null, table: string, uploadedFile: ProjectFile | null = null): string {
+function sourceExpression(m: SourceMap | null, table: string, uploadedFile: ProjectFile | null = null): string | { dbExpr: string; navExpr: string } {
   const isDb = m?.connectorType && ['Database/SQL', 'SQL Server', 'PostgreSQL', 'MySQL'].includes(m.connectorType);
   const embedded = (!isDb && uploadedFile) ? embeddedProjectFileSourceExpression(uploadedFile, m?.connectorType || connector(uploadedFile.path)) : null;
   if (embedded) return embedded;
@@ -2032,12 +2029,17 @@ function buildSourceStagingPlan(
       sourceModeByQuery[queryName] = uploadedFile && embeddedProjectFileSourceExpression(uploadedFile, mapping?.connectorType || connector(uploadedFile.path))
         ? "embedded-upload"
         : "external-connector";
+      const srcExpr = sourceExpression(mapping, operation.table, uploadedFile);
+      let queryBody = "";
+      if (typeof srcExpr === "string") {
+        queryBody = `    Source = ${srcExpr}\nin\n    Source`;
+      } else {
+        queryBody = `    Source = ${srcExpr.dbExpr},\n    Navigation = Source${srcExpr.navExpr}\nin\n    Navigation`;
+      }
       const rawQuery = `let
     // QLIK2PBI SOURCE MODE: ${sourceModeByQuery[queryName]}
     // QLIK2PBI SOURCE REF: ${String(uploadedFile?.path || mapping?.mappedRef || sourceRef).replace(/\r?\n/g, " ")}
-    Source = ${sourceExpression(mapping, operation.table, uploadedFile)}
-in
-    Source`;
+${queryBody}`;
       // Source staging queries must preserve the raw uploaded values. Final-model
       // datatype contracts belong to the table compiler, not the physical source
       // reader. Applying semantic types here can irreversibly turn identifiers
@@ -2629,6 +2631,12 @@ class MBuilder {
   }
   private addStep(name: string, expr: string): string { this.assignments.push([name, expr || '#table({}, {}']); return name; }
 
+  private applySourceExpression(srcExpr: string | { dbExpr: string; navExpr: string }): string {
+    if (typeof srcExpr === 'string') return this.addStep(this.nextStep("Source"), srcExpr);
+    const dbStep = this.addStep(this.nextStep("Source"), srcExpr.dbExpr);
+    return this.addStep(this.nextStep("Navigation"), `${dbStep}${srcExpr.navExpr}`);
+  }
+
   private render(finalStep: string): string {
     const lines = ['let'];
     for (let i = 0; i < this.assignments.length; i++) {
@@ -2764,14 +2772,14 @@ in
           const sourceQuery = op.id ? this.sourceQueryByOperationId.get(op.id) : undefined;
           const base = sourceQuery
             ? this.addStep(this.nextStep("Source"), qname(sourceQuery))
-            : this.addStep(this.nextStep("Source"), sourceExpression(this.mappingFor(src), op.table));
+            : this.applySourceExpression(sourceExpression(this.mappingFor(src), op.table));
           result = this.applyLoadSteps(base, op);
         }
       } else {
         const sourceQuery = op.id ? this.sourceQueryByOperationId.get(op.id) : undefined;
         const base = sourceQuery
           ? this.addStep(this.nextStep("Source"), qname(sourceQuery))
-          : this.addStep(this.nextStep("Source"), sourceExpression(this.mappingFor(src), op.table));
+          : this.applySourceExpression(sourceExpression(this.mappingFor(src), op.table));
         result = this.applyLoadSteps(base, op);
       }
     } else if (op.resident.length) {
@@ -2807,7 +2815,7 @@ in
       const sourceQuery = op.id ? this.sourceQueryByOperationId.get(op.id) : undefined;
       const base = sourceQuery
         ? this.addStep(this.nextStep("Source"), qname(sourceQuery))
-        : this.addStep(this.nextStep("Source"), sourceExpression(this.mappingFor(src), op.table));
+        : this.applySourceExpression(sourceExpression(this.mappingFor(src), op.table));
       return this.applyLoadSteps(base, op);
     }
     if (op.resident.length) { const base = this.buildTable(op.resident[0], false); return this.applyLoadSteps(base, op); }
