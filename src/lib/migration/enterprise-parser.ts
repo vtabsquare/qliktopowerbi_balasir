@@ -1817,12 +1817,17 @@ function dbSourceExpression(mappedRef: string, connectorType: string): string {
   for (const piece of (mappedRef || '').split(/;|\n/)) {
     if (piece.includes('=')) { const [k, v] = piece.split('=', 2); parts[k.trim().toLowerCase()] = v.trim().replace(/^["']|["']$/g, ''); }
   }
-  const server = parts['server'] || parts['host'] || parts['data source'];
+  let server = parts['server'] || parts['host'] || parts['data source'];
   const database = parts['database'] || parts['db'] || parts['initial catalog'];
   const query = parts['query'] || parts['sql'];
   const schema = parts['schema'] || 'dbo';
   const table = parts['table'] || parts['item'];
   if (!server || !database) return `error Error.Record("QLIK2PBI.SourceMapping", "Database source requires Server and Database values.", [Source=${esc(mappedRef)}])`;
+
+  // Fix SQL Server instance names that mistakenly use a forward slash instead of a backslash
+  if (server && ['SQL Server', 'Database/SQL'].includes(connectorType)) {
+    server = server.replace(/\//g, '\\');
+  }
 
   let dbFunc = 'Sql.Database';
   if (connectorType === 'PostgreSQL') dbFunc = 'PostgreSQL.Database';
