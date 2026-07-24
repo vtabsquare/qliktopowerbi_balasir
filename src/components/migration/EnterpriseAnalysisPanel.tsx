@@ -474,9 +474,7 @@ function DynamicMappingInput({ connectorType, value, onChange }: { connectorType
       <div className="flex gap-2 min-w-[350px]">
         <input value={parts['Server'] || ''} onChange={e => updatePart('Server', e.target.value)} placeholder="Server" className="w-1/4 px-2 py-1 rounded border border-border bg-surface text-xs text-foreground font-mono" />
         <input value={parts['Database'] || ''} onChange={e => updatePart('Database', e.target.value)} placeholder="Database" className="w-1/4 px-2 py-1 rounded border border-border bg-surface text-xs text-foreground font-mono" />
-        {connectorType !== "MySQL" && (
-          <input value={parts['Schema'] || ''} onChange={e => updatePart('Schema', e.target.value)} placeholder="Schema" className="w-1/4 px-2 py-1 rounded border border-border bg-surface text-xs text-foreground font-mono" />
-        )}
+        <input value={parts['Schema'] || ''} onChange={e => updatePart('Schema', e.target.value)} placeholder={connectorType === "MySQL" ? "Schema (opt.)" : "Schema"} className="w-1/4 px-2 py-1 rounded border border-border bg-surface text-xs text-foreground font-mono" />
         <input value={parts['Table'] || ''} onChange={e => updatePart('Table', e.target.value)} placeholder="Table/View" className="w-1/4 px-2 py-1 rounded border border-border bg-surface text-xs text-foreground font-mono" />
       </div>
     );

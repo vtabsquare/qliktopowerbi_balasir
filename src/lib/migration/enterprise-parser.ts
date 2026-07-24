@@ -1858,7 +1858,13 @@ function dbSourceExpression(mappedRef: string, connectorType: string): string {
 
   if (query) return `${dbFunc}(${esc(server)}, ${esc(database)}, [Query=${esc(query)}])`;
   if (table) {
-    if (connectorType === 'MySQL') return `${dbFunc}(${esc(server)}, ${esc(database)}){[Item=${esc(table)}]}[Data]`;
+    if (connectorType === 'MySQL') {
+      // For MySQL, Schema is optional — if provided use {[Schema=...,Item=...]}, otherwise {[Item=...]}
+      if (schema && schema !== 'dbo') {
+        return `${dbFunc}(${esc(server)}, ${esc(database)}){[Schema=${esc(schema)},Item=${esc(table)}]}[Data]`;
+      }
+      return `${dbFunc}(${esc(server)}, ${esc(database)}){[Item=${esc(table)}]}[Data]`;
+    }
     return `${dbFunc}(${esc(server)}, ${esc(database)}){[Schema=${esc(schema)},Item=${esc(table)}]}[Data]`;
   }
   return `${dbFunc}(${esc(server)}, ${esc(database)})`;
@@ -3915,6 +3921,8 @@ function requiredDetails(connectorType: string, ref = ''): string {
   if (ct === 'XML') return 'XML file path plus element/table extraction rule if nested.';
   if (ct === 'Folder') return 'Folder path and file-combine rule/pattern.';
   if (ct === 'Database/SQL') return 'Server, database, schema/table or native SQL query, authentication method. Format: server=SERVER;database=DB;schema=dbo;table=TableName';
+  if (ct === 'MySQL') return 'Server, database, optional schema, and table/view name. Format: server=SERVER;database=DB;schema=SCHEMA;table=TableName';
+  if (ct === 'SQL Server' || ct === 'PostgreSQL') return 'Server, database, schema, and table/view name. Format: server=SERVER;database=DB;schema=SCHEMA;table=TableName';
   if (ref.toLowerCase().includes('qvd')) return 'Upload the QVD generator script or map to the original CSV/Excel/SQL source.';
   return 'Choose connector type and provide a Power BI-readable mapped source reference.';
 }
