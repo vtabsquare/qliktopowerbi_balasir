@@ -649,12 +649,30 @@ function parseLoad(raw: string, resolved: string, file: string, start: number, e
   };
 }
 
+export function isQlikScriptFile(file: ProjectFile): boolean {
+  if (!file.isText) return false;
+  const p = (file.path || '').toLowerCase().replace(/\\/g, '/');
+  const name = p.split('/').pop() || '';
+  const ext = (file.ext || ('.' + name.split('.').pop()) || '').toLowerCase();
+  
+  if (['.sql', '.csv', '.tsv', '.json', '.xml', '.md', '.yaml', '.yml', '.xlsx', '.pbix', '.pbit', '.doc', '.docx', '.pdf'].includes(ext)) {
+    return false;
+  }
+  if (ext === '.qvs' || name === 'loadscript.txt' || name === 'module.txt') {
+    return true;
+  }
+  if (p.includes('-prj/') && (ext === '.txt' || ext === '.qvs')) {
+    return true;
+  }
+  return /\b(LOAD|RESIDENT|AUTOGENERATE|QUALIFY|UNQUALIFY|STORE|MAPPING\s+LOAD|SET|LET)\b/i.test(file.content || '');
+}
+
 export function parseProject(files: ProjectFile[]): { operations: Operation[]; variables: Record<string, string>; connections: { type: string; connection: string; file: string; line: number }[] } {
   const statements: [ProjectFile, string, number, number][] = [];
   const variables: Record<string, string> = {};
   const connections: { type: string; connection: string; file: string; line: number }[] = [];
   for (const pf of files) {
-    if (!pf.isText) continue;
+    if (!pf.isText || !isQlikScriptFile(pf)) continue;
     for (const [raw, start, end] of splitStatements(pf.content)) {
       const norm = raw.replace(/;+$/, '').trim().replace(/\s+/g, ' ');
       const vm = norm.match(/^(SET|LET)\s+([^=]+?)\s*=\s*(.*)$/i);
@@ -671,9 +689,14 @@ export function parseProject(files: ProjectFile[]): { operations: Operation[]; v
     if (cm) { connections.push({ type: cm[1].toUpperCase(), connection: cm[2], file: pf.path, line: start }); continue; }
     const dm = norm.match(/^DROP\s+TABLES?\s+(.+)/i);
     if (dm) {
-      for (const t of dm[1].split(/,|\s+/)) {
+      let targetList = dm[1].trim();
+      targetList = targetList.replace(/^IF\s+EXISTS\s+/i, '');
+      for (const t of targetList.split(/,|\s+/)) {
         const tn = t.trim().replace(/;+$/, '');
-        if (tn) { count++; operations.push({ id: `OP${String(count).padStart(5,'0')}`, table: cleanName(tn), opType: 'drop', role: 'dropped', file: pf.path, startLine: start, endLine: end, raw, resolvedRaw: resolved, fields: [], calculatedFields: [], fieldExpressions: {}, sourceRefs: [], resident: [], qvdInputs: [], qvdOutputs: [], inlineColumns: [], inlineRows: [], where: '', groupBy: [], joinTarget: '', concatTarget: '', applymaps: [], aggregations: [], warnings: [] }); }
+        if (tn && !/^(IF|EXISTS)$/i.test(tn)) {
+          count++;
+          operations.push({ id: `OP${String(count).padStart(5,'0')}`, table: cleanName(tn), opType: 'drop', role: 'dropped', file: pf.path, startLine: start, endLine: end, raw, resolvedRaw: resolved, fields: [], calculatedFields: [], fieldExpressions: {}, sourceRefs: [], resident: [], qvdInputs: [], qvdOutputs: [], inlineColumns: [], inlineRows: [], where: '', groupBy: [], joinTarget: '', concatTarget: '', applymaps: [], aggregations: [], warnings: [] });
+        }
       }
       continue;
     }
