@@ -26,6 +26,7 @@ import { parseQvwProject } from "@/lib/migration/qvw";
 import { LayoutDashboard, FileWarning } from "lucide-react";
 import { classifyUploadedArtifacts, type UploadClassificationResult } from "@/lib/migration/input-classifier";
 import { InputClassificationPanel } from "@/components/migration/InputClassificationPanel";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/")({
   component: UploadPage,
@@ -329,15 +330,31 @@ function UploadPage() {
 
   const handleNext = () => {
     setEnterpriseFiles(allFiles);
-    navigate({ to: "/app/analysis" });
+    if (!qvwAnalysis) {
+      toast.info("No QVW content detected", {
+        description: "Skipping visualization and expression analysis stages (Steps 3 & 4) because no QVW package was found.",
+        duration: 6000,
+      });
+      navigate({ to: "/app/analysis" });
+    } else {
+      navigate({ to: "/app/qvw-analysis" });
+    }
   };
 
   return (
     <div className="space-y-6">
+      {/* Contextual Guidance */}
+      <div className="surface-card p-5 sm:p-6 border-l-4 border-l-primary bg-primary/5 shadow-sm">
+        <h2 className="font-display text-xl font-bold text-foreground">Phase 1: Upload & Extraction</h2>
+        <p className="text-sm text-muted-foreground mt-1.5 max-w-2xl">
+          Upload your Qlik files here. The engine will automatically parse QVS scripts, classify ETL logic, and extract any visualization packages needed for the migration pipeline.
+        </p>
+      </div>
+
       {/* Upload Section */}
-      <div className="surface-card p-6 space-y-4">
+      <div className="surface-card p-6 space-y-4 shadow-sm border border-border/50">
         <div className="flex items-start gap-4 mb-2">
-          <div className="grid h-11 w-11 place-items-center rounded-xl bg-accent text-primary shrink-0">
+          <div className="grid h-11 w-11 place-items-center rounded-xl bg-primary/10 text-primary shrink-0">
             <PackageOpen className="h-5 w-5" />
           </div>
           <div>
@@ -424,10 +441,12 @@ function UploadPage() {
 
       {/* Analyse button */}
       {allFiles.length > 0 && (
-        <div className="surface-card p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div className="surface-card p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4 shadow-sm border border-border/50">
           <div>
-            <h3 className="font-display text-xl font-semibold">Lineage Analysis Engine</h3>
-            <p className="text-sm text-muted-foreground">
+            <h3 className="font-display text-lg font-semibold flex items-center gap-2">
+              <Database className="h-5 w-5 text-primary" /> Lineage Analysis Engine
+            </h3>
+            <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
               {canAnalyze
                 ? singleScriptMode
                   ? `Single-QVS mode: ${selectedSources[0]?.name} will be analysed end-to-end as both source and ETL logic.`
@@ -560,7 +579,7 @@ function UploadPage() {
           disabled={!complete || hasSyntaxErrors}
           className="flex items-center gap-2 px-6 py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-sm shadow-lg hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
         >
-          Proceed to Enterprise Analysis <ArrowRight className="h-4 w-4" />
+          {qvwAnalysis ? "Proceed to QVW Analysis" : "Proceed to Enterprise Analysis"} <ArrowRight className="h-4 w-4" />
         </button>
       </div>
     </div>

@@ -272,7 +272,7 @@ export function Stage5Dax({ onNext }: { onNext?: () => void }) {
           </div>
 
           <div className="surface-card overflow-hidden">
-            <pre className="p-6 text-xs font-mono leading-relaxed overflow-auto max-h-[32rem] bg-surface-elevated">
+            <pre className="p-6 text-xs font-mono leading-relaxed overflow-auto max-h-[42rem] min-h-[28rem] bg-surface-elevated">
 {code}
             </pre>
           </div>

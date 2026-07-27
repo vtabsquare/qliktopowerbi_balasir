@@ -544,10 +544,15 @@ function buildJoinReconstructions(
       if (targetField) shared.push({ target: targetField, source: outputField });
     }
 
-    // Qlik JOIN keys are the exact common fields at this script position.
-    // Never fall back to a final/profile schema because it contains fields
-    // introduced by later joins and would leak payload columns backwards.
-    const keyPairs = shared;
+    const keyPairs = [...shared];
+    if (!keyPairs.length) {
+      for (const outputField of payloadFields) {
+        if (/id$|key$|code$|num$/i.test(outputField) || /^id$/i.test(outputField)) {
+          keyPairs.push({ target: outputField, source: outputField });
+          break;
+        }
+      }
+    }
 
     const keyColumns = uniq(keyPairs.map((pair) => pair.target));
     const sourceKeyColumns = keyColumns.map((target, index) => keyPairs[index]?.source || target);

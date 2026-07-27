@@ -21,7 +21,7 @@ function CalendarBuilder({ analysis, onAnalysisUpdate }: { analysis: EnterpriseA
   const sourceTable = finalTables.some((table) => table.table === config.sourceTable) ? config.sourceTable : finalTables[0]?.table || "";
   const sourceFields = sourceTable ? (analysis.profiles[sourceTable]?.fields || []) : [];
   const dateFields = sourceFields.filter((field) => {
-    const type = analysis.columnTypes?.[sourceTable]?.[field] || "";
+    const type = (sourceTable ? analysis.columnTypes?.[sourceTable]?.[field] : undefined) || "";
     return /date|time/i.test(type) || /date|day|month|year/i.test(field);
   });
   const sourceColumn = dateFields.includes(config.sourceColumn || "") ? config.sourceColumn : dateFields[0] || sourceFields[0] || "";
@@ -94,7 +94,7 @@ function CalendarBuilder({ analysis, onAnalysisUpdate }: { analysis: EnterpriseA
           </label>
           <label className="text-xs font-medium">Date column
             <select value={sourceColumn} onChange={(event) => update("sourceColumn", event.target.value)} className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm">
-              {(dateFields.length ? dateFields : sourceFields).map((field) => <option key={field} value={field}>{field} · {analysis.columnTypes?.[sourceTable]?.[field] || "Detected"}</option>)}
+              {(dateFields.length ? dateFields : sourceFields).map((field) => <option key={field} value={field}>{field} · {(sourceTable ? analysis.columnTypes?.[sourceTable]?.[field] : undefined) || "Detected"}</option>)}
             </select>
           </label>
         </>}
@@ -185,9 +185,11 @@ function ExecutionPlanReview({ analysis }: { analysis: EnterpriseAnalysis }) {
   const plans = Object.values(analysis.executionPlans || {}).filter((plan) => plan.tableName !== "Qlik Variables");
   if (!plans.length) return null;
   return (
-    <div className="surface-card p-4">
-      <h3 className="font-display font-semibold text-lg text-foreground mb-1">Table execution plans</h3>
-      <p className="text-sm text-muted-foreground mb-4">One authoritative plan drives the ten-row preview, Power Query M, final model columns, validation, and PBIP export. Every visible generated step returns a table.</p>
+    <div className="space-y-4">
+      <div>
+        <h3 className="font-display font-semibold text-base text-foreground mb-1">Table execution plans</h3>
+        <p className="text-xs text-muted-foreground">One authoritative plan drives the ten-row preview, Power Query M, final model columns, validation, and PBIP export. Every visible generated step returns a table.</p>
+      </div>
       <div className="space-y-3">
         {plans.map((plan) => (
           <details key={plan.tableName} className="rounded-xl border border-border bg-background">
@@ -225,38 +227,12 @@ function ExecutionPlanReview({ analysis }: { analysis: EnterpriseAnalysis }) {
 export function EnterprisePowerQueryPage({ analysis, columnTypeEdits, onTypeChange, onAnalysisUpdate }: Props) {
   return (
     <div className="space-y-6">
-      <CalendarBuilder analysis={analysis} onAnalysisUpdate={onAnalysisUpdate} />
-      <div className="surface-card p-4">
-        <h3 className="font-display font-semibold text-lg text-foreground mb-1">AI-assisted consolidated load reconstruction</h3>
-        <p className="text-sm text-muted-foreground mb-4">The backend completes multiple deterministic passes before Power Query or DAX is produced: parse, lineage backtracking, static-table consolidation, aggregation separation, key construction and model optimization.</p>
-        <ReconstructionPlan analysis={analysis} />
-      </div>
-      <ExecutionPlanReview analysis={analysis} />
-      <div className="surface-card p-4">
-        <h3 className="font-display font-semibold text-lg text-foreground mb-1">Final Tables Overview</h3>
-        <p className="text-sm text-muted-foreground mb-4">Review each final table's columns, lineage, and data types before generating M Query code.</p>
-        <TabFinalTables analysis={analysis} />
-      </div>
-      <div className="surface-card p-4">
-        <h3 className="font-display font-semibold text-lg text-foreground mb-1">Qlik Logic Decisions</h3>
-        <p className="text-sm text-muted-foreground mb-4">The migration engine classifies Qlik-only runtime, formatting, persistence and security constructs before writing Power Query.</p>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-          {(["translate", "preserve-metadata", "ignore-runtime", "manual-review"] as const).map((action) => (
-            <div key={action} className="rounded-xl border border-border p-3 bg-surface-elevated/40">
-              <div className="text-xs text-muted-foreground capitalize">{action.replace("-", " ")}</div>
-              <div className="text-xl font-bold">{analysis.logicDecisions?.filter((item) => item.action === action).length || 0}</div>
-            </div>
-          ))}
+      {/* 1. Primary Workspace: M Query Generation & Data Types */}
+      <div className="surface-card p-5 sm:p-6 border-2 border-primary/30 shadow-lg bg-gradient-to-b from-background via-surface to-surface-elevated/20">
+        <div className="flex items-center justify-between gap-3 mb-2">
+          <h3 className="font-display font-bold text-xl text-foreground">M Query Generation &amp; Data Types</h3>
+          <span className="rounded-full bg-primary/15 px-3 py-1 text-xs font-semibold text-primary">Primary Workspace</span>
         </div>
-        <div className="max-h-64 overflow-auto rounded-xl border border-border">
-          <table className="w-full text-xs">
-            <thead className="sticky top-0 bg-surface-elevated"><tr><th className="p-2 text-left">Construct</th><th className="p-2 text-left">Decision</th><th className="p-2 text-left">Power BI handling</th></tr></thead>
-            <tbody>{(analysis.logicDecisions || []).map((item) => <tr key={item.id} className="border-t border-border"><td className="p-2 max-w-[320px] truncate" title={item.qlikConstruct}>{item.category}: {item.qlikConstruct}</td><td className="p-2 capitalize">{item.action.replace("-", " ")}</td><td className="p-2 text-muted-foreground">{item.handling}</td></tr>)}</tbody>
-          </table>
-        </div>
-      </div>
-      <div className="surface-card p-4">
-        <h3 className="font-display font-semibold text-lg text-foreground mb-1">M Query Generation &amp; Data Types</h3>
         <p className="text-sm text-muted-foreground mb-4">Edit Power BI data types, save, then generate optimized M Query code for each table.</p>
         <TabMQueryDataTypes
           analysis={analysis}
@@ -264,6 +240,74 @@ export function EnterprisePowerQueryPage({ analysis, columnTypeEdits, onTypeChan
           onTypeChange={onTypeChange}
           onAnalysisUpdate={onAnalysisUpdate}
         />
+      </div>
+
+      {/* 2. Calendar Builder */}
+      <CalendarBuilder analysis={analysis} onAnalysisUpdate={onAnalysisUpdate} />
+
+      {/* 3. Collapsible Secondary & Diagnostic Sections */}
+      <div className="space-y-4 pt-4 border-t border-border/60">
+        <h4 className="font-display text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1">Background Lineage &amp; Engine Diagnostics</h4>
+
+        <details className="surface-card p-4 rounded-xl border border-border/50 group cursor-pointer shadow-sm">
+          <summary className="font-display font-semibold text-base text-foreground flex items-center justify-between">
+            <span>AI-assisted consolidated load reconstruction</span>
+            <span className="text-xs text-primary group-open:hidden">View Reconstruction</span>
+            <span className="text-xs text-primary hidden group-open:inline">Hide Reconstruction</span>
+          </summary>
+          <div className="mt-4 pt-4 border-t border-border/50 cursor-default">
+            <p className="text-sm text-muted-foreground mb-4">The backend completes multiple deterministic passes before Power Query or DAX is produced: parse, lineage backtracking, static-table consolidation, aggregation separation, key construction and model optimization.</p>
+            <ReconstructionPlan analysis={analysis} />
+          </div>
+        </details>
+
+        <details className="surface-card p-4 rounded-xl border border-border/50 group cursor-pointer shadow-sm">
+          <summary className="font-display font-semibold text-base text-foreground flex items-center justify-between">
+            <span>Table execution plans</span>
+            <span className="text-xs text-primary group-open:hidden">View Execution Plans</span>
+            <span className="text-xs text-primary hidden group-open:inline">Hide Execution Plans</span>
+          </summary>
+          <div className="mt-4 pt-4 border-t border-border/50 cursor-default">
+            <ExecutionPlanReview analysis={analysis} />
+          </div>
+        </details>
+
+        <details className="surface-card p-4 rounded-xl border border-border/50 group cursor-pointer shadow-sm">
+          <summary className="font-display font-semibold text-base text-foreground flex items-center justify-between">
+            <span>Final Tables Overview ({analysis.finalTables.length} tables)</span>
+            <span className="text-xs text-primary group-open:hidden">View Final Tables</span>
+            <span className="text-xs text-primary hidden group-open:inline">Hide Final Tables</span>
+          </summary>
+          <div className="mt-4 pt-4 border-t border-border/50 cursor-default">
+            <p className="text-sm text-muted-foreground mb-4">Review each final table's columns, lineage, and data types before generating M Query code.</p>
+            <TabFinalTables analysis={analysis} />
+          </div>
+        </details>
+
+        <details className="surface-card p-4 rounded-xl border border-border/50 group cursor-pointer shadow-sm">
+          <summary className="font-display font-semibold text-base text-foreground flex items-center justify-between">
+            <span>Qlik Logic Decisions ({(analysis.logicDecisions || []).length} items)</span>
+            <span className="text-xs text-primary group-open:hidden">View Decisions</span>
+            <span className="text-xs text-primary hidden group-open:inline">Hide Decisions</span>
+          </summary>
+          <div className="mt-4 pt-4 border-t border-border/50 cursor-default">
+            <p className="text-sm text-muted-foreground mb-4">The migration engine classifies Qlik-only runtime, formatting, persistence and security constructs before writing Power Query.</p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+              {(["translate", "preserve-metadata", "ignore-runtime", "manual-review"] as const).map((action) => (
+                <div key={action} className="rounded-xl border border-border p-3 bg-surface-elevated/40">
+                  <div className="text-xs text-muted-foreground capitalize">{action.replace("-", " ")}</div>
+                  <div className="text-xl font-bold">{analysis.logicDecisions?.filter((item) => item.action === action).length || 0}</div>
+                </div>
+              ))}
+            </div>
+            <div className="max-h-64 overflow-auto rounded-xl border border-border">
+              <table className="w-full text-xs">
+                <thead className="sticky top-0 bg-surface-elevated"><tr><th className="p-2 text-left">Construct</th><th className="p-2 text-left">Decision</th><th className="p-2 text-left">Power BI handling</th></tr></thead>
+                <tbody>{(analysis.logicDecisions || []).map((item) => <tr key={item.id} className="border-t border-border"><td className="p-2 max-w-[320px] truncate" title={item.qlikConstruct}>{item.category}: {item.qlikConstruct}</td><td className="p-2 capitalize">{item.action.replace("-", " ")}</td><td className="p-2 text-muted-foreground">{item.handling}</td></tr>)}</tbody>
+              </table>
+            </div>
+          </div>
+        </details>
       </div>
     </div>
   );

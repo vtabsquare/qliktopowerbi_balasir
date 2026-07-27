@@ -185,7 +185,7 @@ export function Stage4PowerQuery({ onNext }: { onNext: () => void }) {
                 >
                   {copied ? <><Check className="h-3 w-3" /> Copied</> : <><Copy className="h-3 w-3" /> Copy</>}
                 </button>
-                <pre className="p-6 text-xs font-mono leading-relaxed overflow-auto max-h-[28rem] bg-surface-elevated text-foreground">
+                <pre className="p-6 text-xs font-mono leading-relaxed overflow-auto max-h-[42rem] min-h-[30rem] bg-surface-elevated text-foreground">
 {current.code}
                 </pre>
               </div>

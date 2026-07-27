@@ -103,6 +103,8 @@ export interface TomNamedExpression {
   expression: string;
   kind: "m";
   description?: string;
+  /** When true the expression is written with enableLoad: false so Power BI does not try to load it as a table. */
+  isLoadDisabled?: boolean;
   annotations?: TomAnnotation[];
 }
 

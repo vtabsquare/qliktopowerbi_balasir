@@ -114,14 +114,22 @@ function QvwAnalysisPage() {
 
   return (
     <div className="space-y-6">
-      <section className="surface-card p-6">
-        <div className="flex flex-col xl:flex-row xl:items-center gap-5">
-          <div className="grid h-14 w-14 place-items-center rounded-2xl bg-gradient-to-br from-fuchsia-600 to-violet-700 text-white shadow-lg shrink-0">
-            <LayoutDashboard className="h-7 w-7" />
+      {/* Contextual Guidance */}
+      <div className="surface-card p-5 sm:p-6 border-l-4 border-l-primary bg-primary/5 shadow-sm">
+        <h2 className="font-display text-xl font-bold text-foreground">Phase 1: QVW Analysis</h2>
+        <p className="text-sm text-muted-foreground mt-1.5 max-w-3xl">
+          Review the visualization package extracted from your QlikView application. Here you can inspect sheets, UI objects, and expressions before migrating them to Power BI.
+        </p>
+      </div>
+
+      <section className="surface-card p-5 sm:p-6 shadow-sm border border-border/50">
+        <div className="flex flex-col xl:flex-row xl:items-center gap-4">
+          <div className="grid h-12 w-12 place-items-center rounded-xl bg-primary/10 text-primary shadow-sm shrink-0">
+            <LayoutDashboard className="h-6 w-6" />
           </div>
           <div className="flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="font-display text-2xl font-bold">
+              <h2 className="font-display text-xl font-semibold">
                 {qvwAnalysis.document.title || "QlikView Application"}
               </h2>
               <StatusBadge

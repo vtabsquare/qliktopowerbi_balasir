@@ -287,10 +287,10 @@ function MQueryDiagnosticEditor({
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
           spellCheck={false}
-          className="min-h-[320px] w-full resize-y bg-background p-4 font-mono text-xs leading-6 text-foreground outline-none focus:ring-2 focus:ring-primary/40"
+          className="min-h-[520px] w-full resize-y bg-background p-4 font-mono text-xs leading-6 text-foreground outline-none focus:ring-2 focus:ring-primary/40"
         />
       ) : (
-        <div className="max-h-[430px] overflow-auto font-mono text-xs leading-6">
+        <div className="max-h-[650px] min-h-[420px] overflow-auto font-mono text-xs leading-6">
           {lines.map((line, index) => {
             const diagnostic = issueLines.get(index);
             return (
@@ -945,7 +945,7 @@ function StepTypeBadge({ type }: { type: string }) {
 
 function MQueryStepTable({ mCode }: { mCode: string }) {
   const steps = parseMQuerySteps(mCode);
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(false);
   const [search, setSearch] = useState('');
 
   const [exportHover, setExportHover] = useState(false);
@@ -1404,33 +1404,41 @@ export function TabMQueryDataTypes({
                   {analysis.executionPlans?.[tableName] && (() => {
                     const plan = analysis.executionPlans[tableName];
                     return (
-                      <div className="rounded-xl border border-border bg-surface-elevated/40 p-4 space-y-3">
-                        <div className="flex items-center justify-between gap-3">
+                      <details className="rounded-xl border border-border bg-surface-elevated/40 group cursor-pointer">
+                        <summary className="flex items-center justify-between gap-3 p-4 list-none">
                           <div>
-                            <h4 className="text-sm font-semibold">Approved Qlik execution plan</h4>
-                            <p className="text-xs text-muted-foreground">Power Query is generated only after the complete Qlik table lifecycle, joins, payloads and final datatype contract are resolved.</p>
+                            <h4 className="text-sm font-semibold flex items-center gap-2">
+                              <span>Approved Qlik execution plan</span>
+                              <span className="text-xs font-normal text-muted-foreground">({plan.steps.length} compiled steps)</span>
+                            </h4>
+                            <p className="text-xs text-muted-foreground mt-0.5">Power Query is generated only after the complete Qlik table lifecycle, joins, payloads and final datatype contract are resolved.</p>
                           </div>
-                          <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold text-emerald-600">{plan.steps.length} compiled steps</span>
-                        </div>
-                        <div className="grid gap-2 md:grid-cols-3 text-xs">
-                          <div className="rounded-lg border border-border bg-background p-3"><div className="font-medium">Source</div><div className="mt-1 text-muted-foreground break-all">{plan.sourceTable || plan.sourceReference || "Resolved from execution graph"}</div></div>
-                          <div className="rounded-lg border border-border bg-background p-3"><div className="font-medium">Final columns</div><div className="mt-1 text-muted-foreground">{plan.finalColumns.length}</div></div>
-                          <div className="rounded-lg border border-border bg-background p-3"><div className="font-medium">Datatype contract</div><div className="mt-1 text-muted-foreground">{Object.keys(plan.reviewedTypes || {}).length} reviewed columns</div></div>
-                        </div>
-                        {plan.joins.length > 0 && (
-                          <div className="space-y-2">
-                            <div className="text-xs font-semibold">Join contracts</div>
-                            {plan.joins.map((join) => (
-                              <div key={join.operationId} className="grid gap-2 rounded-lg border border-border bg-background p-3 text-xs md:grid-cols-4">
-                                <div><span className="text-muted-foreground">Source</span><div className="font-medium">{join.sourceTable}</div></div>
-                                <div><span className="text-muted-foreground">Join keys</span><div className="font-medium">{join.leftKeys.join(", ") || "Manual review"}</div></div>
-                                <div className="md:col-span-2"><span className="text-muted-foreground">Payload fields</span><div className="font-medium">{join.expandColumns.join(", ") || "No payload"}</div></div>
-                              </div>
-                            ))}
+                          <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold text-emerald-600 shrink-0">
+                            <span className="group-open:hidden">View Plan</span>
+                            <span className="hidden group-open:inline">Hide Plan</span>
+                          </span>
+                        </summary>
+                        <div className="border-t border-border p-4 space-y-3 cursor-default">
+                          <div className="grid gap-2 md:grid-cols-3 text-xs">
+                            <div className="rounded-lg border border-border bg-background p-3"><div className="font-medium">Source</div><div className="mt-1 text-muted-foreground break-all">{plan.sourceTable || plan.sourceReference || "Resolved from execution graph"}</div></div>
+                            <div className="rounded-lg border border-border bg-background p-3"><div className="font-medium">Final columns</div><div className="mt-1 text-muted-foreground">{plan.finalColumns.length}</div></div>
+                            <div className="rounded-lg border border-border bg-background p-3"><div className="font-medium">Datatype contract</div><div className="mt-1 text-muted-foreground">{Object.keys(plan.reviewedTypes || {}).length} reviewed columns</div></div>
                           </div>
-                        )}
-                        {plan.warnings.length > 0 && <div className="text-xs text-amber-600">{plan.warnings.join(" · ")}</div>}
-                      </div>
+                          {plan.joins.length > 0 && (
+                            <div className="space-y-2">
+                              <div className="text-xs font-semibold">Join contracts</div>
+                              {plan.joins.map((join) => (
+                                <div key={join.operationId} className="grid gap-2 rounded-lg border border-border bg-background p-3 text-xs md:grid-cols-4">
+                                  <div><span className="text-muted-foreground">Source</span><div className="font-medium">{join.sourceTable}</div></div>
+                                  <div><span className="text-muted-foreground">Join keys</span><div className="font-medium">{join.leftKeys.join(", ") || "Manual review"}</div></div>
+                                  <div className="md:col-span-2"><span className="text-muted-foreground">Payload fields</span><div className="font-medium">{join.expandColumns.join(", ") || "No payload"}</div></div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {plan.warnings.length > 0 && <div className="text-xs text-amber-600">{plan.warnings.join(" · ")}</div>}
+                        </div>
+                      </details>
                     );
                   })()}
                   <MQueryDiagnosticEditor

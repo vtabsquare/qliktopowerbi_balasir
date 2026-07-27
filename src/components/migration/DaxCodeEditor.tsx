@@ -107,7 +107,7 @@ export function DaxCodeEditor({ id, value, onChange, catalog, autoFocus, ariaLab
         }}
         onFocus={updateCursor}
         onBlur={() => window.setTimeout(() => setOpen(false), 160)}
-        className="min-h-[170px] w-full resize-y rounded-xl border border-slate-700 bg-[#0B1120] p-4 font-mono text-xs leading-6 text-slate-50 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+        className="min-h-[320px] w-full resize-y rounded-xl border border-slate-700 bg-[#0B1120] p-4 font-mono text-xs leading-6 text-slate-50 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
       />
 
       {open && completion.items.length > 0 && (

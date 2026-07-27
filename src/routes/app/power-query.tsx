@@ -32,6 +32,13 @@ function PowerQueryPage() {
 
   return (
     <div className="space-y-5">
+      {/* Contextual Guidance */}
+      <div className="surface-card p-5 sm:p-6 border-l-4 border-l-primary bg-primary/5 shadow-sm">
+        <h2 className="font-display text-xl font-bold text-foreground">Phase 2: Power Query & M Code</h2>
+        <p className="text-sm text-muted-foreground mt-1.5 max-w-3xl">
+          Review the generated M queries and optimize column data types. The Power Query scripts will handle data transformations and loading into Power BI.
+        </p>
+      </div>
       <RepairFocusNotice areas={["power-query", "data-types"]} />
       <EnterprisePowerQueryPage
         analysis={enterpriseAnalysis}

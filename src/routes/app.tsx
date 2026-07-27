@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, useRouterState } from "@tanstack/react-router";
 import { AppHeader } from "@/components/migration/AppHeader";
 import { StageNav } from "@/components/migration/StageNav";
 import { useMigration } from "@/lib/migration/store";
@@ -41,13 +41,28 @@ function AuthGuard() {
 
 function MigrationLayout() {
   const { enterpriseAnalysis } = useMigration();
+  const router = useRouterState();
+  const currentPath = router.location.pathname;
+  const isLandingPage = currentPath === "/app" || currentPath === "/app/" || currentPath === "/app/instructions";
   const tableCount = enterpriseAnalysis?.finalTables.length ?? 0;
 
   return (
     <div className="min-h-screen" id="app-top">
       <AppHeader />
-      <main className="mx-auto w-full max-w-[1440px] px-4 sm:px-6 lg:px-8 pt-8 sm:pt-10 pb-28">
-        <Hero tableCount={tableCount} />
+      <main className="mx-auto w-full max-w-[1440px] px-4 sm:px-6 lg:px-8 pt-4 sm:pt-6 pb-20">
+        {isLandingPage ? (
+          <Hero tableCount={tableCount} />
+        ) : (
+          <div className="mb-4 flex items-center justify-between rounded-xl bg-surface/60 px-4 py-2 text-xs border border-border/60 shadow-xs">
+            <div className="flex items-center gap-2 font-medium text-muted-foreground">
+              <span className="h-2 w-2 rounded-full bg-success animate-pulse" />
+              <span>Workspace Active</span>
+              <span>•</span>
+              <span className="text-foreground font-semibold">{tableCount ? `${tableCount} Final Tables` : "Pipeline Ready"}</span>
+            </div>
+            <a href="#migration-stage-menu" className="text-primary hover:underline font-semibold">Change Stage ↓</a>
+          </div>
+        )}
         <StageNav />
         <Outlet />
         <FooterSteps />
@@ -60,23 +75,27 @@ function MigrationLayout() {
 
 function Hero({ tableCount }: { tableCount: number }) {
   return (
-    <section className="mb-8 sm:mb-10">
-      <span className="chip mb-6 text-primary">
-        <span className="h-2 w-2 rounded-full bg-success animate-pulse" />
-        AI MIGRATION ENGINE ACTIVE
-      </span>
-      <h1 className="font-display font-black text-[clamp(3rem,7vw,5.5rem)] tracking-tight leading-[0.94] mb-5 break-words">
-        <span className="text-foreground">Qlik</span>
-        <span className="mx-2 sm:mx-4 text-muted-foreground font-light">→</span>
-        <span className="gradient-text">Power BI</span>
-      </h1>
-      <p className="text-muted-foreground max-w-2xl leading-relaxed">
-        Enterprise-grade migration. Upload your Qlik scripts, run the analysis engine, and export a deployment-ready Power BI PBIP project.
-      </p>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mt-8 max-w-3xl">
-        <Metric icon="◎" value="100%" label="Conversion accuracy" />
-        <Metric icon="⚡" value="10x" label="Faster than manual" />
-        <Metric icon="❒" value={tableCount ? `${tableCount}` : "5"} label={tableCount ? "Final tables detected" : "Pipeline stages"} />
+    <section className="mb-6 sm:mb-8 glass-card p-6 sm:p-8 bg-gradient-to-br from-surface/90 via-surface/60 to-primary/5 border border-primary/20 shadow-lg">
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+        <div>
+          <span className="chip mb-4 text-primary bg-primary/10 border-primary/20">
+            <span className="h-2 w-2 rounded-full bg-success animate-pulse" />
+            AI MIGRATION ENGINE ACTIVE
+          </span>
+          <h1 className="font-display font-black text-[clamp(2.25rem,5vw,3.75rem)] tracking-tight leading-[1.05] mb-3 break-words">
+            <span className="text-foreground">Qlik</span>
+            <span className="mx-2 text-muted-foreground font-light">→</span>
+            <span className="gradient-text">Power BI</span>
+          </h1>
+          <p className="text-muted-foreground text-sm max-w-xl leading-relaxed">
+            Enterprise-grade automated migration. Upload your Qlik scripts, run the analysis engine, and export a deployment-ready Power BI PBIP project with star-schema modeling and DAX translation.
+          </p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full lg:w-auto">
+          <Metric icon="◎" value="100%" label="Conversion accuracy" />
+          <Metric icon="⚡" value="10x" label="Faster than manual" />
+          <Metric icon="❒" value={tableCount ? `${tableCount}` : "5"} label={tableCount ? "Final tables" : "Core stages"} />
+        </div>
       </div>
     </section>
   );
@@ -84,11 +103,11 @@ function Hero({ tableCount }: { tableCount: number }) {
 
 function Metric({ icon, value, label }: { icon: string; value: string; label: string }) {
   return (
-    <div className="surface-card p-4 flex items-center gap-3">
-      <div className="grid h-10 w-10 place-items-center rounded-xl bg-accent text-primary text-lg">{icon}</div>
+    <div className="surface-card p-3.5 flex items-center gap-3 bg-surface/80 border border-border/60 shadow-sm hover:border-primary/30 transition-all">
+      <div className="grid h-9 w-9 place-items-center rounded-xl bg-primary/10 text-primary text-base font-bold">{icon}</div>
       <div className="leading-tight">
-        <div className="font-display font-bold text-xl">{value}</div>
-        <div className="text-[11px] text-muted-foreground">{label}</div>
+        <div className="font-display font-bold text-lg text-foreground">{value}</div>
+        <div className="text-[10px] text-muted-foreground">{label}</div>
       </div>
     </div>
   );
@@ -96,18 +115,20 @@ function Metric({ icon, value, label }: { icon: string; value: string; label: st
 
 function FooterSteps() {
   const steps = [
-    { n: "01", k: "CAPTURE", title: "Requirement → Rule Book", body: "Capture business intent and auto-generate a Markdown Rule Book that drives the rest of the migration." },
-    { n: "02", k: "CONVERT", title: "Script to Power Query M", body: "Source &amp; ETL QVS parsed, then Power Query produced only for the final surviving tables." },
-    { n: "03", k: "DEPLOY", title: "Semantic Model &amp; DAX", body: "Star-schema model auto-built for review, then variables resolved and Set Analysis translated to DAX." },
+    { n: "01", k: "CAPTURE", title: "Requirement → Rule Book", body: "Capture business intent and auto-generate a Markdown Rule Book that drives the migration." },
+    { n: "02", k: "CONVERT", title: "Script to Power Query M", body: "Source &amp; ETL QVS parsed, then Power Query produced only for surviving tables." },
+    { n: "03", k: "DEPLOY", title: "Semantic Model &amp; DAX", body: "Star-schema model auto-built for review, then variables and Set Analysis translated to DAX." },
   ];
   return (
-    <section className="grid md:grid-cols-3 gap-px bg-border mt-16 rounded-2xl overflow-hidden border border-border">
+    <section className="grid md:grid-cols-3 gap-3 mt-12">
       {steps.map((s) => (
-        <div key={s.n} className="bg-background p-6">
-          <div className="font-mono text-xs text-muted-foreground mb-3">{s.n} — {s.k}</div>
-          <div className="font-display font-semibold text-lg mb-2" dangerouslySetInnerHTML={{ __html: s.title }} />
-          <div className="text-sm text-muted-foreground leading-relaxed mb-4" dangerouslySetInnerHTML={{ __html: s.body }} />
-          <div className="text-primary">→</div>
+        <div key={s.n} className="glass-panel p-4 bg-surface/50 hover:bg-surface/80 transition-all border border-border/60">
+          <div className="flex items-center justify-between mb-2">
+            <span className="font-mono text-xs font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded">{s.n} · {s.k}</span>
+            <span className="text-muted-foreground">→</span>
+          </div>
+          <div className="font-display font-semibold text-sm mb-1 text-foreground" dangerouslySetInnerHTML={{ __html: s.title }} />
+          <div className="text-xs text-muted-foreground leading-relaxed" dangerouslySetInnerHTML={{ __html: s.body }} />
         </div>
       ))}
     </section>

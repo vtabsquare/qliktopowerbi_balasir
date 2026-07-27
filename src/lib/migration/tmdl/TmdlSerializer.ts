@@ -148,6 +148,7 @@ export function serializeTmdlFolder(spec: TomDatabaseSpec): TmdlFolderResult {
       ...(index ? [""] : []),
       ...descriptionLines(expression.description, 0),
       ...serializeExpressionObject(`expression ${quoteTmdlName(expression.name)}`, expression.expression, 0),
+      ...(expression.isLoadDisabled ? ["\tenableLoad: false"] : []),
       ...serializeAnnotations(expression.annotations, 1),
     ]).join(NL)}${NL}`;
   }

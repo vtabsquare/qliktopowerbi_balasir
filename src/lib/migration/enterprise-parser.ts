@@ -952,6 +952,35 @@ export function detectTables(operations: Operation[]): Record<string, TableProfi
       p.etlStory = buildEtlStory(t, p, lin);
     }
   }
+
+  // When tables are loaded via LOAD * from external files/staging without physical metadata,
+  // ensure fact tables inherit any primary keys from generated dimension tables in the project.
+  const norm = (val: string) => cleanName(val).toLowerCase().replace(/[^a-z0-9]/g, "");
+  const tblBase = (tbl: string) => norm(tbl.replace(/^(dim|fact|tbl|ref)_?/i, "").replace(/s$/i, ""));
+  const keyMatchesDim = (tbl: string, col: string) => {
+    const base = tblBase(tbl);
+    const key = norm(col);
+    return key === `${base}id` || key === `${base}key` || key === `${base}code`
+      || (base.length > 4 && (key === `${base.slice(0, -1)}id` || key === `${base.slice(0, -1)}key`));
+  };
+  const factProfiles = Object.values(profiles).filter(p => p.status === 'generated' && ['fact', 'bridge'].includes(p.classification));
+  const dimProfiles = Object.values(profiles).filter(p => p.status === 'generated' && ['dimension', 'reference', 'calendar'].includes(p.classification));
+  for (const fact of factProfiles) {
+    for (const dim of dimProfiles) {
+      if (fact.table === dim.table) continue;
+      const dimKey = dim.fields.find(c => KEY_RE_R.test(c) && keyMatchesDim(dim.table, c));
+      if (dimKey && !fact.fields.some(f => norm(f) === norm(dimKey))) {
+        const dimCore = norm(dim.table).replace(/s$/, "").replace(/^(dim|ref|tbl)/, "");
+        const keyCore = norm(dimKey).replace(/id$|key$|code$|num$/, "");
+        const core = keyCore.length >= 3 ? keyCore : dimCore;
+        const alreadyCovered = core.length >= 3 && fact.fields.some(f => norm(f).includes(core));
+        if (!alreadyCovered) {
+          fact.fields = uniq([...fact.fields, dimKey]);
+        }
+      }
+    }
+  }
+
   return profiles;
 }
 
@@ -1110,10 +1139,17 @@ export function buildSourceMappings(operations: Operation[], updates: Record<str
       }
     }
     
-    let ct = u.connectorType || connector(mapped) || connector(ref);
+    let autoMappedQvd = false;
+    if (!u.mappedRef && !bypass && isQvd(mapped)) {
+      mapped = mapped.replace(/\.qvd$/i, '.csv');
+      autoMappedQvd = true;
+    }
+    
+    let ct = u.connectorType || (autoMappedQvd ? 'CSV/Text' : (connector(mapped) || connector(ref)));
     if (['Unknown','QVD - map to supported source'].includes(ct) && mapped && mapped !== ref) ct = connector(mapped);
-    const status = physicalStatus(ref, mapped, ct, u.status || '');
-    rows.push({ originalRef: ref, mappedRef: mapped, connectorType: ct, status, notes: u.notes || notes, table, sourceRole: role, effectiveRef: mapped, qvdProducerTable: producerTable, bypassQvd: false });
+    const status = u.status || (autoMappedQvd ? 'Mapped' : physicalStatus(ref, mapped, ct, u.status || ''));
+    const effectiveNotes = autoMappedQvd ? 'Auto-mapped QVD to CSV for Power BI compatibility. Ensure converted CSV files are placed in this path.' : (u.notes || notes);
+    rows.push({ originalRef: ref, mappedRef: mapped, connectorType: ct, status, notes: effectiveNotes, table, sourceRole: autoMappedQvd ? 'qvd source (auto-mapped to csv)' : role, effectiveRef: mapped, qvdProducerTable: producerTable, bypassQvd: false });
   }
 
   for (const o of operations) {
@@ -3013,9 +3049,10 @@ in
       return marker;
     }
 
-    const requestedExpand = plan?.expandColumns?.length
+    const rawRequestedExpand = plan?.expandColumns?.length
       ? plan.expandColumns
       : uniq(joinOp.fields.filter((field) => !rightKeys.some((key) => key.toLowerCase() === field.toLowerCase())));
+    const requestedExpand = rawRequestedExpand.filter((field) => !rightKeys.some((key) => key.toLowerCase() === field.toLowerCase()) && !leftKeys.some((key) => key.toLowerCase() === field.toLowerCase()));
     const qualifiedCollisions = plan?.qualifiedCollisions || {};
     const outputNames = requestedExpand.map((field) => qualifiedCollisions[field] || field);
     const leftTableName = joinOp.joinTarget || this.finalTableName;
@@ -3522,20 +3559,31 @@ export function inferRelationships(
       if (factTable === dimensionTable) continue;
       const dimensionKey = generated[dimensionTable].fields.find((column) => KEY_RE_R.test(column) && keyMatchesDimension(dimensionTable, column));
       if (!dimensionKey) continue;
-      const factKey = field(factTable, dimensionKey);
+      let factKey = field(factTable, dimensionKey);
+      if (!factKey) {
+        const dimCore = normalized(dimensionTable).replace(/s$/, "").replace(/^(dim|ref|tbl)/, "");
+        const keyCore = normalized(dimensionKey).replace(/id$|key$|code$|num$/, "");
+        const core = keyCore.length >= 3 ? keyCore : dimCore;
+        if (core.length >= 3) {
+          factKey = generated[factTable].fields.find((c) => normalized(c).includes(core));
+        }
+      }
       if (!factKey) continue;
+      const isExact = normalized(factKey) === normalized(dimensionKey);
       add({
         fromTable: factTable,
         fromColumn: factKey,
         toTable: dimensionTable,
         toColumn: dimensionKey,
-        score: 190,
+        score: isExact ? 190 : 185,
         active: activeMode,
         status: activeMode ? "active" : "inactive/desktop review",
-        reason: `Verified foreign-key pattern: ${factTable}[${factKey}] matches the row identifier ${dimensionTable}[${dimensionKey}]. Non-key shared attributes were ignored.`,
+        reason: isExact
+          ? `Verified foreign-key pattern: ${factTable}[${factKey}] matches the row identifier ${dimensionTable}[${dimensionKey}]. Non-key shared attributes were ignored.`
+          : `Verified semantic foreign-key pattern: ${factTable}[${factKey}] connects to dimension identifier ${dimensionTable}[${dimensionKey}].`,
         cardinality: "manyToOne",
         filterDirection: "single",
-        confidence: 94,
+        confidence: isExact ? 94 : 90,
       });
     }
   }
@@ -4317,6 +4365,32 @@ function applyReconstructionSchema(
       if (!profile.fields.some((field) => field.toLowerCase() === composite.keyColumn.toLowerCase())) profile.fields.push(composite.keyColumn);
       columnTypes[table] ||= {};
       columnTypes[table][composite.keyColumn] = 'Text';
+    }
+  }
+
+  const norm = (val: string) => cleanName(val).toLowerCase().replace(/[^a-z0-9]/g, "");
+  const tblBase = (tbl: string) => norm(tbl.replace(/^(dim|fact|tbl|ref)_?/i, "").replace(/s$/i, ""));
+  const keyMatchesDim = (tbl: string, col: string) => {
+    const base = tblBase(tbl);
+    const key = norm(col);
+    return key === `${base}id` || key === `${base}key` || key === `${base}code`
+      || (base.length > 4 && (key === `${base.slice(0, -1)}id` || key === `${base.slice(0, -1)}key`));
+  };
+  const factProfiles = Object.values(profiles).filter(p => p.status === 'generated' && ['fact', 'bridge'].includes(p.classification));
+  const dimProfiles = Object.values(profiles).filter(p => p.status === 'generated' && ['dimension', 'reference', 'calendar'].includes(p.classification));
+  for (const fact of factProfiles) {
+    for (const dim of dimProfiles) {
+      if (fact.table === dim.table) continue;
+      const dimKey = dim.fields.find(c => KEY_RE_R.test(c) && keyMatchesDim(dim.table, c));
+      if (dimKey && !fact.fields.some(f => norm(f) === norm(dimKey))) {
+        const dimCore = norm(dim.table).replace(/s$/, "").replace(/^(dim|ref|tbl)/, "");
+        const keyCore = norm(dimKey).replace(/id$|key$|code$|num$/, "");
+        const core = keyCore.length >= 3 ? keyCore : dimCore;
+        const alreadyCovered = core.length >= 3 && fact.fields.some(f => norm(f).includes(core));
+        if (!alreadyCovered) {
+          fact.fields = uniq([...fact.fields, dimKey]);
+        }
+      }
     }
   }
 

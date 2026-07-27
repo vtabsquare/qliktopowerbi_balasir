@@ -502,6 +502,7 @@ export function buildTomDatabaseSpec(
         name,
         expression: normalizeExpression(expression, `let\n    Source = #table({}, {})\nin\n    Source`),
         kind: "m" as const,
+        isLoadDisabled: true,
         description: "Load-disabled/helper query retained from Qlik lineage. It is not loaded into the Power BI semantic model.",
         annotations: annotations([
           ["Qlik.QueryRole", "staging-or-static"],

@@ -49,14 +49,21 @@ function ExpressionConversionPage() {
 
   return (
     <div className="space-y-6">
-      <section className="surface-card p-6">
-        <div className="flex flex-col xl:flex-row xl:items-center gap-5">
-          <div className="grid h-14 w-14 place-items-center rounded-2xl bg-gradient-to-br from-blue-600 to-violet-700 text-white"><FunctionSquare className="h-7 w-7"/></div>
+      {/* Contextual Guidance */}
+      <div className="surface-card p-5 sm:p-6 border-l-4 border-l-primary bg-primary/5 shadow-sm">
+        <h2 className="font-display text-xl font-bold text-foreground">Phase 2: Expression Conversion</h2>
+        <p className="text-sm text-muted-foreground mt-1.5 max-w-3xl">
+          Review and approve the automatic conversions of Qlik expressions to DAX logic. Every QVW expression is normalized, parsed, classified, translated, and retained with full traceability.
+        </p>
+      </div>
+
+      <section className="surface-card p-5 sm:p-6 shadow-sm border border-border/50">
+        <div className="flex flex-col xl:flex-row xl:items-center gap-4">
+          <div className="grid h-12 w-12 place-items-center rounded-xl bg-primary/10 text-primary shrink-0"><FunctionSquare className="h-6 w-6"/></div>
           <div className="flex-1">
-            <h2 className="font-display text-2xl font-bold">Qlik Expressions → Power BI Logic</h2>
-            <p className="text-sm text-muted-foreground mt-2">Every QVW expression is normalized, parsed, classified, translated and retained with traceability to its sheet and object.</p>
+            <h2 className="font-display text-xl font-semibold">Qlik Expressions → Power BI Logic</h2>
           </div>
-          <div className="text-right text-xs text-muted-foreground"><div>Parser version</div><div className="font-mono text-foreground">{expressionInventory.parserVersion}</div></div>
+          <div className="text-right text-xs text-muted-foreground bg-surface px-3 py-1.5 rounded-lg border border-border/50"><div>Parser version</div><div className="font-mono text-foreground font-semibold">{expressionInventory.parserVersion}</div></div>
         </div>
       </section>
 
@@ -92,7 +99,7 @@ function ExpressionConversionPage() {
 
       <div className="flex flex-wrap justify-between gap-3">
         <button onClick={() => navigate({ to: "/app/qvw-analysis" })} className="inline-flex items-center gap-2 rounded-xl border border-border px-4 py-2.5 text-sm font-medium hover:bg-accent/30"><ArrowLeft className="h-4 w-4"/> Back to QVW Analysis</button>
-        <button onClick={() => navigate({ to: "/app/powerbi-model" })} className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground">Review Power BI Data Model <ArrowRight className="h-4 w-4"/></button>
+        <button onClick={() => navigate({ to: "/app/analysis" })} className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground">Proceed to ETL Analysis <ArrowRight className="h-4 w-4"/></button>
       </div>
     </div>
   );

@@ -58,66 +58,50 @@ export function AppHeader() {
   };
 
   return (
-    <header className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur-xl supports-[backdrop-filter]:bg-background/75">
-      <div className="mx-auto flex w-full max-w-[1440px] items-center gap-4 px-4 py-3 sm:px-6 lg:px-8">
-        <Link to="/" className="flex shrink-0 items-center gap-3">
-          <div className="grid h-11 w-11 place-items-center rounded-xl bg-gradient-to-br from-primary to-[oklch(0.62_0.2_260)] text-primary-foreground font-bold shadow-elevated">
-            <span className="text-xs tracking-tight">VT</span>
-          </div>
-          <div className="leading-tight">
-            <div className="font-display font-bold text-sm tracking-wide">VTAB</div>
-            <div className="font-display font-bold text-sm tracking-wide -mt-0.5">SQUARE</div>
-          </div>
-        </Link>
-        <nav className="hidden min-w-0 flex-1 items-center gap-4 overflow-x-auto whitespace-nowrap px-2 text-sm [scrollbar-width:none] md:flex [&::-webkit-scrollbar]:hidden">
-          <Link
-            to="/app/instructions"
-            className="text-muted-foreground hover:text-foreground transition-colors"
-          >
-            Instructions
+    <header className="sticky top-0 z-40 border-b border-border/80 bg-background/80 backdrop-blur-xl supports-[backdrop-filter]:bg-background/60 shadow-sm transition-all">
+      <div className="mx-auto flex w-full max-w-[1440px] items-center justify-between gap-4 px-4 py-2.5 sm:px-6 lg:px-8">
+        <div className="flex items-center gap-4">
+          <Link to="/" className="flex shrink-0 items-center gap-3 group">
+            <div className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-primary to-[oklch(0.62_0.2_260)] text-primary-foreground font-bold shadow-elevated group-hover:scale-105 transition-transform">
+              <span className="text-xs tracking-tight">VT</span>
+            </div>
+            <div className="leading-tight">
+              <div className="font-display font-bold text-sm tracking-wide text-foreground">VTAB</div>
+              <div className="font-display font-bold text-xs tracking-wide text-muted-foreground -mt-0.5">SQUARE</div>
+            </div>
           </Link>
-          <Link to="/app" className="font-semibold text-foreground">
-            Upload
-          </Link>
+          <span className="hidden lg:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-[11px] font-semibold tracking-wide">
+            <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
+            AI MIGRATION ENGINE v2.0
+          </span>
+        </div>
+
+        <nav className="hidden min-w-0 items-center gap-1 overflow-x-auto whitespace-nowrap rounded-full border border-border/60 bg-surface/60 p-1 text-xs font-medium shadow-sm md:flex">
           <Link
-            to="/app/qvw-analysis"
-            className="text-muted-foreground hover:text-foreground transition-colors"
+            to="/app"
+            activeProps={{ className: "bg-primary text-primary-foreground shadow-sm" }}
+            className="rounded-full px-3.5 py-1.5 text-muted-foreground hover:text-foreground transition-all"
           >
-            QVW Analysis
-          </Link>
-          <Link
-            to="/app/expression-conversion"
-            className="text-muted-foreground hover:text-foreground transition-colors"
-          >
-            Expressions
-          </Link>
-          <Link
-            to="/app/analysis"
-            className="text-muted-foreground hover:text-foreground transition-colors"
-          >
-            ETL Analysis
+            Pipeline
           </Link>
           <Link
             to="/app/calendar-analysis"
-            className="text-muted-foreground hover:text-foreground transition-colors"
+            activeProps={{ className: "bg-primary text-primary-foreground shadow-sm" }}
+            className="rounded-full px-3.5 py-1.5 text-muted-foreground hover:text-foreground transition-all"
           >
             Calendars
           </Link>
           <Link
-            to="/app/powerbi-model"
-            className="text-muted-foreground hover:text-foreground transition-colors"
-          >
-            Power BI Model
-          </Link>
-          <Link
             to="/app/report-designer"
-            className="text-muted-foreground hover:text-foreground transition-colors"
+            activeProps={{ className: "bg-primary text-primary-foreground shadow-sm" }}
+            className="rounded-full px-3.5 py-1.5 text-muted-foreground hover:text-foreground transition-all"
           >
             Report Designer
           </Link>
           <Link
             to="/app/logs"
-            className="text-muted-foreground hover:text-foreground transition-colors"
+            activeProps={{ className: "bg-primary text-primary-foreground shadow-sm" }}
+            className="rounded-full px-3.5 py-1.5 text-muted-foreground hover:text-foreground transition-all"
           >
             Logs
           </Link>

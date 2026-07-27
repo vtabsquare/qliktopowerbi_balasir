@@ -40,7 +40,7 @@ export function Stage6Model({ onNext, analysis }: { onNext?: () => void, analysi
         base = (raw as any[]).map(p => ({
           id: p.table,
           name: p.table,
-          type: p.classification || "Fact",
+          type: (p.classification === 'fact' || p.classification === 'bridge' ? 'Fact' : p.classification === 'calendar' ? 'Calendar' : 'Dimension') as any,
           columns: p.fields?.map((f: string) => ({
             name: f,
             dataType: analysis?.columnTypes?.[p.table]?.[f] || "String"
@@ -52,6 +52,12 @@ export function Stage6Model({ onNext, analysis }: { onNext?: () => void, analysi
         base = JSON.parse(JSON.stringify(raw)); // deep copy to allow mutations below
       }
     }
+
+    base = base.map(t => {
+      const rawType = (t.type || "Fact").toString().toLowerCase();
+      const normType = rawType === "fact" || rawType === "bridge" ? "Fact" : rawType.includes("calendar") || rawType.includes("date") ? "Calendar" : "Dimension";
+      return { ...t, type: normType };
+    });
 
     // Infer missing tables from relationships so the diagram can draw connections
     const existingTableNames = new Set(base.map(t => t.name.toLowerCase()));
@@ -173,8 +179,8 @@ export function Stage6Model({ onNext, analysis }: { onNext?: () => void, analysi
   const pbiRelationships = useMemo(() => {
     if (relationships.length > 0) return relationships;
     const rels: any[] = [];
-    const facts = allTables.filter(t => t.type === "Fact");
-    const dims = allTables.filter(t => t.type !== "Fact");
+    const facts = allTables.filter(t => t.type === "Fact" || t.type?.toString().toLowerCase() === "fact" || t.type?.toString().toLowerCase() === "bridge");
+    const dims = allTables.filter(t => !(t.type === "Fact" || t.type?.toString().toLowerCase() === "fact" || t.type?.toString().toLowerCase() === "bridge"));
 
     facts.forEach(f => {
       dims.forEach(d => {
@@ -224,8 +230,8 @@ export function Stage6Model({ onNext, analysis }: { onNext?: () => void, analysi
     return rels;
   }, [relationships, allTables]);
 
-  const facts = allTables.filter((t) => t.type === "Fact");
-  const others = allTables.filter((t) => t.type !== "Fact");
+  const facts = allTables.filter((t) => t.type === "Fact" || t.type?.toString().toLowerCase() === "fact" || t.type?.toString().toLowerCase() === "bridge");
+  const others = allTables.filter((t) => !(t.type === "Fact" || t.type?.toString().toLowerCase() === "fact" || t.type?.toString().toLowerCase() === "bridge"));
 
   return (
     <div className="space-y-6">

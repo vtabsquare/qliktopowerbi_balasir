@@ -156,8 +156,16 @@ function AnalysisPage() {
 
   return (
     <div className="space-y-5">
+      {/* Contextual Guidance */}
+      <div className="surface-card p-5 sm:p-6 border-l-4 border-l-primary bg-primary/5 shadow-sm">
+        <h2 className="font-display text-xl font-bold text-foreground">Phase 2: ETL Analysis</h2>
+        <p className="text-sm text-muted-foreground mt-1.5 max-w-3xl">
+          Review the automatically detected tables and confirm your source mappings. The Enterprise Analysis Engine has parsed the QVS scripts to infer relationships and prepare for Power Query generation.
+        </p>
+      </div>
+
       {/* Header */}
-      <div className="surface-card p-4 flex items-center justify-between gap-4">
+      <div className="surface-card p-4 flex items-center justify-between gap-4 shadow-sm border border-border/50">
         <div className="flex items-center gap-3">
           <div className="grid h-10 w-10 place-items-center rounded-xl bg-accent">
             <Database className="h-5 w-5 text-primary" />
@@ -192,16 +200,20 @@ function AnalysisPage() {
       </div>
 
       {/* Pipeline Logs */}
-      <div className="surface-card p-4">
-        <h4 className="font-display font-semibold text-base text-foreground mb-3">Pipeline Logs</h4>
-        <div className="space-y-1">
+      <details className="surface-card p-4 shadow-sm border border-border/50 rounded-xl group cursor-pointer">
+        <summary className="font-display font-semibold text-base text-foreground flex items-center justify-between">
+          <span>Pipeline Logs <span className="text-xs font-normal text-muted-foreground ml-2">({analysis.logs.length} entries)</span></span>
+          <span className="text-xs text-primary group-open:hidden">View Logs</span>
+          <span className="text-xs text-primary hidden group-open:block">Hide Logs</span>
+        </summary>
+        <div className="space-y-1 mt-4 pt-4 border-t border-border/50 max-h-60 overflow-y-auto">
           {analysis.logs.map((l, i) => (
             <div key={i} className="flex items-start gap-2 text-xs text-muted-foreground">
               <Check className="h-3.5 w-3.5 text-green-400 mt-0.5 shrink-0" />{l}
             </div>
           ))}
         </div>
-      </div>
+      </details>
 
       {/* Source Mapping Editor */}
       <RepairFocusNotice areas={["source-mapping"]} />

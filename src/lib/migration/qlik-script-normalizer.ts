@@ -230,15 +230,6 @@ function sanitizePhysicalLine(line: string): string {
   }
 
   const firstComment = commentStarts[0];
-  const lastComment = commentStarts.at(-1) ?? firstComment;
-  const suffix = line.slice(lastComment + 2);
-  const recoveredStart = findRecoveredStatementStart(suffix);
-
-  if (recoveredStart !== undefined) {
-    const absoluteStart = lastComment + 2 + recoveredStart;
-    return spacesPreservingNewlines(line.slice(0, absoluteStart)) + line.slice(absoluteStart);
-  }
-
   return line.slice(0, firstComment) + spacesPreservingNewlines(line.slice(firstComment));
 }
 
