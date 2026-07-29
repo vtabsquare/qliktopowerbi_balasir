@@ -3259,7 +3259,7 @@ function appendFinalModelProjectionToMQuery(query: string, columns: string[], ta
   return appendTableProducingStep(
     query,
     `Final${cleanName(tableName)}Columns`,
-    `Table.SelectColumns(__PREVIOUS_STEP__, {${selected.map(esc).join(", ")}}, MissingField.Error)`,
+    `Table.SelectColumns(__PREVIOUS_STEP__, {${selected.map(esc).join(", ")}}, MissingField.Ignore)`,
   );
 }
 
