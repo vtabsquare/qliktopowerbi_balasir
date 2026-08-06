@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState, useEffect, useCallback } from "react";
 import JSZip from "jszip";
 import {
   FileUp,
@@ -20,7 +20,11 @@ import {
   TrendingUp,
   Shield,
   LayoutDashboard,
+  Download,
+  FolderInput,
+  RefreshCw,
 } from "lucide-react";
+import { qvdToCSV } from "@/lib/migration/qvd-parser";
 import { cn } from "@/lib/utils";
 
 export interface ExtractedFile {
@@ -33,6 +37,10 @@ export interface ExtractedFile {
   /** Temporary upload payload used only by the local Windows QVW extraction bridge. */
   binaryBase64?: string;
   originPackage?: string;
+  /** Set to true on a synthetic .csv file that was auto-converted from a .qvd */
+  qvdConverted?: boolean;
+  /** Absolute path where the converted CSV was physically saved on disk */
+  savedCsvPath?: string;
 }
 
 export interface AutoAssignedFiles {
@@ -231,61 +239,314 @@ function useCounter(target: number, duration = 800) {
   return value;
 }
 
+// ─── QVD output directory state (persisted in localStorage) ──────────────────
+const QVD_OUTPUT_DIR_KEY = "qvd_output_dir";
+
+function useQvdOutputDir() {
+  const [dir, setDir] = useState<string>(() => {
+    try { return localStorage.getItem(QVD_OUTPUT_DIR_KEY) || ""; } catch { return ""; }
+  });
+  const save = useCallback((val: string) => {
+    setDir(val);
+    try { localStorage.setItem(QVD_OUTPUT_DIR_KEY, val); } catch { /* ignore */ }
+  }, []);
+  return [dir, save] as const;
+}
+
+// ─── QVD conversion helper ───────────────────────────────────────────────────
+async function convertQvdFile(
+  file: File,
+  filePath: string,
+  outputDir: string,
+): Promise<{ csvFile: ExtractedFile; savedPath: string } | { error: string }> {
+  try {
+    const csvName = file.name.replace(/\.qvd$/i, ".csv");
+    const csvPath = filePath.replace(/\.qvd$/i, ".csv");
+
+    // ── Attempt 1: server-side pyqvd conversion (same output as running pyqvd manually) ──
+    let csvText = "";
+    let savedPath = "";
+    let rowCount = 0;
+    let usedPyqvd = false;
+
+    try {
+      const params = new URLSearchParams({ fileName: file.name, outputDir });
+      const res = await fetch(`/api/qvd/convert?${params}`, {
+        method: "POST",
+        headers: { "content-type": "application/octet-stream" },
+        body: await file.arrayBuffer(),
+      });
+
+      if (res.ok) {
+        const data = await res.json() as {
+          ok?: boolean; csv?: string; savedPath?: string;
+          rowCount?: number; pyqvdMissing?: boolean; error?: string;
+        };
+        if (data.ok && data.csv) {
+          csvText   = data.csv;
+          savedPath = data.savedPath || "";
+          rowCount  = data.rowCount  ?? 0;
+          usedPyqvd = true;
+        } else if (data.pyqvdMissing) {
+          // pyqvd not installed — fall through to TypeScript parser
+          console.warn("[QVD→CSV] pyqvd not found on server. Install with: pip install pyqvd");
+        } else if (data.error) {
+          throw new Error(data.error);
+        }
+      }
+    } catch (serverErr) {
+      // Server may be unavailable (cloud deploy) — fall through to TypeScript parser
+      console.warn("[QVD→CSV] Server convert failed, falling back to TS parser:", serverErr);
+    }
+
+    // ── Attempt 2: TypeScript parser fallback ─────────────────────────────────
+    if (!csvText) {
+      const buffer = await file.arrayBuffer();
+      const result = qvdToCSV(buffer);
+      csvText  = result.csv;
+      rowCount = result.rowCount;
+
+      // Save the TypeScript-parsed CSV via the legacy save-csv endpoint
+      try {
+        const res = await fetch("/api/qvd/save-csv", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ csv: csvText, fileName: csvName, outputDir }),
+        });
+        if (res.ok) {
+          const data = await res.json() as { savedPath?: string };
+          savedPath = data.savedPath || "";
+        }
+      } catch { /* Server not available — in-memory only */ }
+    }
+
+    const sizeKb = parseFloat((new Blob([csvText]).size / 1024).toFixed(2));
+    const csvFile: ExtractedFile = {
+      path: csvPath,
+      name: csvName,
+      extension: ".csv",
+      sizeKb,
+      text: csvText,
+      parsedAsText: true,
+      originPackage: file.name,
+      qvdConverted: true,
+      savedCsvPath: savedPath,
+    };
+
+    console.info(
+      `[QVD→CSV] ${file.name}: ${rowCount} rows${usedPyqvd ? " (pyqvd)" : " (TS parser)"}${savedPath ? ` → ${savedPath}` : " (in-memory only)"}`,
+    );
+    return { csvFile, savedPath };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+
+// ─── QVD Folder Pick Modal ────────────────────────────────────────────────────
+// Shown ONLY when QVD files are detected, before any conversion runs.
+function QvdFolderModal({
+  qvdNames,
+  initialPath,
+  defaultPath,
+  onConfirm,
+  onSkip,
+}: {
+  qvdNames: string[];
+  initialPath: string;
+  defaultPath: string;
+  onConfirm: (path: string) => void;
+  onSkip: () => void;
+}) {
+  const [draft, setDraft] = useState(initialPath);
+  const inputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => { setTimeout(() => inputRef.current?.focus(), 80); }, []);
+
+  const placeholder = defaultPath || "e.g. C:\\MyData\\QvdExports";
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="relative w-full max-w-lg mx-4 rounded-2xl border border-teal-500/30 bg-gradient-to-br from-surface-elevated to-surface shadow-2xl p-6 space-y-5 animate-in slide-in-from-bottom-4 duration-300">
+        {/* Header */}
+        <div className="flex items-start gap-3">
+          <div className="grid place-items-center h-10 w-10 rounded-xl bg-gradient-to-br from-teal-500 to-emerald-600 shrink-0 shadow-lg">
+            <FolderInput className="h-5 w-5 text-white" />
+          </div>
+          <div>
+            <div className="font-semibold text-sm text-foreground">
+              QVD files detected — where should the CSVs be saved?
+            </div>
+            <div className="text-[11px] text-muted-foreground mt-0.5">
+              {qvdNames.length === 1
+                ? `1 QVD file (${qvdNames[0]}) will be converted to CSV.`
+                : `${qvdNames.length} QVD files will be converted to CSV.`}
+            </div>
+          </div>
+        </div>
+
+        {/* Detected files list */}
+        {qvdNames.length > 0 && (
+          <div className="rounded-xl bg-teal-950/40 border border-teal-500/20 px-3 py-2 max-h-28 overflow-y-auto space-y-1">
+            {qvdNames.map((n) => (
+              <div key={n} className="flex items-center gap-2 text-[11px] font-mono text-teal-300">
+                <Database className="h-3 w-3 shrink-0 text-teal-400" />
+                {n}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Path input */}
+        <div className="space-y-1.5">
+          <label htmlFor="qvd-modal-path" className="text-xs font-medium text-foreground">
+            Output folder path
+          </label>
+          <input
+            ref={inputRef}
+            id="qvd-modal-path"
+            type="text"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") onConfirm(draft.trim()); }}
+            placeholder={placeholder}
+            className="w-full rounded-xl border border-teal-500/40 bg-black/30 px-4 py-2.5 text-sm font-mono text-foreground placeholder:text-muted-foreground/40 outline-none focus:border-teal-400 transition-colors"
+          />
+          <p className="text-[10px] text-muted-foreground/60">
+            Leave blank to use the default folder: <span className="font-mono">{defaultPath || "<project>/qvd-output"}</span>
+          </p>
+        </div>
+
+        {/* Actions */}
+        <div className="flex gap-3 pt-1">
+          <button
+            id="qvd-modal-confirm"
+            onClick={() => onConfirm(draft.trim())}
+            className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white text-sm font-semibold transition-all active:scale-95 shadow-md"
+          >
+            Convert &amp; Save Here
+          </button>
+          <button
+            id="qvd-modal-skip"
+            onClick={onSkip}
+            className="px-5 py-2.5 rounded-xl bg-accent hover:bg-accent/80 text-accent-foreground text-sm font-semibold transition-all"
+          >
+            Skip Conversion
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function MultiFileDropzone({ onFiles }: Props) {
   const inputFileRef = useRef<HTMLInputElement>(null);
   const inputFolderRef = useRef<HTMLInputElement>(null);
   const inputZipRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const [processing, setProcessing] = useState(false);
+  const [qvdOutputDir, setQvdOutputDir] = useQvdOutputDir();
+
+  // Modal state: null = hidden, object = pending QVD batch waiting for path
+  const [pendingQvdModal, setPendingQvdModal] = useState<{
+    qvdNames: string[];
+    defaultPath: string;
+    resolve: (path: string | null) => void;
+  } | null>(null);
+
+  /** Ask the user for an output folder via the modal. Returns the chosen path or null if skipped. */
+  function askForOutputDir(qvdNames: string[], defaultPath: string): Promise<string | null> {
+    return new Promise((resolve) => {
+      setPendingQvdModal({ qvdNames, defaultPath, resolve });
+    });
+  }
 
   const processFiles = async (rawFiles: File[]) => {
     setProcessing(true);
     const result: ExtractedFile[] = [];
     try {
+      // ── Pre-scan: collect QVD file names across files and ZIPs ──
+      const qvdFileNames: string[] = [];
       for (const file of rawFiles) {
-      const ext = "." + (file.name.split(".").pop() ?? "").toLowerCase();
-      if (ext === ".zip") {
-        try {
-          const zip = await JSZip.loadAsync(file);
-          for (const [path, zipEntry] of Object.entries(zip.files)) {
-            if (zipEntry.dir) continue;
-            const entryExt = "." + path.split(".").pop()!.toLowerCase();
-            const entryWithSize = zipEntry as unknown as {
-              _data?: { uncompressedSize?: number };
-            };
-            const sizeKb = parseFloat(
-              ((entryWithSize._data?.uncompressedSize ?? 0) / 1024).toFixed(2),
-            );
-            const text = isTextFile(entryExt) ? await zipEntry.async("text") : null;
-            const binaryBase64 = entryExt === ".qvw" ? await zipEntry.async("base64") : undefined;
-            result.push({
-              path,
-              name: path.split("/").pop()!,
-              extension: entryExt,
-              sizeKb,
-              text,
-              parsedAsText: text !== null,
-              binaryBase64,
-              originPackage: file.name,
-            });
-          }
-        } catch (e) {
-          console.warn("ZIP parse failed:", file.name, e);
+        const ext = "." + (file.name.split(".").pop() ?? "").toLowerCase();
+        if (ext === ".qvd") {
+          qvdFileNames.push(file.name);
+        } else if (ext === ".zip") {
+          try {
+            const zip = await JSZip.loadAsync(file);
+            for (const [zipPath] of Object.entries(zip.files)) {
+              if (zipPath.toLowerCase().endsWith(".qvd"))
+                qvdFileNames.push(zipPath.split("/").pop() || zipPath);
+            }
+          } catch { /* ignore pre-scan errors */ }
         }
-      } else {
-        const sizeKb = parseFloat((file.size / 1024).toFixed(2));
-        const text = isTextFile(ext) ? await file.text() : null;
-        const binaryBase64 = ext === ".qvw" ? await blobToBase64(file) : undefined;
-        result.push({
-          path: (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name,
-          name: file.name,
-          extension: ext,
-          sizeKb,
-          text,
-          parsedAsText: text !== null,
-          binaryBase64,
-        });
       }
+
+      // ── If QVDs detected: show modal and wait for user's folder choice ──
+      let resolvedOutputDir = qvdOutputDir;
+      if (qvdFileNames.length > 0) {
+        let defaultPath = "";
+        try {
+          const r = await fetch("/api/qvd/status");
+          if (r.ok) {
+            const d = await r.json() as { defaultPath?: string };
+            defaultPath = d.defaultPath || "";
+          }
+        } catch { /* ignore */ }
+
+        const chosen = await askForOutputDir(qvdFileNames, defaultPath);
+        if (chosen === null) {
+          resolvedOutputDir = "__SKIP__"; // user skipped — don't convert
+        } else {
+          resolvedOutputDir = chosen;
+          setQvdOutputDir(chosen);
+        }
+      }
+
+      // ── Main processing loop ──
+      for (const file of rawFiles) {
+        const ext = "." + (file.name.split(".").pop() ?? "").toLowerCase();
+        if (ext === ".zip") {
+          try {
+            const zip = await JSZip.loadAsync(file);
+            for (const [path, zipEntry] of Object.entries(zip.files)) {
+              if (zipEntry.dir) continue;
+              const entryExt = "." + path.split(".").pop()!.toLowerCase();
+              const entryWithSize = zipEntry as unknown as { _data?: { uncompressedSize?: number } };
+              const sizeKb = parseFloat(((entryWithSize._data?.uncompressedSize ?? 0) / 1024).toFixed(2));
+              const text = isTextFile(entryExt) ? await zipEntry.async("text") : null;
+              const binaryBase64 = entryExt === ".qvw" ? await zipEntry.async("base64") : undefined;
+              const entry: ExtractedFile = {
+                path,
+                name: path.split("/").pop()!,
+                extension: entryExt,
+                sizeKb,
+                text,
+                parsedAsText: text !== null,
+                binaryBase64,
+                originPackage: file.name,
+              };
+              result.push(entry);
+              if (entryExt === ".qvd" && resolvedOutputDir !== "__SKIP__") {
+                const qvdBlob = await zipEntry.async("blob");
+                const qvdFile = new File([qvdBlob], entry.name, { type: "application/octet-stream" });
+                const conv = await convertQvdFile(qvdFile, path, resolvedOutputDir);
+                if ("csvFile" in conv) result.push(conv.csvFile);
+              }
+            }
+          } catch (e) {
+            console.warn("ZIP parse failed:", file.name, e);
+          }
+        } else {
+          const sizeKb = parseFloat((file.size / 1024).toFixed(2));
+          const text = isTextFile(ext) ? await file.text() : null;
+          const binaryBase64 = ext === ".qvw" ? await blobToBase64(file) : undefined;
+          const filePath = (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name;
+          result.push({ path: filePath, name: file.name, extension: ext, sizeKb, text, parsedAsText: text !== null, binaryBase64 });
+          if (ext === ".qvd" && resolvedOutputDir !== "__SKIP__") {
+            const conv = await convertQvdFile(file, filePath, resolvedOutputDir);
+            if ("csvFile" in conv) result.push(conv.csvFile);
+          }
+        }
       }
       await onFiles(result);
     } finally {
@@ -301,121 +562,66 @@ export function MultiFileDropzone({ onFiles }: Props) {
   };
 
   return (
-    <div
-      onDragOver={(e) => {
-        e.preventDefault();
-        setDragging(true);
-      }}
-      onDragLeave={() => setDragging(false)}
-      onDrop={handleDrop}
-      className={cn(
-        "relative rounded-2xl border-2 border-dashed transition-all duration-300 overflow-hidden",
-        dragging
-          ? "border-primary scale-[1.01] bg-primary/5"
-          : "border-border bg-surface-elevated hover:border-primary/50",
+    <>
+      {pendingQvdModal && (
+        <QvdFolderModal
+          qvdNames={pendingQvdModal.qvdNames}
+          initialPath={qvdOutputDir}
+          defaultPath={pendingQvdModal.defaultPath}
+          onConfirm={(path) => { setPendingQvdModal(null); pendingQvdModal.resolve(path); }}
+          onSkip={() => { setPendingQvdModal(null); pendingQvdModal.resolve(null); }}
+        />
       )}
-    >
-      {/* Animated background glow on drag */}
-      {dragging && (
-        <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-violet-500/10 pointer-events-none animate-pulse" />
-      )}
-
-      <div className="px-6 py-10 text-center relative z-10">
-        <div
-          className={cn(
-            "grid place-items-center h-16 w-16 rounded-2xl mx-auto mb-4 shadow-lg transition-all duration-300",
-            processing ? "bg-primary/20" : "bg-gradient-to-br from-primary to-violet-600",
-          )}
-        >
-          {processing ? (
-            <div className="h-7 w-7 rounded-full border-[3px] border-white/30 border-t-white animate-spin" />
-          ) : (
-            <Package className="h-7 w-7 text-white" />
-          )}
+      <div
+        onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={handleDrop}
+        className={cn(
+          "relative rounded-2xl border-2 border-dashed transition-all duration-300 overflow-hidden",
+          dragging ? "border-primary scale-[1.01] bg-primary/5" : "border-border bg-surface-elevated hover:border-primary/50",
+        )}
+      >
+        {dragging && (
+          <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-violet-500/10 pointer-events-none animate-pulse" />
+        )}
+        <div className="px-6 py-10 text-center relative z-10">
+          <div className={cn("grid place-items-center h-16 w-16 rounded-2xl mx-auto mb-4 shadow-lg transition-all duration-300", processing ? "bg-primary/20" : "bg-gradient-to-br from-primary to-violet-600")}>
+            {processing ? <div className="h-7 w-7 rounded-full border-[3px] border-white/30 border-t-white animate-spin" /> : <Package className="h-7 w-7 text-white" />}
+          </div>
+          <div className="font-display font-bold text-xl mb-1">
+            {processing ? "Extracting & Analysing Package…" : "Drop your Qlik project here"}
+          </div>
+          <div className="text-xs text-muted-foreground font-mono mb-7">
+            Single QVS · QVW + PRJ folder · ZIP package · Entire folder
+          </div>
+          <div className="flex flex-wrap justify-center gap-3">
+            {[
+              { icon: Upload, label: "Browse Files", ref: inputFileRef, cls: "bg-accent text-accent-foreground" },
+              { icon: FolderOpen, label: "Upload Folder", ref: inputFolderRef, cls: "bg-accent text-accent-foreground" },
+              { icon: Archive, label: "Upload ZIP", ref: inputZipRef, cls: "bg-gradient-to-r from-primary to-violet-600 text-white shadow-md" },
+            ].map(({ icon: Icon, label, ref, cls }) => (
+              <button key={label} onClick={() => ref.current?.click()} className={cn("inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium hover:opacity-90 transition-all active:scale-95", cls)}>
+                <Icon className="h-4 w-4" /> {label}
+              </button>
+            ))}
+          </div>
         </div>
-        <div className="font-display font-bold text-xl mb-1">
-          {processing ? "Extracting & Analysing Package…" : "Drop your Qlik project here"}
-        </div>
-        <div className="text-xs text-muted-foreground font-mono mb-7">
-          Single QVS · QVW + PRJ folder · ZIP package · Entire folder
-        </div>
-
-        <div className="flex flex-wrap justify-center gap-3">
-          {[
-            {
-              icon: Upload,
-              label: "Browse Files",
-              ref: inputFileRef,
-              cls: "bg-accent text-accent-foreground",
-            },
-            {
-              icon: FolderOpen,
-              label: "Upload Folder",
-              ref: inputFolderRef,
-              cls: "bg-accent text-accent-foreground",
-            },
-            {
-              icon: Archive,
-              label: "Upload ZIP",
-              ref: inputZipRef,
-              cls: "bg-gradient-to-r from-primary to-violet-600 text-white shadow-md",
-            },
-          ].map(({ icon: Icon, label, ref, cls }) => (
-            <button
-              key={label}
-              onClick={() => ref.current?.click()}
-              className={cn(
-                "inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium hover:opacity-90 transition-all active:scale-95",
-                cls,
-              )}
-            >
-              <Icon className="h-4 w-4" /> {label}
-            </button>
-          ))}
-        </div>
+        <input ref={inputFileRef} type="file" className="hidden" multiple
+          accept=".qvw,.qvs,.qvd,.qvx,.txt,.csv,.tsv,.json,.xml,.sql,.py,.ts,.js,.yaml,.yml,.md,.xlsx,.xls,.parquet,.png,.jpg,.jpeg,.webp,.pdf,.ps1,.properties"
+          onChange={(e) => { const f = Array.from(e.target.files || []); if (f.length) processFiles(f); e.target.value = ""; }} />
+        <input ref={inputFolderRef} type="file" className="hidden" multiple
+          {...({ webkitdirectory: "" } as { webkitdirectory: string })}
+          onChange={(e) => { const f = Array.from(e.target.files || []); if (f.length) processFiles(f); e.target.value = ""; }} />
+        <input ref={inputZipRef} type="file" className="hidden" accept=".zip"
+          onChange={(e) => { const f = Array.from(e.target.files || []); if (f.length) processFiles(f); e.target.value = ""; }} />
       </div>
-
-      {/* Hidden inputs */}
-      <input
-        ref={inputFileRef}
-        type="file"
-        className="hidden"
-        multiple
-        accept=".qvw,.qvs,.qvd,.qvx,.txt,.csv,.tsv,.json,.xml,.sql,.py,.ts,.js,.yaml,.yml,.md,.xlsx,.xls,.parquet,.png,.jpg,.jpeg,.webp,.pdf,.ps1,.properties"
-        onChange={(e) => {
-          const f = Array.from(e.target.files || []);
-          if (f.length) processFiles(f);
-          e.target.value = "";
-        }}
-      />
-      <input
-        ref={inputFolderRef}
-        type="file"
-        className="hidden"
-        multiple
-        {...({ webkitdirectory: "" } as { webkitdirectory: string })}
-        onChange={(e) => {
-          const f = Array.from(e.target.files || []);
-          if (f.length) processFiles(f);
-          e.target.value = "";
-        }}
-      />
-      <input
-        ref={inputZipRef}
-        type="file"
-        className="hidden"
-        accept=".zip"
-        onChange={(e) => {
-          const f = Array.from(e.target.files || []);
-          if (f.length) processFiles(f);
-          e.target.value = "";
-        }}
-      />
-    </div>
+    </>
   );
 }
 
+
 // ─── Animated stat card ───────────────────────────────────────────────────────
+
 function StatCard({
   icon: Icon,
   value,
@@ -534,6 +740,7 @@ export function FileAnalysisPanel({
 }: FileAnalysisPanelProps) {
   const qvsFiles = files.filter((f) => f.extension === ".qvs");
   const csvFiles = files.filter((f) => f.extension === ".csv");
+  const convertedCsvFiles = files.filter((f) => f.qvdConverted);
   const assignableFiles = files.filter((f) => f.parsedAsText); // any text file can be assigned
   const totalSize = files.reduce((s, f) => s + f.sizeKb, 0);
   const textCount = files.filter((f) => f.parsedAsText).length;
@@ -579,6 +786,19 @@ export function FileAnalysisPanel({
       title: `${csvFiles.length} CSV data files included`,
       body: "These will be referenced as source connectors in the generated Power Query M code.",
       type: "info",
+    });
+  if (convertedCsvFiles.length > 0)
+    insights.push({
+      icon: RefreshCw,
+      title: `${convertedCsvFiles.length} QVD file${convertedCsvFiles.length > 1 ? "s" : ""} auto-converted to CSV`,
+      body: convertedCsvFiles
+        .map((f) =>
+          f.savedCsvPath
+            ? `✓ ${f.name} → saved to: ${f.savedCsvPath}`
+            : `✓ ${f.name} (in-memory — start local dev server to save physically)`,
+        )
+        .join(" | "),
+      type: "success",
     });
   if (textCount > 0 && textCount === files.length)
     insights.push({
@@ -795,7 +1015,16 @@ export function FileAnalysisPanel({
                       )}
                     </td>
                     <td className="px-4 py-2.5 text-muted-foreground/60 italic">
-                      {!f.parsedAsText ? "Binary — retained in inventory" : ""}
+                      {f.qvdConverted && f.savedCsvPath ? (
+                        <span className="inline-flex items-center gap-1 text-teal-400 font-mono text-[10px]">
+                          <Download className="h-3 w-3" />
+                          {f.savedCsvPath}
+                        </span>
+                      ) : f.qvdConverted ? (
+                        <span className="inline-flex items-center gap-1 text-teal-300 text-[10px]">
+                          <RefreshCw className="h-3 w-3" /> Auto-converted from QVD
+                        </span>
+                      ) : !f.parsedAsText ? "Binary — retained in inventory" : ""}
                     </td>
                   </tr>
                 );

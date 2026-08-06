@@ -565,6 +565,184 @@ async function handleTomApiRequest(request: Request) {
 }
 
 
+// ─── QVD → CSV endpoints ──────────────────────────────────────────────────────
+// /api/qvd/status   – GET  – returns defaultPath + whether pyqvd is available
+// /api/qvd/convert  – POST – receives raw QVD binary, converts via pyqvd, saves CSV
+// /api/qvd/save-csv – POST – receives pre-built CSV text and saves it to disk
+async function handleQvdSaveCsvApiRequest(request: Request) {
+  const url = new URL(request.url);
+  if (!url.pathname.startsWith("/api/qvd/")) return null;
+
+  // Only the local Node runtime can write files or spawn Python
+  if (typeof process === "undefined" || !process.versions?.node) {
+    return jsonResponse({ error: "QVD CSV operations require the local Node runtime." }, { status: 503 });
+  }
+
+  // ── GET /api/qvd/status ──────────────────────────────────────────────────────
+  if (url.pathname === "/api/qvd/status" && request.method === "GET") {
+    const { join } = await import("node:path");
+    const defaultPath = join(process.cwd(), "qvd-output");
+
+    // Probe whether Python + pyqvd are available
+    let pyqvdAvailable = false;
+    let pythonCmd = "python";
+    try {
+      const probe = await runProcess("python", ["-c", "import pyqvd; print('ok')"], process.cwd(), 8_000);
+      if (probe.stdout.trim() === "ok") { pyqvdAvailable = true; pythonCmd = "python"; }
+    } catch {
+      try {
+        const probe = await runProcess("python3", ["-c", "import pyqvd; print('ok')"], process.cwd(), 8_000);
+        if (probe.stdout.trim() === "ok") { pyqvdAvailable = true; pythonCmd = "python3"; }
+      } catch { /* pyqvd not available */ }
+    }
+
+    return jsonResponse({ available: true, defaultPath, pyqvdAvailable, pythonCmd });
+  }
+
+  // ── POST /api/qvd/convert ─────────────────────────────────────────────────────
+  // Receives the raw QVD binary, converts via pyqvd exactly as the terminal
+  // `python convert.py` does, saves the CSV to the user-chosen output dir,
+  // and returns the CSV text + row count.
+  if (url.pathname === "/api/qvd/convert") {
+    if (request.method !== "POST") return new Response("Method not allowed", { status: 405 });
+
+    const fileName  = url.searchParams.get("fileName")  || "output.qvd";
+    const outputDir = url.searchParams.get("outputDir") || "";
+
+    const [fsp, path, os] = await Promise.all([
+      import("node:fs/promises"),
+      import("node:path"),
+      import("node:os"),
+    ]);
+
+    // Create isolated temp directory for QVD + script + CSV
+    const tempDir = await fsp.mkdtemp(path.join(os.tmpdir(), "qlik2pbi-qvd-"));
+
+    try {
+      const qvdBytes = Buffer.from(await request.arrayBuffer());
+      if (qvdBytes.length === 0) return jsonResponse({ error: "Empty QVD file." }, { status: 400 });
+
+      // Use only safe characters for the temp filename; keep the original name for the output
+      const safeName = path.basename(fileName).replace(/[^A-Za-z0-9._\-]/g, "_");
+      const qvdPath  = path.join(tempDir, safeName);
+      const csvPath  = path.join(tempDir, safeName.replace(/\.qvd$/i, ".csv"));
+
+      await fsp.writeFile(qvdPath, qvdBytes);
+
+      // Write a real Python script file — EXACTLY matching the user's working convert.py:
+      //   from pyqvd import QvdTable
+      //   tbl = QvdTable.from_qvd(file)
+      //   df = tbl.to_pandas()
+      //   df.to_csv(csv_name, index=False)
+      // Using QvdDataFrame or tbl.to_csv() directly is a different API that does NOT work.
+      const scriptPath = path.join(tempDir, "convert_qvd.py");
+      const pyScript = [
+        "from pyqvd import QvdTable",
+        `tbl = QvdTable.from_qvd(r"""${qvdPath}""")`,
+        "df = tbl.to_pandas()",
+        `df.to_csv(r"""${csvPath}""", index=False)`,
+      ].join("\n") + "\n";
+      await fsp.writeFile(scriptPath, pyScript, "utf8");
+
+
+      // Try python then python3 — detect success by whether the CSV file was created,
+      // NOT by parsing stdout/stderr (pyqvd may print deprecation warnings to stderr).
+      let pyError = "";
+      let converted = false;
+      for (const cmd of ["python", "python3"]) {
+        try {
+          await runProcess(cmd, [scriptPath], tempDir, 300_000);
+        } catch (err) {
+          pyError = err instanceof Error ? err.message : String(err);
+          continue; // try next python command
+        }
+        // Check whether pyqvd actually created the CSV (definitive success check)
+        try {
+          await fsp.access(csvPath);
+          converted = true;
+          break;
+        } catch {
+          // CSV not created — pyqvd ran but failed silently; try next cmd
+        }
+      }
+
+      if (!converted) {
+        const detail = pyError || "pyqvd did not produce a CSV file.";
+        const isPyqvdMissing = /no module named.*pyqvd|ModuleNotFoundError/i.test(detail);
+        return jsonResponse({
+          error: isPyqvdMissing
+            ? "pyqvd is not installed. Run: pip install pyqvd"
+            : `pyqvd conversion failed: ${detail}`,
+          pyqvdMissing: isPyqvdMissing,
+        }, { status: 503 });
+      }
+
+      // Read the CSV pyqvd produced
+      const csvText = await fsp.readFile(csvPath, "utf8");
+
+      // Save to the user-chosen output directory (same behaviour as terminal convert.py
+      // which saves CSVs alongside QVDs, but here we use the user's chosen folder)
+      const projectRoot = process.cwd();
+      const resolvedDir = outputDir ? path.resolve(outputDir) : path.join(projectRoot, "qvd-output");
+      await fsp.mkdir(resolvedDir, { recursive: true });
+      const csvName   = path.basename(fileName).replace(/\.qvd$/i, ".csv");
+      const savedPath = path.join(resolvedDir, csvName);
+      await fsp.writeFile(savedPath, csvText, "utf8");
+
+      const rowCount = csvText.split("\n").filter(Boolean).length - 1;
+      return jsonResponse({ ok: true, csv: csvText, savedPath, fileName: csvName, rowCount });
+
+    } catch (error) {
+      return jsonResponse(
+        { error: error instanceof Error ? error.message : "QVD conversion failed." },
+        { status: 500 },
+      );
+    } finally {
+      await fsp.rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
+    }
+  }
+
+  // ── POST /api/qvd/save-csv ────────────────────────────────────────────────────
+  // Legacy endpoint: receives pre-built CSV text from the browser and saves it.
+  if (url.pathname !== "/api/qvd/save-csv") return new Response("Not found", { status: 404 });
+  if (request.method !== "POST") return new Response("Method not allowed", { status: 405 });
+
+  try {
+    const body = await readJsonBody(request);
+    if (!body || typeof body !== "object") {
+      return jsonResponse({ error: "Invalid request body." }, { status: 400 });
+    }
+    const payload = body as Record<string, unknown>;
+    const csvText  = typeof payload.csv      === "string" ? payload.csv      : "";
+    const fileName = typeof payload.fileName === "string" ? payload.fileName.trim() : "";
+    const outputDir = typeof payload.outputDir === "string" ? payload.outputDir.trim() : "";
+
+    if (!csvText)  return jsonResponse({ error: "csv is required."      }, { status: 400 });
+    if (!fileName) return jsonResponse({ error: "fileName is required." }, { status: 400 });
+
+    const [{ writeFile, mkdir }, path] = await Promise.all([
+      import("node:fs/promises"),
+      import("node:path"),
+    ]);
+
+    const projectRoot = process.cwd();
+    const resolvedDir = outputDir ? path.resolve(outputDir) : path.join(projectRoot, "qvd-output");
+    await mkdir(resolvedDir, { recursive: true });
+
+    const safeBase = path.basename(fileName).replace(/[^A-Za-z0-9._\- ]/g, "_");
+    const csvName  = safeBase.toLowerCase().endsWith(".csv") ? safeBase : `${safeBase}.csv`;
+    const outPath  = path.join(resolvedDir, csvName);
+    await writeFile(outPath, csvText, "utf8");
+
+    return jsonResponse({ ok: true, savedPath: outPath, fileName: csvName });
+  } catch (error) {
+    return jsonResponse(
+      { error: error instanceof Error ? error.message : "Failed to save CSV file." },
+      { status: 500 },
+    );
+  }
+}
+
 async function handleAgentApiRequest(request: Request, runtimeEnv: RuntimeEnv) {
   const url = new URL(request.url);
   if (url.pathname !== "/api/agent/message") return null;
@@ -723,6 +901,8 @@ export default {
       const runtimeEnv = await getRuntimeEnv(env);
       const qvwApiResponse = await handleQvwApiRequest(request);
       if (qvwApiResponse) return applySecurityHeaders(qvwApiResponse);
+      const qvdCsvApiResponse = await handleQvdSaveCsvApiRequest(request);
+      if (qvdCsvApiResponse) return applySecurityHeaders(qvdCsvApiResponse);
       const tomApiResponse = await handleTomApiRequest(request);
       if (tomApiResponse) return applySecurityHeaders(tomApiResponse);
       const authApiResponse = await handleAuthApiRequest(request, runtimeEnv);

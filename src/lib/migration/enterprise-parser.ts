@@ -1283,14 +1283,27 @@ function governRelationshipsBySample(
     const manyValues = previewColumnValues(previews[manyTable], manyColumn);
     if (oneValues.length) {
       const unique = new Set(oneValues);
-      if (unique.size !== oneValues.length) return [];
+      if (unique.size !== oneValues.length) {
+        // The one-side sample contains duplicate key values.
+        // Previously this dropped the relationship, which prevented
+        // applyRelationshipKeyGovernance from adding Table.Distinct and caused
+        // Power BI to report "duplicate value on the one-side" errors and fall
+        // back to Many-to-Many cardinality.
+        // Fix: keep the relationship so governance can deduplicate the dimension
+        // table via Table.Distinct. Use overlap=-1 so it loses tie-breaks against
+        // a cleaner relationship on the same table pair.
+        return [{ relationship: { ...relationship, reason: `${relationship.reason}; one-side sample has duplicate keys — Table.Distinct will be applied automatically.` }, overlap: -1 }];
+      }
     }
     let overlap = -1;
     if (oneValues.length && manyValues.length) {
       const oneSet = new Set(oneValues);
       const matchingManyValues = manyValues.filter((value) => oneSet.has(value));
       overlap = new Set(matchingManyValues).size;
-      if (overlap === 0) return [];
+      // Only drop on confirmed zero-overlap when we have a reasonable sample
+      // size (≥5 values on each side). Small samples can appear non-overlapping
+      // simply because QVD/CSV previews are not guaranteed to share rows.
+      if (overlap === 0 && oneValues.length >= 5 && manyValues.length >= 5) return [];
       const coverage = matchingManyValues.length / manyValues.length;
       // Date dimensions must actually cover the fact dates. A relationship to
       // a monthly/partial calendar creates blank members and misleading time
@@ -1298,6 +1311,7 @@ function governRelationshipsBySample(
       if (/date|calendar/i.test(`${oneTable} ${oneColumn} ${manyColumn}`) && coverage < 0.8) return [];
     }
     return [{ relationship, overlap }];
+
   });
 
   // A Power BI model should not contain multiple competing relationship paths
@@ -1325,14 +1339,23 @@ function relationshipOneSide(relationship: Relationship): { table: string; colum
 function appendGovernedOneSideKey(query: string, keyColumn: string): string {
   if (!query.trim() || !keyColumn) return query;
   const stepName = `Validated_${cleanName(keyColumn)}_RelationshipKey`;
-  const expression = `let
-        _source = __PREVIOUS_STEP__,
-        _required = if Table.HasColumns(_source, ${esc(keyColumn)}) then _source else error Error.Record("QLIK2PBI.MissingRelationshipKey", "The one-side relationship key is missing.", [Column=${esc(keyColumn)}, AvailableColumns=Table.ColumnNames(_source)]),
-        _nonBlank = Table.SelectRows(_required, each let _key = Record.FieldOrDefault(_, ${esc(keyColumn)}, null) in _key <> null and Text.Trim(Text.From(_key)) <> "")
-    in
-        Table.Distinct(_nonBlank, {${esc(keyColumn)}})`;
+  // IMPORTANT: Do NOT use a nested let..in expression here.
+  // appendTableProducingStep inlines the expression directly as a step value inside
+  // the outer let..in block. If the expression itself contains `in`, the M parser
+  // sees two `in` keywords at the same nesting level and misreads the outer block,
+  // causing all subsequent step references to fail with "matches no exports" errors.
+  // A flat function-call chain is always safe as a step value.
+  const expression = `Table.Distinct(
+        Table.SelectRows(
+            __PREVIOUS_STEP__,
+            each Record.FieldOrDefault(_, ${esc(keyColumn)}, null) <> null
+                and Text.Trim(Text.From(Record.FieldOrDefault(_, ${esc(keyColumn)}, null), "en-US")) <> ""
+        ),
+        {${esc(keyColumn)}}
+    )`;
   return appendTableProducingStep(query, stepName, expression);
 }
+
 
 /**
  * Enforces the physical requirements of a Power BI one-side table before a
@@ -1352,12 +1375,17 @@ function applyRelationshipKeyGovernance(
     if (!keysByTable.has(side.table)) keysByTable.set(side.table, []);
     keysByTable.get(side.table)!.push(side.column);
   }
+  // Build a case-insensitive index of mQuery table names so a relationship
+  // whose table name casing differs from the mQueries key still gets Table.Distinct applied.
+  const mQueryTableIndex = new Map<string, string>();
+  for (const name of Object.keys(mQueries)) mQueryTableIndex.set(name.toLowerCase(), name);
   const result = { ...mQueries };
   for (const [table, columns] of keysByTable) {
-    if (!result[table]) continue;
-    let query = unwrapReviewedTypeQuery(result[table]);
+    const resolvedName = mQueryTableIndex.get(table.toLowerCase());
+    if (!resolvedName) continue;
+    let query = unwrapReviewedTypeQuery(result[resolvedName]);
     for (const column of uniq(columns)) query = appendGovernedOneSideKey(query, column);
-    result[table] = applyReviewedTypesToMQuery(query, columnTypesForTable(columnTypes, table));
+    result[resolvedName] = applyReviewedTypesToMQuery(query, columnTypesForTable(columnTypes, resolvedName));
   }
   return result;
 }
@@ -3268,15 +3296,21 @@ function appendCompositeKeyToMQuery(query: string, keyColumn: string, columns: s
   const encodedValues = columns.map((column) =>
     `let value = Record.FieldOrDefault(_, ${esc(column)}, null), textValue = if value = null then "<NULL>" else Text.From(value, "en-US") in Text.Replace(textValue, ${esc(delimiter)}, ${esc(delimiter + delimiter)})`,
   ).join(", ");
-  const expression = `let
-        _source = __PREVIOUS_STEP__,
-        _missing = List.Difference({${columns.map(esc).join(", ")}}, Table.ColumnNames(_source)),
-        _validated = if List.IsEmpty(_missing) then _source else error Error.Record("QLIK2PBI.MissingCompositeKeyColumns", "Composite-key inputs are missing.", [Key=${esc(keyColumn)}, MissingColumns=_missing, AvailableColumns=Table.ColumnNames(_source)]),
-        _withoutExisting = Table.RemoveColumns(_validated, {${esc(keyColumn)}}, MissingField.Ignore)
-    in
-        Table.AddColumn(_withoutExisting, ${esc(keyColumn)}, each Text.Combine({${encodedValues}}, ${esc(delimiter)}), type text)`;
+  // Use a flat expression — no nested let..in as a step value (see note in appendGovernedOneSideKey).
+  // Table.RemoveColumns + Table.AddColumn chain replaces the validated intermediate variables.
+  const expression = `Table.AddColumn(
+        Table.RemoveColumns(
+            __PREVIOUS_STEP__,
+            {${esc(keyColumn)}},
+            MissingField.Ignore
+        ),
+        ${esc(keyColumn)},
+        each Text.Combine({${encodedValues}}, ${esc(delimiter)}),
+        type text
+    )`;
   return appendTableProducingStep(query, `Created_${cleanName(keyColumn)}`, expression);
 }
+
 
 export function buildStagingQueries(
   _profiles: Record<string, TableProfile>,
@@ -3369,12 +3403,21 @@ export function applyReviewedTypesToMQuery(
   const baseQuery = unwrapReviewedTypeQuery(query);
   const valueOperations = reviewedTypeValueOperations(reviewed);
   const metadataOperations = reviewedTypeMetadataOperations(reviewed);
+  // NOTE: __PREVIOUS_STEP__ is a placeholder that appendTableProducingStep replaces
+  // with the real M step identifier BEFORE the query reaches Power BI.
+  // M lambdas (each ...) have lexical access to outer-scope step names, so
+  // Table.HasColumns(__PREVIOUS_STEP__, _{0}) is valid once substituted.
+  // We must NOT use a nested let..in here because:
+  //   1. appendTableProducingStep inlines the expression, and a nested `in` keyword
+  //      confuses the M parser's outer `let...in` block detection.
+  //   2. removeAppendedReviewedTypes regex-matches Table.TransformColumns(stepName, ...)
+  //      to find the source step — a nested let would break that regex.
   const expression = `Table.TransformColumnTypes(
         Table.TransformColumns(
             __PREVIOUS_STEP__,
             List.Select(${valueOperations}, each Table.HasColumns(__PREVIOUS_STEP__, _{0})),
             null,
-            MissingField.Error
+            MissingField.UseNull
         ),
         List.Select(${metadataOperations}, each Table.HasColumns(__PREVIOUS_STEP__, _{0})),
         "en-US"
@@ -3386,6 +3429,7 @@ export function applyReviewedTypesToMQuery(
     [REVIEWED_TYPES_BEGIN.replace(/^\/\/\s*/, ""), signatureComment, REVIEWED_TYPES_END.replace(/^\/\/\s*/, "")],
   );
 }
+
 
 // ──────────────────────────────────────────────────────────────
 // SECTION 9: DAX Translator
@@ -4528,11 +4572,17 @@ export function runEnterpriseAnalysis(files: ProjectFile[], mappingUpdates: Reco
   tablePreviews = buildTablePreviews(profiles, ops, reconstruction, rawSamples, executionPlans);
   let rels = applyCompositeRelationshipPolicy(inferRelationships(profiles, reconstruction), profiles, reconstruction);
   harmonizeRelationshipKeyTypes(rels, columnTypes, columnTypeMeta);
+  // Preserve the full relationship list for M-query key governance (Table.Distinct deduplication).
+  // Sample governance may drop relationships that have duplicate keys in the preview sample,
+  // but we must still apply Table.Distinct to those one-side tables so Power BI can load them.
+  const allRelsForGovernance = [...rels];
   rels = governRelationshipsBySample(rels, tablePreviews);
   const dax = mergeReconstructionMeasures(buildDaxMeasures(ops, profiles), reconstruction);
   let mQueries = buildMQueries(profiles, ops, maps, columnTypes, reconstruction, files, executionPlans);
   if (reconstruction.variableMeasures.length) mQueries['Qlik Variables'] = variableHostMQuery();
-  mQueries = applyRelationshipKeyGovernance(mQueries, rels, columnTypes);
+  // Use the full relationship list so every one-side dimension gets Table.Distinct,
+  // even if sample governance removed that relationship from the semantic model.
+  mQueries = applyRelationshipKeyGovernance(mQueries, allRelsForGovernance, columnTypes);
   const stagingQueries = buildStagingQueries(profiles, ops, maps, columnTypes, reconstruction, files);
   annotatePreviewSourceBindings(tablePreviews, mQueries, stagingQueries);
   const powerQueryReviews = buildPowerQueryReviews(mQueries, stagingQueries, columnTypes);
@@ -4617,6 +4667,8 @@ export function applyModelBuildMode(
   const tablePreviews = buildTablePreviews(profiles, analysis.operations, reconstruction, rawSamples, executionPlans);
   let relationships = applyCompositeRelationshipPolicy(inferRelationships(profiles, reconstruction), profiles, reconstruction);
   harmonizeRelationshipKeyTypes(relationships, columnTypes, columnTypeMeta);
+  // Preserve full list for M-query deduplication before sample governance can drop any.
+  const allRelsForGovernance = [...relationships];
   relationships = governRelationshipsBySample(relationships, tablePreviews);
   let mQueries = buildMQueries(
     profiles,
@@ -4628,7 +4680,7 @@ export function applyModelBuildMode(
     executionPlans,
   );
   if (reconstruction.variableMeasures.length) mQueries["Qlik Variables"] = variableHostMQuery();
-  mQueries = applyRelationshipKeyGovernance(mQueries, relationships, columnTypes);
+  mQueries = applyRelationshipKeyGovernance(mQueries, allRelsForGovernance, columnTypes);
   const stagingQueries = buildStagingQueries(
     profiles,
     analysis.operations,
