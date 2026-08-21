@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 import { ArrowRight, Lock, Mail, UserPlus, KeyRound, Eye, EyeOff, ShieldCheck } from "lucide-react";
@@ -147,6 +147,31 @@ function AuthPage() {
   const [otp, setOtp] = useState("");
   const [stateToken, setStateToken] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const ssoToken = new URLSearchParams(window.location.search).get("token");
+    if (ssoToken) {
+      setLoading(true);
+      fetch("/api/auth/vtab-sso", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: ssoToken })
+      })
+      .then(r => r.json())
+      .then(d => {
+        if (d.error) {
+          toast.error(d.error);
+          setLoading(false);
+        } else if (d.magicLink) {
+          window.location.href = d.magicLink;
+        }
+      })
+      .catch(() => {
+        toast.error("SSO connection failed.");
+        setLoading(false);
+      });
+    }
+  }, []);
 
   const postAuthJson = useCallback(async (path: string, body: Record<string, string>) => {
     const response = await fetch(path, {
@@ -598,3 +623,5 @@ function AuthPage() {
     </div>
   );
 }
+
+
