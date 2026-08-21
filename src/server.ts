@@ -336,9 +336,9 @@ export async function handleVtabSso(request: Request, runtimeEnv: RuntimeEnv) {
     const serviceRoleKey = runtimeEnv.SUPABASE_SERVICE_ROLE_KEY;
     if (!supabaseUrl || !serviceRoleKey) return jsonResponse({ error: "Server DB misconfiguration" }, { status: 500 });
 
-    const usersRes = await fetch(${supabaseUrl.replace(/\/$/, "")}/auth/v1/admin/users, {
+    const usersRes = await fetch(`${supabaseUrl.replace(/\/$/, "")}/auth/v1/admin/users`, {
       method: "GET",
-      headers: { "authorization": Bearer , "apikey": serviceRoleKey }
+      headers: { "authorization": `Bearer ${serviceRoleKey}`, "apikey": serviceRoleKey }
     });
     if (!usersRes.ok) throw new Error("Could not list users");
     const { users } = await usersRes.json();
@@ -346,9 +346,9 @@ export async function handleVtabSso(request: Request, runtimeEnv: RuntimeEnv) {
     if (!exists) return jsonResponse({ error: "SSO user is not registered in QlikToPowerBI." }, { status: 403 });
 
     // 2. Generate Magic Link
-    const linkRes = await fetch(${supabaseUrl.replace(/\/$/, "")}/auth/v1/admin/generate_link, {
+    const linkRes = await fetch(`${supabaseUrl.replace(/\/$/, "")}/auth/v1/admin/generate_link`, {
       method: "POST",
-      headers: { "authorization": Bearer , "apikey": serviceRoleKey, "content-type": "application/json" },
+      headers: { "authorization": `Bearer ${serviceRoleKey}`, "apikey": serviceRoleKey, "content-type": "application/json" },
       body: JSON.stringify({ type: "magiclink", email })
     });
     
