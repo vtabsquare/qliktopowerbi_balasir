@@ -349,17 +349,23 @@ export async function handleVtabSso(request: Request, runtimeEnv: RuntimeEnv) {
     const linkRes = await fetch(`${supabaseUrl.replace(/\/$/, "")}/auth/v1/admin/generate_link`, {
       method: "POST",
       headers: { "authorization": `Bearer ${serviceRoleKey}`, "apikey": serviceRoleKey, "content-type": "application/json" },
-      body: JSON.stringify({ type: "magiclink", email })
+      body: JSON.stringify({ 
+        type: "magiclink", 
+        email,
+        options: {
+            redirect_to: "https://qlik-to-pbi-bridge.onrender.com"
+        }
+      })
     });
     
     if (!linkRes.ok) throw new Error("Could not generate login link");
     const linkData = await linkRes.json();
-    const actionLink = linkData.properties?.action_link;
+    const actionLink = linkData.action_link;
     if (!actionLink) throw new Error("Missing action_link");
 
     return jsonResponse({ success: true, magicLink: actionLink });
   } catch (e) {
-    return jsonResponse({ error: "SSO verification failed." }, { status: 400 });
+    return jsonResponse({ error: "SSO verification failed: " + String(e) }, { status: 400 });
   }
 }
 
