@@ -74,6 +74,14 @@ function LandingPage() {
             <span className="relative z-10">Next: Launch Migration Engine</span>
             <ArrowRight className="relative z-10 h-5 w-5 group-hover:translate-x-1 transition-transform" />
           </motion.button>
+          <a
+            href="https://www.vtabsquare.com/?demo=1&product=qlik-to-power-bi-migration&source=qlik-migration-demo"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-5 inline-flex items-center gap-2 rounded-xl border border-primary/40 px-6 py-3 font-semibold text-primary transition-colors hover:bg-primary/10"
+          >
+            Contact for Demo <ArrowRight className="h-4 w-4" />
+          </a>
         </motion.div>
       </section>
 
