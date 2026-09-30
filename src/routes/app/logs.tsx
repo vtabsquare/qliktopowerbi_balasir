@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { AlertCircle, ArrowLeft, CheckCircle2, FileJson, ScrollText, ShieldCheck } from "lucide-react";
-import { dedupePipelineLogs, useMigration } from "@/lib/migration/store";
+import { AlertCircle, ArrowLeft, CheckCircle2, Download, FileJson, ScrollText, ShieldCheck } from "lucide-react";
+import { dedupePipelineLogs, downloadWorkspaceBackup, useMigration } from "@/lib/migration/store";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/logs")({
   component: PipelineLogsPage,
@@ -17,11 +18,32 @@ function Metric({ label, value }: { label: string; value: string | number }) {
 
 function PipelineLogsPage() {
   const navigate = useNavigate();
-  const { enterpriseFiles, enterpriseAnalysis, qvwAnalysis, expressionInventory, powerBiModel, pipelineLogs, projectWorkspace } = useMigration();
+  const {
+    enterpriseFiles,
+    enterpriseAnalysis,
+    qvwAnalysis,
+    expressionInventory,
+    powerBiModel,
+    pipelineLogs,
+    projectWorkspace,
+    exportWorkspaceBackup,
+  } = useMigration();
   const combinedLogs = dedupePipelineLogs([
     ...pipelineLogs,
     ...(enterpriseAnalysis?.logs || []),
   ]);
+
+  const handleExportBackup = () => {
+    try {
+      const backup = exportWorkspaceBackup();
+      downloadWorkspaceBackup(backup);
+      toast.success("Workspace backup snapshot exported successfully.", {
+        description: `Exported ${backup.filesCount} file(s) and full pipeline state.`,
+      });
+    } catch (err) {
+      toast.error(`Failed to export backup: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
 
   const exportStatus = !enterpriseAnalysis
     ? "Analysis required"
@@ -43,9 +65,19 @@ function PipelineLogsPage() {
           <h2 className="font-display text-2xl font-bold mt-1">Migration Logs &amp; Readiness</h2>
           <p className="text-sm text-muted-foreground mt-1">Trace extraction, conversion, model validation and PBIP export state without losing the current workspace.</p>
         </div>
-        <button onClick={() => navigate({ to: "/app/semantic-model" })} className="px-4 py-2 rounded-lg border border-border text-sm hover:bg-surface-elevated">
-          Validation &amp; Export
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleExportBackup}
+            disabled={enterpriseFiles.length === 0}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-border text-sm hover:bg-surface-elevated disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            title="Download full workspace backup (.q2pbi.json)"
+          >
+            <Download className="h-4 w-4 text-primary" /> Export Backup
+          </button>
+          <button onClick={() => navigate({ to: "/app/semantic-model" })} className="px-4 py-2 rounded-lg border border-border text-sm hover:bg-surface-elevated">
+            Validation &amp; Export
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

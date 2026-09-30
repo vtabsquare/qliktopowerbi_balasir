@@ -819,8 +819,46 @@ async function handleQvdSaveCsvApiRequest(request: Request) {
   }
 }
 
+// ─── Automated Staging File Cleanup Daemon ──────────────────────────────────────
+// Cleans temporary CSV files in qvd-output older than maxAgeMs (default: 24 hours)
+let lastCleanupTimestamp = 0;
+async function autoCleanupStagingFiles(maxAgeMs: number = 24 * 60 * 60 * 1000): Promise<{ removed: number; errors: number }> {
+  if (Date.now() - lastCleanupTimestamp < 10 * 60 * 1000 && maxAgeMs > 0) {
+    return { removed: 0, errors: 0 };
+  }
+  lastCleanupTimestamp = Date.now();
+  let removed = 0;
+  let errors = 0;
+  try {
+    const [{ readdir, stat, unlink }, path] = await Promise.all([import("node:fs/promises"), import("node:path")]);
+    const stagingDir = path.join(process.cwd(), "qvd-output");
+    const entries = await readdir(stagingDir, { withFileTypes: true }).catch(() => []);
+    const threshold = Date.now() - maxAgeMs;
+    for (const entry of entries) {
+      if (!entry.isFile()) continue;
+      const fullPath = path.join(stagingDir, entry.name);
+      try {
+        const fileStat = await stat(fullPath);
+        if (fileStat.mtimeMs < threshold) {
+          await unlink(fullPath);
+          removed++;
+        }
+      } catch {
+        errors++;
+      }
+    }
+  } catch {
+    // Staging dir may not exist yet, safe to ignore
+  }
+  return { removed, errors };
+}
+
 async function handleAgentApiRequest(request: Request, runtimeEnv: RuntimeEnv) {
   const url = new URL(request.url);
+  if (url.pathname === "/api/system/cleanup-staging") {
+    const res = await autoCleanupStagingFiles(24 * 60 * 60 * 1000);
+    return jsonResponse({ ok: true, message: "Staging files cleanup executed.", ...res });
+  }
   if (url.pathname !== "/api/agent/message") return null;
   if (request.method !== "POST") return jsonResponse({ error: "Method not allowed" }, { status: 405 });
 

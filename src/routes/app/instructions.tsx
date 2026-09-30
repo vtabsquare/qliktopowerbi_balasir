@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { downloadOperationsRunbookFile } from "@/lib/migration/docs/runbook";
 import {
   AlertTriangle,
   ArrowRight,
@@ -108,12 +109,22 @@ function InstructionsPage() {
                 possible.
               </p>
             </div>
-            <Link
-              to="/app"
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground shadow-lg hover:opacity-90"
-            >
-              Continue to Upload <ArrowRight className="h-4 w-4" />
-            </Link>
+            <div className="flex flex-col sm:flex-row items-center gap-3">
+              <button
+                type="button"
+                onClick={() => downloadOperationsRunbookFile("markdown")}
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-border/80 bg-background/90 px-4 py-3 text-sm font-semibold text-foreground shadow-sm hover:bg-muted/80 transition-all cursor-pointer"
+                title="Download offline markdown operations runbook and technical manual"
+              >
+                <Download className="h-4 w-4 text-primary" /> Operations Runbook
+              </button>
+              <Link
+                to="/app"
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground shadow-lg hover:opacity-90"
+              >
+                Continue to Upload <ArrowRight className="h-4 w-4" />
+              </Link>
+            </div>
           </div>
         </div>
 

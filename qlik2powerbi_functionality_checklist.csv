@@ -1,0 +1,124 @@
+Module,Feature / Functionality,Test Scenario,Expected Result,Status
+Authentication & Security,User Sign In,Login with valid email and password,"User authenticated, session established, redirected to /app workspace",Pass
+Authentication & Security,User Sign In,Login with invalid password,Error alert: 'Incorrect email or password. Please try again.' displayed,Pass
+Authentication & Security,User Sign In,Login with unregistered email,Error alert: 'Incorrect email or password. Please try again.' displayed,Pass
+Authentication & Security,User Sign In,Submit login form with empty email or password,Browser validation prevents submission; highlights required fields,Pass
+Authentication & Security,User Sign In,Toggle password visibility icon,Password field toggles between masked characters and plaintext,Pass
+Authentication & Security,User Sign In,Rate limiting after consecutive failed sign-ins,Error alert: 'Too many attempts. Please wait a moment and try again.',Pass
+Authentication & Security,User Sign Up,Register new account with valid details and strong password,"Account created, confirmation OTP sent to email, state advances to verify-otp",Pass
+Authentication & Security,User Sign Up,Register with password shorter than 12 characters,Password strength bar displays 'Weak'; submit button remains disabled/blocked,Pass
+Authentication & Security,User Sign Up,"Register without uppercase, lowercase, number, or special char",Real-time password meter checklist highlights missing complexity criteria,Pass
+Authentication & Security,User Sign Up,Register with common/dictionary password (e.g. password123),Password meter flags common pattern and rejects submission,Pass
+Authentication & Security,User Sign Up,Register with an email already registered,Error alert: 'An account with this email already exists. Please sign in instead.',Pass
+Authentication & Security,User Sign Up,Register with invalid email format (missing @ sign or domain),HTML5 browser validation flags invalid email format,Pass
+Authentication & Security,OTP Verification,Enter valid 6-digit OTP code within 5 minutes,"OTP verified successfully, session created, redirected to /app",Pass
+Authentication & Security,OTP Verification,Enter invalid or incorrect OTP code,Error alert: 'The verification code is invalid or has expired.',Pass
+Authentication & Security,OTP Verification,Enter expired OTP code (>5 minutes),Error alert: 'The verification code is invalid or has expired. Please request a new one.',Pass
+Authentication & Security,OTP Verification,Click 'Resend OTP' link,New verification OTP dispatched; cooldown timer initiates,Pass
+Authentication & Security,Password Recovery,Submit Forgot Password request with registered email,Password recovery instructions with OTP sent to user email,Pass
+Authentication & Security,Password Recovery,Enter valid recovery OTP code,"Recovery code accepted, transitions to Set New Password screen",Pass
+Authentication & Security,Password Recovery,Submit new password meeting 12+ char complexity rules,"Password updated in database, success toast shown, redirected to sign in",Pass
+Authentication & Security,Session & Route Guard,Access protected route (/app/*) without active session,Route guard triggers immediate redirection to /auth,Pass
+Authentication & Security,Session & Route Guard,Access /auth while already authenticated,User automatically redirected to /app workspace without re-prompt,Pass
+Authentication & Security,Logout,Click 'Sign Out' in App Header,"Supabase session cleared, tokens purged, redirected to /auth",Pass
+Instructions & Onboarding,Guidelines & Rules,Open /app/instructions page,"Displays mandatory, recommended, and optional Qlik migration assets",Pass
+Instructions & Onboarding,Extraction Modes,Review Supported Extraction Modes cards,"Explains Mode A (QVW+PRJ), Mode B (PRJ), Mode C (QVS), Mode D (QVW only)",Pass
+Instructions & Onboarding,Security Guidance,Review Security Preparation panel,"Clear instructions to scrub credentials, tokens, and mask Section Access",Pass
+Instructions & Onboarding,Navigation,Click 'Continue to Upload' button,Smoothly navigates user to /app file intake screen,Pass
+Upload & File Intake,Single File Drop,Drag and drop a single .qvs script file,"File parsed into memory, classified as ETL script, pipeline unlocks",Pass
+Upload & File Intake,PRJ Folder Ingestion,Drop complete <AppName>-prj folder or ZIP archive,"Preserves relative paths; identifies QlikViewProject.xml, sheets, and objects",Pass
+Upload & File Intake,QVW Binary Handling,Upload raw .qvw binary file without PRJ,Detects binary QVW; calls local bridge /api/qvw/extract or displays PRJ prompt,Pass
+Upload & File Intake,Unsupported File,"Upload unsupported extension (e.g. .exe, .pdf, .mp4)",Warning displayed indicating unsupported format ignored,Pass
+Upload & File Intake,File Classification,Verify Input Classification panel after upload,"Accurately groups files into Scripts, Sheets, Objects, Variables, and Config",Pass
+Upload & File Intake,Role Assignment,Auto-assign Source and ETL script roles,System assigns connection script to Source and transformations to ETL tab,Pass
+Upload & File Intake,Role Override,Manually change script role dropdown between Source and ETL,Dropdown selection updates state immediately without re-uploading,Pass
+Upload & File Intake,Reset Workspace,Click 'Clear / Reset' upload button,"Clears uploaded files, resets migration store, restores initial empty dropzone",Pass
+QVW Analysis,Overview & Metrics,Navigate to /app/qvw-analysis with uploaded PRJ,"Displays count cards: Sheets, Objects, Expressions, Variables, Bookmarks, Actions",Pass
+QVW Analysis,Completeness Score,Inspect Intake Status badge and Completeness Score,Calculates % completeness based on available PRJ XML files,Pass
+QVW Analysis,Metadata Export,Click 'Download metadata JSON' button,Downloads complete <AppName>-analysis.json file to client machine,Pass
+QVW Analysis,Sheets Inspector,Browse Sheets tab in QVW Analysis,"Lists all sheets, sheet IDs, object count, sort order, and alternate state",Pass
+QVW Analysis,Visualizations Catalog,"Search visual objects by ID, title, or type","Filters list dynamically across Straight Tables, Pivots, Bars, Lines, Gauges",Pass
+QVW Analysis,Visual Mapping,Verify Qlik chart type to Power BI visual mapping,Straight Table -> Table; Pivot Table -> Matrix; Bar/Line -> Column/Line; Gauge -> Gauge,Pass
+QVW Analysis,Visual Detail Drawer,Click on any visualization card,"Opens detail drawer showing dimensions, measures, expressions, and format strings",Pass
+QVW Analysis,Expressions Catalog,Search expressions by field name or formula text,Returns filtered list with object ID bindings and detected functions,Pass
+QVW Analysis,Variables Explorer,Inspect Variables tab,"Displays script variables, UI variables, definitions, and evaluated values",Pass
+QVW Analysis,Actions & Triggers,Inspect Actions & Triggers tab,Lists document event triggers (OnOpen) and button actions with migration notes,Pass
+QVW Analysis,Macros & Extensions,Inspect Macros & Extensions tab,Identifies VBScript macros and custom extensions; flags for manual redesign,Pass
+Calendar Analysis,Date Range Detection,Auto-detect Min/Max date bounds from script,Calculates earliest and latest transaction date boundaries,Pass
+Calendar Analysis,DAX Calendar Generation,Generate DAX Master Date Dimension,"Outputs DAX table code with CALENDAR, Year, Quarter, Month, Day, WeekNum",Pass
+Calendar Analysis,Fiscal Year Offset,Configure custom Fiscal Year start month (e.g. April),Recalculates FiscalYear and FiscalQuarter columns according to offset,Pass
+Calendar Analysis,Fact Table Lineage,Link Date dimension to Fact table date keys,Establishes 1:* relationship between Date[Date] and Fact[TransactionDate],Pass
+Expression & DAX Engine,Basic Aggregations,Convert Sum(Amount) and Avg(Price),Translates accurately to SUM(Table[Amount]) and AVERAGE(Table[Price]),Pass
+Expression & DAX Engine,Distinct Count,Convert Count(distinct CustomerID),Translates to DISTINCTCOUNT(Table[CustomerID]),Pass
+Expression & DAX Engine,Simple Set Analysis,Convert Sum({<Year={2024}>} Sales),"Translates to CALCULATE(SUM(Sales[Sales]), DimDate[Year] = 2024)",Pass
+Expression & DAX Engine,Multi-Field Set Analysis,"Convert Sum({<Year={2024}, Status={'Active'}>} Sales)",Translates to CALCULATE with multiple boolean filter arguments,Pass
+Expression & DAX Engine,Exclusion Set Analysis,Convert Sum({<Category-={'Discontinued'}>} Margin),"Translates to CALCULATE(SUM(Margin), Product[Category] <> 'Discontinued')",Pass
+Expression & DAX Engine,Dollar-Sign Expansion,Convert expressions referencing $(vBaseRate),Substitutes variable definition or binds to translated scalar measure,Pass
+Expression & DAX Engine,Aggr() Translation,"Convert Aggr(Sum(Sales), CustomerID)","Translates to SUMX(VALUES(Customer[CustomerID]), [Total Sales])",Pass
+Expression & DAX Engine,Rolling Time Windows,"Convert RangeSum(Above(Sum(Sales), 0, 3))","Translates to CALCULATE(..., DATESINPERIOD(...) / WINDOW(...))",Pass
+Expression & DAX Engine,Conditionals & Coalesce,"Convert If(IsNull(Field), 0, Field) and Alt(A, B)","Translates to IF(ISBLANK(...)) and COALESCE(A, B)",Pass
+Expression & DAX Engine,Branching Logic,"Convert Pick(Match(Type, 1, 2, 3), 'A', 'B', 'C')","Translates to SWITCH(TRUE(), Type = 1, 'A', Type = 2, 'B', Type = 3, 'C')",Pass
+Expression & DAX Engine,Status Classification,"Filter inventory by status (Automatic, Warning, Manual)",Accurately filters expressions by automated conversion confidence level,Pass
+Expression & DAX Engine,Approve Expression,Click 'Approve' on converted DAX measure,Marks status as Approved; persists approval in store; updates readiness checklist,Pass
+Expression & DAX Engine,Exclude Expression,Exclude expression with required mandatory reason,Excludes from final model while preserving full lineage audit trail,Pass
+Expression & DAX Engine,Reset Expression,Click 'Reset' on manually modified expression,Reverts user modifications back to initial compiler-generated DAX,Pass
+Expression & DAX Engine,Interactive DAX Editor,Edit DAX code in Monaco/syntax-highlighted editor,"Provides syntax coloring, parenthesis matching, and real-time validation",Pass
+Expression & DAX Engine,Bulk Measure Translator,Execute batch translation on unassigned expressions,Performs concurrent DAX generation with AI assistance,Pass
+ETL & Script Analysis,Load Parsing,Parse multi-tab Qlik load scripts,"Extracts LOAD, SQL SELECT, INLINE tables, and variable declarations",Pass
+ETL & Script Analysis,Resident Loads,Resolve RESIDENT table dependencies,Chains downstream transformation steps to correct parent staging table,Pass
+ETL & Script Analysis,Mapping Load & ApplyMap,Resolve MAPPING LOAD tables and ApplyMap() calls,Transforms lookups into Power Query merges or DAX LOOKUPVALUE,Pass
+ETL & Script Analysis,Autogenerate Statements,Parse AUTOGENERATE and row iteration loops,Converts to sequential List.Numbers / Table.FromColumns in Power Query,Pass
+ETL & Script Analysis,Joins & Concatenations,"Resolve LEFT JOIN, INNER JOIN, OUTER JOIN, CONCATENATE",Translates to Power Query Table.NestedJoin and Table.Combine operations,Pass
+ETL & Script Analysis,Drop Table Handling,Parse DROP TABLE staging cleanups,Marks intermediate staging tables so they are not exposed in semantic model,Pass
+ETL & Script Analysis,Lineage Graph,Inspect interactive table lineage diagram,"Visualizes source files, staging tables, and final reporting tables with dependencies",Pass
+ETL & Script Analysis,Synthetic Key Detection,Identify Qlik synthetic keys across multiple shared fields,Displays warning badge; recommends creating composite surrogate keys,Pass
+ETL & Script Analysis,Circular Reference Check,Detect circular relationship loops in ETL logic,Flags loop and recommends breaking circular dependency via dimensional modeling,Pass
+Power Query (M) Engine,M Script Generation,Generate complete 'let ... in' M query for each table,"Produces valid, formatted Power Query M script with clear transformation steps",Pass
+Power Query (M) Engine,Connection Parameterization,Replace hardcoded paths/connections with parameters,"Generates #""ServerName"" and #""DatabaseName"" parameter references",Pass
+Power Query (M) Engine,Column Data Typing,Inspect Table.TransformColumnTypes step,"Assigns appropriate M types (type text, Int64.Type, type number, type date)",Pass
+Power Query (M) Engine,Syntax Validation,Run M query syntax and token validator,"Checks matching brackets, quotes, commas, and step identifier chaining",Pass
+Power Query (M) Engine,AI Auto-Fix Center,Open Auto-Fix Center on script with syntax errors,AI engine identifies error location and provides structured repair patch,Pass
+Power Query (M) Engine,Apply Auto-Fix,Click 'Apply Fix' button in Auto-Fix Center,"Updates M script immediately, clears error badge, and re-validates syntax",Pass
+Power Query (M) Engine,Clipboard Copy,Click 'Copy M Query' button,Copies M script to clipboard with confirmation toast message,Pass
+Power BI Semantic Model,Table Classification,"Classify tables as Fact, Dimension, or Bridge",Assigns table roles accurately; displays distinct visual indicators per role,Pass
+Power BI Semantic Model,Primary Key Assignment,Set primary key column on dimension tables,Marks column as unique key (`isKey: true`) for relationship endpoints,Pass
+Power BI Semantic Model,Column Formatting,"Configure display format (Currency, Percent, Date)","Sets Power BI format string (e.g. '$#,##0.00', 'yyyy-MM-dd')",Pass
+Power BI Semantic Model,Hide Foreign Keys,Toggle visibility on foreign key / technical ID columns,Marks column with `isHidden: true` so it remains hidden in report canvas,Pass
+Power BI Semantic Model,Smart Model Engine,Click 'Apply Recommended Model',Normalizes table keys and automatically configures star schema relationships,Pass
+Power BI Semantic Model,Model Health Checks,Inspect Model Checks tab for blocking errors,"Validates zero orphan tables, zero type mismatches, and key uniqueness",Pass
+Relationships Canvas,Visual Schema Canvas,Open /app/relationships diagram view,Displays interactive entity relationship diagram with connected table cards,Pass
+Relationships Canvas,Cardinality Detection,Verify cardinality indicators on connecting links,"Correctly tags 1:*, *:1, or 1:1 relationships",Pass
+Relationships Canvas,Cross-Filter Direction,Change cross-filter direction between Single and Both,Updates relationship definition and recalculates filter direction,Pass
+Relationships Canvas,Active / Inactive State,Toggle relationship between Active and Inactive,Sets primary relationship active; secondary relationships marked inactive,Pass
+Relationships Canvas,Ambiguous Path Alert,Create dual active paths between two tables,Alerts user of ambiguous filter paths and requires one link to be inactive,Pass
+Relationships Canvas,Add Relationship,Create new manual relationship between two columns,Validates column data type compatibility and adds relationship to model,Pass
+Relationships Canvas,Delete Relationship,Delete existing relationship link,Removes relationship from model; offers undo / restore option,Pass
+Report Designer,Domain Discovery,Detect business domains from semantic model,"Identifies core domains (Sales, Finance, Inventory) and KPI candidates",Pass
+Report Designer,KPI Candidate Ranking,Inspect KPI Discovery tab,Ranks KPI measures with confidence score and assigned display table,Pass
+Report Designer,Page Layout Planner,Review auto-generated multi-page layout plan,"Generates Executive Summary, Detailed Analytics, and Trend Breakdown pages",Pass
+Report Designer,Visual Layout Grid,Inspect 16:9 canvas visual bounding boxes,"Renders planned visuals (Bar, Line, Card, Slicer, Matrix) with coordinates",Pass
+Report Designer,Binding QueryRef Validation,Verify visual field and measure bindings,Guarantees every projection has a valid semantic model queryRef,Pass
+Report Designer,Power BI Enhancements,Inspect Power BI modern UX enhancements,"Generates interactive slicers, drillthrough target pages, and tooltip cards",Pass
+Report Designer,Report Plan Export,Export professional-report-plan.json,Generates downloadable report layout manifest for audit and governance,Pass
+Validation & PBIP Export,Readiness Checklist,Verify 8-point automated pre-flight checklist,"Checks tables, M scripts, compiler invariants, DAX syntax, and visual bindings",Pass
+Validation & PBIP Export,Compiler Invariants,Validate authoritative compiler invariants,"Confirms calendar integrity, table uniqueness, and measure references",Pass
+Validation & PBIP Export,Microsoft TOM Bridge,Check Microsoft TOM status (/api/tom/status),Detects .NET TOM bridge or falls back to strict TypeScript TMDL serializer,Pass
+Validation & PBIP Export,PBIP ZIP Generation,Click 'Download PBIP Project (ZIP)',Generates complete .pbip project archive with definition.pbir and model.bim,Pass
+Validation & PBIP Export,PBIP Structure Verification,Unzip generated project package,"Contains .pbip file, /Report folder, /SemanticModel folder, and .platform files",Pass
+Validation & PBIP Export,Semantic Model JSON,Click 'Download Model JSON',Downloads consolidated model.json containing TMDL definitions and measures,Pass
+Validation & PBIP Export,Migration Manifest,Verify migration-manifest.json in export package,Contains full lineage linking Qlik sheet/object IDs to Power BI visuals,Pass
+Logs & Observability,Stage Execution Logs,Open /app/logs to inspect event stream,Displays timestamped pipeline log entries across all 11 stages,Pass
+Logs & Observability,Log Severity Filters,"Filter logs by Info, Warning, Error, and Blocking",Accurately filters log entries according to selected severity level,Pass
+Logs & Observability,AI Diagnostics,Inspect AI diagnostic recommendations on warnings,Provides clear root-cause explanation and suggested remediation steps,Pass
+Logs & Observability,Log Export,Export logs to text/JSON format,Downloads structured log file for audit and customer support,Pass
+AI Migration Assistant,Widget Toggle,Click floating AI assistant icon on any page,Expands floating chat modal without interrupting active workflow,Pass
+AI Migration Assistant,Context Awareness,Ask question regarding active stage,"AI assistant context includes current page, loaded tables, and error diagnostics",Pass
+AI Migration Assistant,DAX Explanation,Request explanation of complex translated DAX formula,"AI returns plain-language breakdown of CALCULATE, filter context, and syntax",Pass
+AI Migration Assistant,One-Click Fix Suggestion,Request auto-repair for an M query syntax error,AI generates code patch with 'Apply to Editor' button,Pass
+AI Migration Assistant,Clear Chat History,Click 'Clear Chat' in assistant panel,Clears conversation history and restores default prompt suggestions,Pass
+Global Layout & Navigation,Stage Navigation Menu,Click through StageNav (Stages 0 to 10),Switches smoothly between pipeline stages; marks completed stages with checkmarks,Pass
+Global Layout & Navigation,Floating Workflow Nav,Use floating Quick-Jump navigation pill,"Jumps directly between Upload, ETL, DAX, Model, and Export stages",Pass
+Global Layout & Navigation,Theme Switcher,Toggle between Dark and Light mode in header,Switches color scheme smoothly; maintains accessible contrast ratios,Pass
+Global Layout & Navigation,Cookie Consent,Review Cookie Consent banner on first visit,Displays Accept and Decline buttons; choice persisted in localStorage,Pass
+Global Layout & Navigation,Privacy Policy,Navigate to /privacy route,"Renders comprehensive data privacy policy, security rules, and terms of service",Pass
+Global Layout & Navigation,Responsive Layout,Resize viewport to mobile/tablet breakpoint,Navigation collapses to responsive drawer; tables and code editors adapt,Pass

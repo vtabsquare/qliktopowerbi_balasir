@@ -1,0 +1,101 @@
+Scenario,Action,Expected Result,Status(Pass/Fail)
+Register Page from Login,Click 'Sign up' link on Sign In form,Navigates to registration view and displays sign-up form with password complexity meter,Pass
+Login Page from Register,Click 'Already have an account? Sign in' link on Register form,Navigates back to sign-in view and displays email/password inputs,Pass
+Forgot Password Page,Click 'Forgot password?' link on Sign In form,Switches auth view to password recovery email submission form,Pass
+Login Page from Forgot Password,Click 'Back to sign in' button on Forgot Password form,Returns user to primary sign-in form,Pass
+OTP Verification Page,Submit valid registration or request verification code,Advances view to 6-digit OTP verification interface with timer,Pass
+Login Page from OTP,Click 'Back to sign in' link on OTP verification screen,Aborts OTP flow and returns to sign-in form,Pass
+Set New Password Page,Submit valid recovery OTP code,Navigates to Set New Password screen with complexity validator,Pass
+Login Page after Password Reset,Submit new password successfully,Displays success toast and routes user back to sign-in view,Pass
+Unauthenticated Access to /app,Attempt direct URL access to '/app' without active session,Auth guard intercepts request and redirects immediately to '/auth',Pass
+Unauthenticated Deep Link Access,Attempt direct URL access to '/app/power-query' unauthenticated,Auth guard intercepts request and redirects to '/auth',Pass
+Authenticated Access to /auth,Navigate to '/auth' while already possessing active session,Auto-redirects logged-in user straight to '/app' workspace,Pass
+Log Out Navigation,Click 'Sign Out' icon button in App Header,"Revokes Supabase session, removes tokens, and redirects to '/auth'",Pass
+Launch Migration Engine,Click 'Next: Launch Migration Engine' button on Landing page ('/'),Navigates user to '/app/instructions' (or '/auth' if unauthenticated),Pass
+Privacy Policy Page,Click 'Privacy Policy' link in landing footer,Navigates to '/privacy' route and renders compliance statement,Pass
+Return Home from Privacy,Click 'Back to Home' / Logo link on Privacy Policy page,Navigates back to root landing page ('/'),Pass
+Brand Logo Navigation,Click 'VTAB Square' logo in App Header while in workspace,Navigates back to primary workspace dashboard ('/app'),Pass
+Instructions to Upload,Click 'Continue to Upload' button on Instructions page,Navigates to '/app' file intake and dropzone screen,Pass
+Review Instructions from Upload,Click 'Review instructions' link in upload info banner,Navigates back to '/app/instructions',Pass
+Upload to QVW Analysis,Click 'Continue to QVW Analysis' after uploading PRJ package,Navigates to '/app/qvw-analysis' with extracted metadata populated,Pass
+Upload to ETL Analysis (Single QVS),Click 'Continue to ETL Analysis' when uploading standalone .qvs,Navigates directly to '/app/analysis' skipping sheet visualization stage,Pass
+QVW Analysis to Expression Conversion,Click 'Convert expressions' CTA button in QVW Analysis header,Navigates to '/app/expression-conversion' and builds expression inventory,Pass
+Upload Package from Empty QVW State,Click 'Upload package' button on empty QVW Analysis screen,Navigates back to '/app' upload screen,Pass
+QVW Analysis to Calendar Analysis,Click 'Calendar Analysis' link in QVW Analysis overview,Navigates to '/app/calendar-analysis',Pass
+Return to QVW from Calendar,Click 'Back to QVW Analysis' button on Calendar Analysis page,Navigates back to '/app/qvw-analysis',Pass
+Calendar to Expression Conversion,Click 'Proceed to Expression Conversion' button on Calendar page,Navigates to '/app/expression-conversion',Pass
+Expression Conversion to Previous,Click 'Previous: QVW Analysis' button at bottom of Expression page,Navigates back to '/app/qvw-analysis',Pass
+Expression Conversion to Next,Click 'Next: ETL Analysis' button at bottom of Expression page,Navigates to '/app/analysis' to inspect data lineage,Pass
+ETL Analysis to Previous,Click 'Previous: Expression Conversion' button on ETL Analysis page,Navigates back to '/app/expression-conversion',Pass
+ETL Analysis to Next,Click 'Next: Power Query' button on ETL Analysis page,Navigates to '/app/power-query' with compiled M scripts,Pass
+Power Query to Previous,Click 'Previous: ETL Analysis' button on Power Query page,Navigates back to '/app/analysis',Pass
+Power Query to Next,Click 'Next: DAX Measures' button on Power Query page,Navigates to '/app/dax-measures',Pass
+DAX Measures to Previous,Click 'Previous: Power Query' button on DAX Measures page,Navigates back to '/app/power-query',Pass
+DAX Measures to Next,Click 'Next: Power BI Model' button on DAX Measures page,Navigates to '/app/powerbi-model',Pass
+Power BI Model to Previous,Click 'Previous: DAX Measures' button on Model page,Navigates back to '/app/dax-measures',Pass
+Power BI Model to Next,Click 'Next: Relationships' button on Model page,Navigates to '/app/relationships' schema canvas,Pass
+Relationships to Previous,Click 'Previous: Power BI Model' button on Relationships page,Navigates back to '/app/powerbi-model',Pass
+Relationships to Report Designer,Click 'Next: Report Designer' button on Relationships page,Navigates to '/app/report-designer',Pass
+Report Designer to Previous,Click 'Back to Relationships' button on Report Designer page,Navigates back to '/app/relationships',Pass
+Report Designer to Validation & Export,Click 'Next: Validation & Export' button on Report Designer page,Navigates to '/app/semantic-model',Pass
+Semantic Model to Previous,Click 'Previous: Report Designer' button on Validation & Export page,Navigates back to '/app/report-designer',Pass
+Semantic Model to Logs,Click 'View Pipeline Logs' button on Validation & Export page,Navigates to '/app/logs' observability dashboard,Pass
+Logs to Validation & Export,Click 'Validation & Export' button in Logs header,Navigates back to '/app/semantic-model',Pass
+Logs to Upload / New Migration,Click 'Start New Migration' link on Logs page,Navigates to '/app' to initiate a fresh migration workflow,Pass
+StageNav: Phase 1 Tab,Click 'Phase 1: Capture & Extract' tab in StageNav header,"Selects Phase 1; displays stages: Instructions, Upload, QVW Analysis",Pass
+StageNav: Phase 2 Tab,Click 'Phase 2: Analyze & Convert' tab in StageNav header,"Selects Phase 2; displays stages: Expressions, ETL, Power Query, DAX",Pass
+StageNav: Phase 3 Tab,Click 'Phase 3: Validate & Deploy' tab in StageNav header,"Selects Phase 3; displays stages: Model, Relationships, Export, Logs",Pass
+StageNav: Show All Stages,Click 'Show All' toggle button in StageNav,Expands all 11 stages into a comprehensive grid view,Pass
+StageNav Jump: Instructions,Click 'Stage 1: Instructions' pill in StageNav,Navigates directly to '/app/instructions',Pass
+StageNav Jump: Upload,Click 'Stage 2: Upload' pill in StageNav,Navigates directly to '/app',Pass
+StageNav Jump: QVW Analysis,Click 'Stage 3: QVW Analysis' pill in StageNav,Navigates directly to '/app/qvw-analysis',Pass
+StageNav Jump: Expression Conversion,Click 'Stage 4: Expression Conversion' pill in StageNav,Navigates directly to '/app/expression-conversion',Pass
+StageNav Jump: ETL Analysis,Click 'Stage 5: ETL Analysis' pill in StageNav,Navigates directly to '/app/analysis',Pass
+StageNav Jump: Power Query,Click 'Stage 6: Power Query' pill in StageNav,Navigates directly to '/app/power-query',Pass
+StageNav Jump: DAX Measures,Click 'Stage 7: DAX Measures' pill in StageNav,Navigates directly to '/app/dax-measures',Pass
+StageNav Jump: Power BI Model,Click 'Stage 8: Power BI Model' pill in StageNav,Navigates directly to '/app/powerbi-model',Pass
+StageNav Jump: Relationships,Click 'Stage 9: Relationships' pill in StageNav,Navigates directly to '/app/relationships',Pass
+StageNav Jump: Validation & Export,Click 'Stage 10: Validation & Export' pill in StageNav,Navigates directly to '/app/semantic-model',Pass
+StageNav Jump: Logs,Click 'Stage 11: Logs' pill in StageNav,Navigates directly to '/app/logs',Pass
+StageNav Scroll Shortcut,Click 'Change Stage ↓' link in workspace sub-header banner,Smoothly scrolls viewport to '#migration-stage-menu',Pass
+Floating Top Button,Click floating 'Top' pill button at bottom-right of screen,Smoothly scrolls viewport to the top of the current page ('#app-top'),Pass
+Open Quick-Jump Drawer,Click floating 'Quick Jump' pill button at bottom-right,Opens glassmorphic floating navigator panel displaying all 11 stages,Pass
+Close Quick-Jump via Backdrop,Click background overlay outside Quick-Jump drawer,Dismisses the Quick-Jump drawer and restores normal interaction,Pass
+Close Quick-Jump via Close Button,Click 'X' icon button on Quick-Jump drawer header,Closes the Quick-Jump navigator panel,Pass
+Quick Jump to Upload,Click 'Upload' item inside Quick-Jump drawer,Closes drawer and navigates immediately to '/app',Pass
+Quick Jump to ETL Analysis,Click 'ETL Analysis' item inside Quick-Jump drawer,Closes drawer and navigates immediately to '/app/analysis',Pass
+Quick Jump to Power Query,Click 'Power Query' item inside Quick-Jump drawer,Closes drawer and navigates immediately to '/app/power-query',Pass
+Quick Jump to DAX Measures,Click 'DAX Measures' item inside Quick-Jump drawer,Closes drawer and navigates immediately to '/app/dax-measures',Pass
+Quick Jump to Model,Click 'Power BI Model' item inside Quick-Jump drawer,Closes drawer and navigates immediately to '/app/powerbi-model',Pass
+Quick Jump to Semantic Export,Click 'Validation & Export' item inside Quick-Jump drawer,Closes drawer and navigates immediately to '/app/semantic-model',Pass
+Quick Jump to Pipeline Logs,Click 'Logs' item inside Quick-Jump drawer,Closes drawer and navigates immediately to '/app/logs',Pass
+QVW Analysis: Overview Tab,Click 'Overview' tab trigger on QVW Analysis page,"Displays application metrics, completeness score, and source file list",Pass
+QVW Analysis: Sheets Tab,Click 'Sheets' tab trigger on QVW Analysis page,Displays card list of all extracted sheets with object counts and states,Pass
+QVW Analysis: Visualizations Tab,Click 'Visualizations' tab trigger on QVW Analysis page,"Displays filterable grid of all extracted charts, tables, and KPIs",Pass
+QVW Analysis: Expressions Tab,Click 'Expressions' tab trigger on QVW Analysis page,Displays list of all extracted Qlik formulas and their visual bindings,Pass
+QVW Analysis: Variables Tab,Click 'Variables' tab trigger on QVW Analysis page,Displays script and document variables with evaluated values,Pass
+QVW Analysis: Actions Tab,Click 'Actions & Triggers' tab trigger on QVW Analysis page,"Displays sheet/document triggers, button actions, and bookmarks",Pass
+QVW Analysis: Bookmarks Tab,Click 'Bookmarks' tab trigger on QVW Analysis page,Displays extracted bookmark inventory and selection states,Pass
+QVW Analysis: Macros Tab,Click 'Macros & Extensions' tab trigger on QVW Analysis page,Displays extracted VBScript routines and third-party extensions,Pass
+QVW Analysis: Package Tab,Click 'Package' tab trigger on QVW Analysis page,Displays detailed file manifest of all files present in the PRJ package,Pass
+Open Visual Object Drawer,Click on any visualization card in QVW Visualizations tab,"Opens slide-over detail drawer showing dimensions, measures, and format rules",Pass
+Close Visual Object Drawer,Click close icon or backdrop on Visual Object detail drawer,Dismisses drawer and returns focus to Visualizations catalog,Pass
+Expression Row Selection,Click on an expression in Expression Inventory list,Loads selected expression into Expression Editor with DAX translation panel,Pass
+Model View: Overview Tab,Click 'Overview' tab trigger on Power BI Model page,"Displays summary stats: Fact/Dim counts, relationship counts, health checks",Pass
+Model View: Tables Tab,Click 'Tables' tab trigger on Power BI Model page,"Displays table catalog with column data types, formats, and key configurations",Pass
+Model View: Relationships Tab,Click 'Relationships' tab trigger on Power BI Model page,"Displays active, review, and excluded relationship listings",Pass
+Model View: Checks Tab,Click 'Checks' tab trigger on Power BI Model page,Displays model integrity validation diagnostics and blocking issues,Pass
+Report Designer: Plan Tab,Click 'Report plan' tab trigger on Report Designer page,"Displays generation strategy, detected domains, and visual coverage metrics",Pass
+Report Designer: Page Designer,Click 'Page designer' tab trigger on Report Designer page,Displays interactive 16:9 canvas layout preview with placed visual cards,Pass
+Report Designer: KPI Tab,Click 'KPI discovery' tab trigger on Report Designer page,Displays discovered business KPIs ranked by confidence score,Pass
+Report Designer: Governance,Click 'Validation' tab trigger on Report Designer page,Displays export safeguards and semantic model queryRef validation rules,Pass
+Open Auto-Fix Center Drawer,Click 'Open Auto-Fix Center' button on Power Query page,Expands side panel highlighting detected M errors with repair options,Pass
+Close Auto-Fix Center Drawer,Click 'Close' button on Auto-Fix Center panel,Collapses Auto-Fix panel back to full-width M query code editor,Pass
+Auto-Fix Deep Link Navigation,Click 'Jump to Repair Focus' button on an Auto-Fix diagnostic,Navigates directly to target model/query tab and highlights the error object,Pass
+Open AI Assistant Drawer,Click floating AI Copilot button at bottom of screen,Expands AI Migration Assistant chat interface with active stage context,Pass
+Close AI Assistant Drawer,Click minimize/close button on AI Assistant panel,Collapses assistant panel without losing ongoing chat conversation,Pass
+AI Prompt Suggestion Click,Click any pre-built prompt chip inside AI Assistant,Transfers prompt text into input field and sends inquiry automatically,Pass
+Browser Back Button,Click browser 'Back' button after advancing stage,TanStack Router smoothly transitions to previous stage route with state intact,Pass
+Browser Forward Button,Click browser 'Forward' button,TanStack Router advances to next visited stage route with state intact,Pass
+Page Refresh on Active Route,Press F5 / Reload on '/app/power-query' with active model,"Page reloads, restores cached migration state, and retains Power Query tab",Pass
+Direct Stage Bookmark Access,Paste direct URL '/app/relationships' into browser bar,"Loads application, verifies auth session, and navigates directly to schema canvas",Pass

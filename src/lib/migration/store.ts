@@ -80,6 +80,26 @@ export interface ValidationState {
   lastValidatedAt?: string;
 }
 
+export interface WorkspaceBackupPayload {
+  format: "qlik2pbi-workspace-backup";
+  version: "1.0.0";
+  exportedAt: string;
+  sourcePackageName?: string;
+  filesCount: number;
+  enterpriseFiles: ExtractedFile[];
+  enterpriseAnalysis: EnterpriseAnalysis | null;
+  enterpriseMappingRows: MappingRow[];
+  enterpriseMappingUpdates: Record<string, { mappedRef?: string; connectorType?: string; status?: string; notes?: string }>;
+  enterpriseColumnTypeEdits: Record<string, string>;
+  qvwAnalysis: QvwAnalysis | null;
+  expressionInventory: ExpressionInventory | null;
+  powerBiModel: PowerBiModelState | null;
+  projectWorkspace: ProjectWorkspace | null;
+  pipelineLogs: string[];
+  sourceQvsText?: string;
+  etlQvsText?: string;
+}
+
 interface MeasureValidationResult {
   resolvedCount: number;
   remainingCount: number;
@@ -146,6 +166,8 @@ interface MigrationStore extends MigrationMetadata {
   applySmartModel: () => void;
   validateModel: () => void;
   approveModelDiagnostic: (id: string, approved: boolean) => void;
+  exportWorkspaceBackup: () => WorkspaceBackupPayload;
+  restoreWorkspaceBackup: (backup: WorkspaceBackupPayload) => { ok: boolean; message: string };
 }
 
 const initial: MigrationMetadata & {
@@ -842,7 +864,77 @@ export const useMigration = create<MigrationStore>()(persist((set, get) => ({
   }),
   validateModel: () => set((s) => ({ powerBiModel: s.powerBiModel ? validatePowerBiModel(s.powerBiModel) : null })),
   approveModelDiagnostic: (id, approved) => set((s) => ({ powerBiModel: s.powerBiModel ? { ...s.powerBiModel, diagnostics: s.powerBiModel.diagnostics.map((diagnostic) => diagnostic.id === id ? { ...diagnostic, approved } : diagnostic) } : null })),
+  exportWorkspaceBackup: () => {
+    const s = get();
+    return {
+      format: "qlik2pbi-workspace-backup",
+      version: "1.0.0",
+      exportedAt: new Date().toISOString(),
+      sourcePackageName: s.projectWorkspace?.sourcePackageName || s.enterpriseFiles[0]?.originPackage || s.enterpriseFiles[0]?.name || "QlikWorkspace",
+      filesCount: s.enterpriseFiles.length,
+      enterpriseFiles: s.enterpriseFiles,
+      enterpriseAnalysis: s.enterpriseAnalysis,
+      enterpriseMappingRows: s.enterpriseMappingRows,
+      enterpriseMappingUpdates: s.enterpriseMappingUpdates,
+      enterpriseColumnTypeEdits: s.enterpriseColumnTypeEdits,
+      qvwAnalysis: s.qvwAnalysis,
+      expressionInventory: s.expressionInventory,
+      powerBiModel: s.powerBiModel,
+      projectWorkspace: touchWorkspace(s.projectWorkspace),
+      pipelineLogs: dedupePipelineLogs(s.pipelineLogs),
+      sourceQvsText: s.sourceQvsText,
+      etlQvsText: s.etlQvsText,
+    };
+  },
+  restoreWorkspaceBackup: (backup) => {
+    if (!backup || backup.format !== "qlik2pbi-workspace-backup") {
+      return { ok: false, message: "Invalid backup file format. Expected a valid qlik2pbi-workspace-backup JSON file." };
+    }
+    set((state) => ({
+      enterpriseFiles: backup.enterpriseFiles || [],
+      enterpriseAnalysis: backup.enterpriseAnalysis || null,
+      enterpriseMappingRows: backup.enterpriseMappingRows || [],
+      enterpriseMappingUpdates: backup.enterpriseMappingUpdates || {},
+      enterpriseColumnTypeEdits: backup.enterpriseColumnTypeEdits || {},
+      qvwAnalysis: backup.qvwAnalysis || null,
+      expressionInventory: backup.expressionInventory || null,
+      powerBiModel: backup.powerBiModel ? validatePowerBiModel(backup.powerBiModel) : null,
+      projectWorkspace: backup.projectWorkspace ? touchWorkspace(backup.projectWorkspace) : null,
+      sourceQvsText: backup.sourceQvsText,
+      etlQvsText: backup.etlQvsText,
+      pipelineLogs: appendPipelineLogs(
+        state.pipelineLogs,
+        `Workspace successfully restored from backup [${backup.exportedAt || new Date().toISOString()}]`,
+        `Restored ${backup.enterpriseFiles?.length || 0} file(s), ${backup.enterpriseAnalysis?.finalTables.length || 0} table(s)`,
+      ),
+      autoFixReport: null,
+      repairFocus: null,
+      validationState: {
+        workspaceRevision: (state.validationState?.workspaceRevision || 0) + 1,
+        validationRevision: (state.validationState?.validationRevision || 0) + 1,
+        status: "valid",
+        issues: [],
+        lastValidatedAt: new Date().toISOString(),
+      },
+    }));
+    return { ok: true, message: `Successfully restored workspace from backup (${backup.enterpriseFiles?.length || 0} files).` };
+  },
 }), {
   name: "qlik2pbi-enhanced-workspace-v3",
   partialize: (state) => ({ expressionInventory: state.expressionInventory, powerBiModel: state.powerBiModel, projectWorkspace: state.projectWorkspace, autoFixReport: state.autoFixReport, pipelineLogs: dedupePipelineLogs(state.pipelineLogs), validationState: state.validationState }),
 }));
+
+export function downloadWorkspaceBackup(backup: WorkspaceBackupPayload, customFileName?: string): void {
+  const jsonStr = JSON.stringify(backup, null, 2);
+  const blob = new Blob([jsonStr], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  const sanitizedName = (backup.sourcePackageName || "Qlik2PBI_Workspace").replace(/[^a-zA-Z0-9_-]/g, "_");
+  const dateStr = new Date().toISOString().slice(0, 10);
+  a.download = customFileName || `${sanitizedName}_Backup_${dateStr}.q2pbi.json`;
+  a.href = url;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}

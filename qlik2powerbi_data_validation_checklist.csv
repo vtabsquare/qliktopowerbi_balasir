@@ -1,0 +1,80 @@
+Field,Input Type,Validation Rule,Expected Result,Status
+Login Form - Email,Email,Required / Pattern,Must be a valid RFC 5322 email string (e.g. user@domain.com),Pass
+Login Form - Password,Password,Required / MaxLength 128,Masked text input with hidden value; cannot exceed 128 characters,Pass
+Verification - OTP Code,Text (OTP),Required / Length 6 / Numeric,Must be a valid 6-digit numeric verification code sent to user email,Pass
+Register Form - Email,Email,Required / Pattern / Unique,Must be valid email format and unique in database (not registered in Supabase auth.users),Pass
+Register Form - Password,Password,Required / MinLength 12 / Complexity,"Masked text input with minimum 12 chars: >=1 upper, >=1 lower, >=1 number, >=1 special char",Pass
+Register Form - Confirm Password,Password,Required / Match,Masked text input; must match Register Form Password exactly,Pass
+Forgot Password - Email,Email,Required / Pattern,Must be valid email format belonging to an active registered account,Pass
+Password Recovery - OTP Code,Text (OTP),Required / Length 6 / Numeric,Must be a valid 6-digit numeric recovery code within active 5-minute expiry window,Pass
+New Password Form - Password,Password,Required / MinLength 12 / Complexity,Must meet all 5 security complexity rules and not match common dictionary passwords,Pass
+New Password Form - Confirm Password,Password,Required / Match,Must match New Password input field character for character,Pass
+Dropzone - Upload Files,File (Drop/Browse),Extension Whitelist,"Allowed extensions: .qvs, .txt, .xml, .csv, .qvw, .zip; rejects unlisted formats",Pass
+Dropzone - Single File Size Limit,File,Max File Size,Maximum 100MB per individual file in browser memory buffer,Pass
+Dropzone - QVW Project Folder,Directory / Archive,Folder Structure Integrity,Must contain <AppName>-prj directory with QlikViewProject.xml or LoadScript.txt,Pass
+Dropzone - Zip Archive,Archive (.zip),Valid Compression Format,Decompressible ZIP archive with uncorrupted CRC32 checksums,Pass
+Script Intake - Source Script Selector,Select,Required / Script Role,Dropdown selector assigning uploaded script as primary data connection source,Pass
+Script Intake - ETL Script Selector,Select,Required / Script Role,Dropdown selector assigning uploaded script as ETL transformation logic,Pass
+Intake - Project Workspace Name,Text,Optional / Sanitize,"Alphanumeric string; sanitized to remove path traversal tokens (../, .\)",Pass
+QVW Analysis - Object Search,Text,Optional / Search Query,"Case-insensitive text filter matching Object ID, Title, Type, Sheet ID, or Power BI visual",Pass
+QVW Analysis - Expression Search,Text,Optional / Search Query,"Case-insensitive text filter matching formula string, label, or referenced variable",Pass
+QVW Analysis - Sheet Filter Selector,Select,Enum / Available Sheets,Dropdown options dynamically populated from extracted sheet IDs (or 'all'),Pass
+Expression Conversion - Search Filter,Text,Optional / Search Query,"Filters inventory by formula substring, measure name, object binding, or field",Pass
+Expression Conversion - Artifact Type,Select,Enum,"Options: all, measure, existing-column, calculated-column, calculated-table, parameter, visual-filter",Pass
+Expression Conversion - Status Filter,Select,Enum,"Options: all, automatic, warning, manual, unsupported, missing-dependency, approved, excluded",Pass
+Expression Conversion - Sheet Filter,Select,Enum,Dropdown options dynamically derived from QVW sheet metadata,Pass
+Expression Editor - Measure Name,Text,Required / DAX Naming,Non-empty string; cannot contain enclosing brackets [ ] or single quotes ' ',Pass
+Expression Editor - DAX Expression,Code (Monaco),Required / DAX Syntax,"Syntactically valid DAX expression; balanced parentheses, brackets, and string quotes",Pass
+Expression Editor - Display Folder,Text,Optional / Subfolder Path,Optional folder hierarchy string separated by backslashes (e.g. Sales\KPIs),Pass
+Expression Editor - Format String,Text,Optional / Custom Format,"Valid Power BI format string (e.g. '$#,##0.00', '0.0%', 'yyyy-MM-dd')",Pass
+Expression Editor - Approval Toggle,Checkbox,Boolean,Boolean flag (true/false) confirming human verification of translated DAX logic,Pass
+Expression Editor - Exclusion Reason,Textarea,Required when Excluded,Mandatory non-empty string explaining reason before an expression can be excluded,Pass
+Bulk Measure Translator - Prompt,Textarea,Optional / Prompt Guidance,Optional instructions passed to AI translator to guide DAX business logic style,Pass
+Power Query - Table Selector,Select,Required / Model Tables,Must select an existing table identifier from the parsed enterprise data model,Pass
+Power Query - M Script Editor,Code (Text),Required / M Syntax,Syntactically valid Power Query code strictly wrapped in 'let ... in' block,Pass
+Power Query - Server Parameter,Text,Required for Database Sources,"Valid server hostname, FQDN, or IP address (e.g. sql.corp.domain)",Pass
+Power Query - Database Parameter,Text,Required for Database Sources,Non-empty database catalog name,Pass
+Power Query - File Path Parameter,Text,Required for File Sources,"Valid file URI, local absolute path, or SharePoint/OneDrive document URL",Pass
+Auto-Fix - Repair Patch Action,Button / Dialog,User Confirmation,Explicit user trigger confirming replacement of erroneous M or DAX code block,Pass
+Model Table - Table Kind,Select,Enum,"Options: fact, dimension, bridge, parameter, date, calculation-group",Pass
+Model Table - Table Display Name,Text,Required / Unique / MaxLength 100,Unique table name within semantic model; alphanumeric with spaces allowed,Pass
+Model Column - Column Name,Text,Required / Unique in Table,Unique column identifier within table; cannot duplicate an existing measure name,Pass
+Model Column - Data Type,Select,Enum,"Options: Text, Int64, Double, Decimal, DateTime, Date, Boolean, Binary",Pass
+Model Column - Format String,Text,Optional / Custom Format,"Power BI tabular format string (e.g. 'Currency', 'General Date', 'Integer')",Pass
+Model Column - Is Key Toggle,Checkbox,Boolean,Boolean flag; marks column as unique primary key for 1:* relationship endpoints,Pass
+Model Column - Is Hidden Toggle,Checkbox,Boolean,Boolean flag; hides technical surrogate keys from client reporting view,Pass
+Model Column - Sort By Column,Select,Optional / Column Reference,Must reference another column in the same table with matching cardinality (e.g. Month by MonthNum),Pass
+Model Column - Summarize By,Select,Enum,"Options: Default, None, Sum, Min, Max, Count, Average",Pass
+Relationship - From Table,Select,Required / Model Table,Must reference a valid existing table in the Power BI model,Pass
+Relationship - From Column,Select,Required / Table Column,Must reference an existing column belonging to From Table,Pass
+Relationship - To Table,Select,Required / Model Table,Must reference a valid existing table different from From Table,Pass
+Relationship - To Column,Select,Required / Matching Type,Must reference an existing column in To Table with compatible data type,Pass
+Relationship - Cardinality,Select,Enum,"Options: OneToMany (1:*), ManyToOne (*:1), OneToOne (1:1), ManyToMany (*:*)",Pass
+Relationship - Cross-Filter Direction,Select,Enum,"Options: Single, Both",Pass
+Relationship - Active Toggle,Checkbox,Boolean / Path Constraint,Boolean; only one active relationship allowed between two tables to prevent ambiguity,Pass
+Relationship - Security Filtering,Checkbox,Boolean,Controls whether row-level security filters propagate in both directions,Pass
+Calendar Analysis - Start Date,Date,Required / ISO 8601,Valid date string (yyyy-MM-dd); must be less than or equal to End Date,Pass
+Calendar Analysis - End Date,Date,Required / ISO 8601,Valid date string (yyyy-MM-dd); must be greater than or equal to Start Date,Pass
+Calendar Analysis - Fiscal Year Start Month,Number / Select,Range 1 - 12,Integer between 1 (January) and 12 (December) indicating fiscal year start,Pass
+Calendar Analysis - Date Format Pattern,Select / Text,Enum / Pattern,"Options: yyyy-MM-dd, MM/dd/yyyy, dd/MM/yyyy, dd-MMM-yyyy",Pass
+Report Designer - Page Name,Text,Required / MaxLength 60,Non-empty string describing report page; truncated to 60 characters max,Pass
+Report Designer - Page Purpose,Select,Enum,"Options: executive-summary, detail-analysis, trends-over-time, drillthrough, tooltip",Pass
+Report Designer - Canvas Aspect Ratio,Select,Enum,"Options: 16:9 (1280x720), 4:3 (960x720), Tooltip (320x240), Custom",Pass
+Report Designer - Visual Title,Text,Optional / MaxLength 100,Alphanumeric title string displayed on visual card header,Pass
+Report Designer - Visual Type,Select,Enum,"Options: clusteredBarChart, clusteredColumnChart, lineChart, card, tableEx, pivotTable, pieChart, gauge, slicer",Pass
+Report Designer - Visual Position X,Number,Integer / 0 to 1280,Pixel coordinate within horizontal boundary of report canvas,Pass
+Report Designer - Visual Position Y,Number,Integer / 0 to 720,Pixel coordinate within vertical boundary of report canvas,Pass
+Report Designer - Visual Width,Number,Integer / Min 50,Pixel width; must be >= 50 and not exceed remaining canvas width (1280 - X),Pass
+Report Designer - Visual Height,Number,Integer / Min 50,Pixel height; must be >= 50 and not exceed remaining canvas height (720 - Y),Pass
+Report Designer - QueryRef Binding,Select / Ref,Required / Model Reference,Must resolve to an existing semantic model column (Table[Col]) or measure ([Measure]),Pass
+PBIP Export - Project Name,Text,Required / OS Filename Pattern,"Alphanumeric string; cannot contain illegal characters (/ \ : * ? "" < > |)",Pass
+PBIP Export - Require TOM Bridge,Checkbox,Boolean,Boolean flag; requires .NET Microsoft TOM bridge or falls back to TypeScript TMDL serializer,Pass
+PBIP Export - Include Traceability,Checkbox,Boolean,Boolean flag controlling inclusion of migration-manifest.json in export ZIP,Pass
+PBIP Export - Compatibility Target,Select,Enum,"Options: PBIP (Power BI Project), TMDL Folder, Model.bim JSON",Pass
+Logs - Severity Filter,Select,Enum,"Options: all, info, warning, error, blocking-error",Pass
+Logs - Stage Filter,Select,Enum,"Options: all, stage-0 to stage-10",Pass
+Logs - Search Query,Text,Optional / Search Term,"Case-insensitive text filter matching log message, stage name, or code snippet",Pass
+AI Assistant - Query Input,Textarea,Required / Non-empty,"Non-empty string containing user question, formula assistance request, or code snippet",Pass
+AI Assistant - Model Selector,Select,Enum,"Options: gemini-2.5-flash, gemini-1.5-pro, built-in-offline-fallback",Pass
+Cookie Consent - User Choice,Radio / Button,Required / Enum,Options: 'accepted' or 'declined'; persisted to browser localStorage,Pass
+Theme Selector - Preference,Select / Toggle,Enum,"Options: 'light', 'dark', 'system'; synchronizes root HTML theme class",Pass

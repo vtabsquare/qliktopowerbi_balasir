@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { useMigration } from "@/lib/migration/store";
+import { useMigration, downloadWorkspaceBackup } from "@/lib/migration/store";
 import {
   MultiFileDropzone,
   FileAnalysisPanel,
@@ -18,6 +18,8 @@ import {
   Database,
   AlertCircle,
   ShieldCheck,
+  Download,
+  UploadCloud,
 } from "lucide-react";
 import type { MigrationValidationReport, Requirement } from "@/lib/migration/types";
 import { runEnterpriseAnalysis } from "@/lib/migration/enterprise-parser";
@@ -122,6 +124,8 @@ function UploadPage() {
     qvwAnalysis,
     setEnterpriseAnalysis,
     setEnterpriseMappingRows,
+    exportWorkspaceBackup,
+    restoreWorkspaceBackup,
   } = useMigration();
 
   const [allFiles, setAllFiles] = useState<ExtractedFile[]>(enterpriseFiles);
@@ -133,6 +137,46 @@ function UploadPage() {
   const [complete, setComplete] = useState(!!businessMetadata && !!technicalMetadata);
   const [validationReport, setValidationReport] = useState<MigrationValidationReport | null>(null);
   const [inputClassification, setInputClassification] = useState<UploadClassificationResult | null>(null);
+
+  const handleExportBackup = () => {
+    try {
+      const backup = exportWorkspaceBackup();
+      downloadWorkspaceBackup(backup);
+      toast.success("Workspace backup snapshot exported successfully.", {
+        description: `Exported ${backup.filesCount} file(s) and full pipeline state.`,
+      });
+    } catch (err) {
+      toast.error(`Failed to export backup: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
+
+  const handleRestoreFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const parsed = JSON.parse(event.target?.result as string);
+        const result = restoreWorkspaceBackup(parsed);
+        if (result.ok) {
+          toast.success("Backup Restored", { description: result.message });
+          setAllFiles(parsed.enterpriseFiles || []);
+          if (parsed.enterpriseFiles?.length > 0) {
+            setInputClassification(classifyUploadedArtifacts(parsed.enterpriseFiles));
+          }
+          if (parsed.sourceQvsText && parsed.etlQvsText) {
+            setComplete(true);
+          }
+        } else {
+          toast.error("Restore Failed", { description: result.message });
+        }
+      } catch (err) {
+        toast.error("Failed to parse workspace backup file. Please select a valid .q2pbi.json file.");
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = "";
+  };
 
   const bothSelected = selectedSources.length > 0 && selectedEtls.length > 0;
   const singleScriptMode = selectedSources.length === 1
@@ -349,6 +393,52 @@ function UploadPage() {
         <p className="text-sm text-muted-foreground mt-1.5 max-w-2xl">
           Upload your Qlik files here. The engine will automatically parse QVS scripts, classify ETL logic, and extract any visualization packages needed for the migration pipeline.
         </p>
+      </div>
+
+      {/* Workspace Snapshot & Recovery Bar */}
+      <div className="surface-card p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 border border-border/70 rounded-xl bg-surface/50">
+        <div className="flex items-center gap-3">
+          <div className="grid h-10 w-10 place-items-center rounded-lg bg-emerald-500/10 text-emerald-500 shrink-0">
+            <ShieldCheck className="h-5 w-5" />
+          </div>
+          <div>
+            <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+              Workspace Snapshot &amp; Recovery
+              <span className="text-[11px] font-normal px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
+                P0 Enterprise Recovery
+              </span>
+            </h3>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Export a standalone JSON snapshot of your current project or restore previously analyzed files, lineage and DAX models.
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2.5 shrink-0">
+          <button
+            type="button"
+            onClick={handleExportBackup}
+            disabled={allFiles.length === 0}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-border bg-background hover:bg-surface-elevated disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            title="Download full workspace backup (.q2pbi.json)"
+          >
+            <Download className="h-3.5 w-3.5 text-primary" />
+            Export Snapshot
+          </button>
+
+          <label
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-primary/30 bg-primary/10 text-primary hover:bg-primary/20 cursor-pointer transition-colors"
+            title="Restore workspace from a previous .q2pbi.json file"
+          >
+            <UploadCloud className="h-3.5 w-3.5" />
+            Restore Snapshot
+            <input
+              type="file"
+              accept=".json,.q2pbi.json"
+              onChange={handleRestoreFile}
+              className="hidden"
+            />
+          </label>
+        </div>
       </div>
 
       {/* Upload Section */}
