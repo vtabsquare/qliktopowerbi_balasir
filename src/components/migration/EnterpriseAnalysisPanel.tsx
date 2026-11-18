@@ -18,10 +18,11 @@ import { cn } from "@/lib/utils";
 import {
   Database, FileText, Table2, GitBranch, Layers, BarChart3,
   Network, ShieldCheck, Download, Braces, Loader2, AlertCircle,
-  Check, ChevronDown, ChevronRight, RefreshCw, Info, X, Sparkles, Package, Save, Copy, Pencil, Lightbulb
+  Check, ChevronDown, ChevronRight, RefreshCw, Info, X, Sparkles, Package, Save, Copy, Pencil, Lightbulb, Lock
 } from "lucide-react";
 import type { ExtractedFile } from "./MultiFileDropzone";
 import { useMigration } from "@/lib/migration/store";
+import { useAuth } from "@/contexts/AuthContext";
 import { collectCompilerInvariantIssues, compileAuthoritatively, compilerFingerprint } from "@/lib/migration/QlikCompilerService";
 import { AutoFixCenter } from "./AutoFixCenter";
 import { repairDomId } from "@/lib/migration/autofix";
@@ -87,16 +88,45 @@ function SectionHeader({ title, sub }: { title: string; sub?: string }) {
 }
 
 function CodeBlock({ code, lang = "powerquery" }: { code: string; lang?: string }) {
+  const { isDemo } = useAuth();
   const [copied, setCopied] = useState(false);
   return (
     <div className="relative rounded-xl overflow-hidden border border-border bg-surface-elevated">
-      <button
-        onClick={() => { navigator.clipboard.writeText(code); setCopied(true); setTimeout(() => setCopied(false), 1500); }}
-        className="absolute top-2 right-2 z-10 flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium bg-surface border border-border hover:bg-surface-elevated"
+      {isDemo ? (
+        <button
+          type="button"
+          disabled
+          onClick={() => toast.info("🔒 Copying M Query is restricted in Demo Version.")}
+          title="Copying is locked in Demo Version"
+          className="absolute top-2 right-2 z-10 flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium bg-surface/50 border border-border/50 text-muted-foreground/50 opacity-40 cursor-not-allowed select-none"
+        >
+          <Lock className="h-3 w-3" /> Copy
+        </button>
+      ) : (
+        <button
+          onClick={() => { navigator.clipboard.writeText(code); setCopied(true); setTimeout(() => setCopied(false), 1500); }}
+          className="absolute top-2 right-2 z-10 flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium bg-surface border border-border hover:bg-surface-elevated"
+        >
+          {copied ? <><Check className="h-3 w-3" /> Copied</> : "Copy"}
+        </button>
+      )}
+      <pre
+        onCopy={(e) => {
+          if (isDemo) {
+            e.preventDefault();
+            toast.warning("🔒 Copying M Query content is restricted in Demo Version.");
+          }
+        }}
+        onContextMenu={(e) => {
+          if (isDemo) {
+            e.preventDefault();
+            toast.warning("🔒 Copying M Query content is restricted in Demo Version.");
+          }
+        }}
+        className={cn("p-4 text-xs font-mono overflow-auto max-h-72 text-foreground whitespace-pre-wrap", isDemo && "select-none")}
       >
-        {copied ? <><Check className="h-3 w-3" /> Copied</> : "Copy"}
-      </button>
-      <pre className="p-4 text-xs font-mono overflow-auto max-h-72 text-foreground whitespace-pre-wrap">{code}</pre>
+        {code}
+      </pre>
     </div>
   );
 }
@@ -260,6 +290,7 @@ function MQueryDiagnosticEditor({
   issues?: Array<{ id: string; severity: string; category: string; message: string; recommendation: string; evidence?: string }>;
   onSave: (code: string) => void;
 }) {
+  const { isDemo } = useAuth();
   const [draft, setDraft] = useState(code);
   const [editing, setEditing] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -276,7 +307,19 @@ function MQueryDiagnosticEditor({
           {issueLines.size > 0 && <span className="rounded-full border border-yellow-500/40 bg-yellow-400/15 px-2 py-0.5 text-[10px] font-semibold text-yellow-700 dark:text-yellow-300">{issueLines.size} highlighted line(s)</span>}
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => { navigator.clipboard.writeText(draft); setCopied(true); setTimeout(() => setCopied(false), 1500); }} className="rounded border border-border px-2 py-1 text-[10px] hover:bg-muted">{copied ? 'Copied' : 'Copy'}</button>
+          {isDemo ? (
+            <button
+              type="button"
+              disabled
+              onClick={() => toast.info("🔒 Copying M Query is restricted in Demo Version.")}
+              title="Copying is locked in Demo Version"
+              className="inline-flex items-center gap-1 rounded border border-border/50 bg-muted/30 px-2 py-1 text-[10px] text-muted-foreground/50 opacity-40 cursor-not-allowed select-none"
+            >
+              <Lock className="h-3 w-3" /> Copy
+            </button>
+          ) : (
+            <button onClick={() => { navigator.clipboard.writeText(draft); setCopied(true); setTimeout(() => setCopied(false), 1500); }} className="rounded border border-border px-2 py-1 text-[10px] hover:bg-muted">{copied ? 'Copied' : 'Copy'}</button>
+          )}
           <button onClick={() => setEditing((value) => !value)} className="inline-flex items-center gap-1 rounded border border-border px-2 py-1 text-[10px] hover:bg-muted"><Pencil className="h-3 w-3" />{editing ? 'Review highlights' : 'Edit query'}</button>
           {editing && <button onClick={() => { onSave(draft); setEditing(false); }} className="inline-flex items-center gap-1 rounded bg-primary px-2 py-1 text-[10px] font-semibold text-primary-foreground"><Save className="h-3 w-3" />Save & revalidate</button>}
         </div>
@@ -286,11 +329,42 @@ function MQueryDiagnosticEditor({
           data-repair-editor="power-query"
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
+          onCopy={(e) => {
+            if (isDemo) {
+              e.preventDefault();
+              toast.warning("🔒 Copying M Query content is restricted in Demo Version.");
+            }
+          }}
+          onCut={(e) => {
+            if (isDemo) {
+              e.preventDefault();
+            }
+          }}
+          onContextMenu={(e) => {
+            if (isDemo) {
+              e.preventDefault();
+              toast.warning("🔒 Copying M Query content is restricted in Demo Version.");
+            }
+          }}
           spellCheck={false}
-          className="min-h-[520px] w-full resize-y bg-background p-4 font-mono text-xs leading-6 text-foreground outline-none focus:ring-2 focus:ring-primary/40"
+          className={cn("min-h-[520px] w-full resize-y bg-background p-4 font-mono text-xs leading-6 text-foreground outline-none focus:ring-2 focus:ring-primary/40", isDemo && "select-none")}
         />
       ) : (
-        <div className="max-h-[650px] min-h-[420px] overflow-auto font-mono text-xs leading-6">
+        <div
+          onCopy={(e) => {
+            if (isDemo) {
+              e.preventDefault();
+              toast.warning("🔒 Copying M Query content is restricted in Demo Version.");
+            }
+          }}
+          onContextMenu={(e) => {
+            if (isDemo) {
+              e.preventDefault();
+              toast.warning("🔒 Copying M Query content is restricted in Demo Version.");
+            }
+          }}
+          className={cn("max-h-[650px] min-h-[420px] overflow-auto font-mono text-xs leading-6", isDemo && "select-none")}
+        >
           {lines.map((line, index) => {
             const diagnostic = issueLines.get(index);
             return (
@@ -944,6 +1018,7 @@ function StepTypeBadge({ type }: { type: string }) {
 }
 
 function MQueryStepTable({ mCode }: { mCode: string }) {
+  const { isDemo } = useAuth();
   const steps = parseMQuerySteps(mCode);
   const [expanded, setExpanded] = useState(false);
   const [search, setSearch] = useState('');
@@ -959,6 +1034,10 @@ function MQueryStepTable({ mCode }: { mCode: string }) {
     : steps;
 
   const handleExportCsv = () => {
+    if (isDemo) {
+      toast.info("🔒 Step explanation export is locked in Demo Version.");
+      return;
+    }
     const header = 'Seq,Step Name,Step Type,Final Output Step,Explanation,Columns';
     const rows = steps.map(s =>
       [
@@ -999,16 +1078,28 @@ function MQueryStepTable({ mCode }: { mCode: string }) {
             onChange={e => setSearch(e.target.value)}
             className="px-2 py-1 text-xs rounded border border-border bg-surface focus:border-primary outline-none w-36"
           />
-          <button
-            onClick={handleExportCsv}
-            onMouseEnter={() => setExportHover(true)}
-            onMouseLeave={() => setExportHover(false)}
-            title="Export as CSV"
-            className="flex items-center gap-1 px-2 py-1 text-xs rounded border border-border bg-surface hover:bg-surface-elevated transition-colors"
-          >
-            <Download className="h-3.5 w-3.5" />
-            {exportHover && <span>CSV</span>}
-          </button>
+          {isDemo ? (
+            <button
+              type="button"
+              disabled
+              onClick={() => toast.info("🔒 Step explanation export is locked in Demo Version.")}
+              title="Export is locked in Demo Version"
+              className="flex items-center gap-1 px-2 py-1 text-xs rounded border border-border/50 bg-muted/30 text-muted-foreground/50 opacity-40 cursor-not-allowed select-none"
+            >
+              <Lock className="h-3.5 w-3.5" />
+            </button>
+          ) : (
+            <button
+              onClick={handleExportCsv}
+              onMouseEnter={() => setExportHover(true)}
+              onMouseLeave={() => setExportHover(false)}
+              title="Export as CSV"
+              className="flex items-center gap-1 px-2 py-1 text-xs rounded border border-border bg-surface hover:bg-surface-elevated transition-colors"
+            >
+              <Download className="h-3.5 w-3.5" />
+              {exportHover && <span>CSV</span>}
+            </button>
+          )}
         </div>
       </div>
 
@@ -1161,6 +1252,7 @@ export function TabMQueryDataTypes({
   onTypeChange: (key: string, val: string) => void;
   onAnalysisUpdate: (newAnalysis: EnterpriseAnalysis) => void;
 }) {
+  const { isDemo } = useAuth();
   const { businessMetadata, technicalMetadata, ruleBookMd, sourceQvsText, etlQvsText, repairFocus } = useMigration();
   const [generatingAi, setGeneratingAi] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
@@ -1360,13 +1452,37 @@ export function TabMQueryDataTypes({
                   {generatingAi ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
                   Regenerate
                 </button>
-                <button onClick={downloadAll} className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border text-xs font-medium hover:bg-surface-elevated">
-                  <Download className="h-3.5 w-3.5" /> Download (.txt)
-                </button>
+                {isDemo ? (
+                  <button
+                    type="button"
+                    disabled
+                    onClick={() => toast.info("🔒 Download M scripts (.txt) is locked in Demo Version.")}
+                    title="Download (.txt) is locked in Demo Version"
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border/50 text-muted-foreground/50 text-xs font-medium opacity-40 cursor-not-allowed select-none bg-surface/40"
+                  >
+                    <Lock className="h-3.5 w-3.5" /> Download (.txt)
+                  </button>
+                ) : (
+                  <button onClick={downloadAll} className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border text-xs font-medium hover:bg-surface-elevated">
+                    <Download className="h-3.5 w-3.5" /> Download (.txt)
+                  </button>
+                )}
 
-                <button onClick={handleDownloadPbipZip} className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/40 text-primary text-xs font-semibold hover:bg-primary/20 transition-colors">
-                  <Package className="h-3.5 w-3.5" /> Download PBIP (.zip)
-                </button>
+                {isDemo ? (
+                  <button
+                    type="button"
+                    disabled
+                    onClick={() => toast.info("🔒 Download PBIP is locked in Demo Version.")}
+                    title="Download PBIP is locked in Demo Version"
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/5 border border-primary/20 text-primary/40 text-xs font-semibold opacity-40 cursor-not-allowed select-none"
+                  >
+                    <Lock className="h-3.5 w-3.5" /> Download PBIP (.zip)
+                  </button>
+                ) : (
+                  <button onClick={handleDownloadPbipZip} className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/40 text-primary text-xs font-semibold hover:bg-primary/20 transition-colors">
+                    <Package className="h-3.5 w-3.5" /> Download PBIP (.zip)
+                  </button>
+                )}
               </>
             )}
           </div>
@@ -2027,6 +2143,7 @@ export function TabValidation({ analysis }: { analysis: EnterpriseAnalysis }) {
 // ────────────────────────────────────────────────────────────────
 
 export function TabPbipExport({ analysis }: { analysis: EnterpriseAnalysis }) {
+  const { isDemo } = useAuth();
   const { expressionInventory, powerBiModel, qvwAnalysis, pipelineLogs } = useMigration();
   const modelRequired = Boolean(qvwAnalysis || expressionInventory?.artifacts.length);
   const modelReady = !modelRequired || Boolean(powerBiModel && powerBiModel.readiness !== "not-ready");
@@ -2174,26 +2291,68 @@ export function TabPbipExport({ analysis }: { analysis: EnterpriseAnalysis }) {
       <div className="surface-card p-4 space-y-3">
         <SectionHeader title="Downloads" sub="Export your migration artifacts" />
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {isDemo ? (
+            <button
+              type="button"
+              disabled
+              onClick={() => toast.info("🔒 Download PBIP is locked in Demo Version.")}
+              title="Download PBIP is locked in Demo Version"
+              className="flex items-center gap-2 px-4 py-3 rounded-xl border border-primary/20 bg-primary/5 text-sm font-medium opacity-40 cursor-not-allowed select-none"
+            >
+              <Lock className="h-5 w-5 text-primary/50" />
+              <div className="text-left">
+                <div className="font-semibold text-primary/50">Download PBIP (.zip)</div>
+                <div className="text-xs text-primary/40">Locked in Demo Version</div>
+              </div>
+            </button>
+          ) : (
+            <button onClick={handleDownloadPbipZip} disabled={exporting || !ready}
+              className="flex items-center gap-2 px-4 py-3 rounded-xl border border-primary/40 bg-primary/10 text-sm font-medium hover:bg-primary/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+              <Package className="h-5 w-5 text-primary" />
+              <div className="text-left">
+                <div className="font-semibold text-primary">{exporting ? "Generating..." : "Download PBIP (.zip)"}</div>
+                <div className="text-xs text-primary/70">Extract and open the .pbip file</div>
+              </div>
+            </button>
+          )}
 
-          
-          <button onClick={handleDownloadPbipZip} disabled={exporting || !ready}
-            className="flex items-center gap-2 px-4 py-3 rounded-xl border border-primary/40 bg-primary/10 text-sm font-medium hover:bg-primary/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-            <Package className="h-5 w-5 text-primary" />
-            <div className="text-left">
-              <div className="font-semibold text-primary">{exporting ? "Generating..." : "Download PBIP (.zip)"}</div>
-              <div className="text-xs text-primary/70">Extract and open the .pbip file</div>
-            </div>
-          </button>
-          <button onClick={handleDownloadMQueries}
-            className="flex items-center gap-2 px-4 py-3 rounded-xl border border-border text-sm font-medium hover:bg-surface-elevated">
-            <FileText className="h-4 w-4 text-primary" />
-            <div className="text-left"><div>Power Query M Scripts</div><div className="text-xs text-muted-foreground">All tables as .txt</div></div>
-          </button>
-          <button onClick={handleDownloadJson}
-            className="flex items-center gap-2 px-4 py-3 rounded-xl border border-border text-sm font-medium hover:bg-surface-elevated">
-            <Braces className="h-4 w-4 text-primary" />
-            <div className="text-left"><div>Full Analysis JSON</div><div className="text-xs text-muted-foreground">Model + DAX + relationships</div></div>
-          </button>
+          {isDemo ? (
+            <button
+              type="button"
+              disabled
+              onClick={() => toast.info("🔒 Download M scripts (.txt) is locked in Demo Version.")}
+              title="Download is locked in Demo Version"
+              className="flex items-center gap-2 px-4 py-3 rounded-xl border border-border/50 text-sm font-medium opacity-40 cursor-not-allowed select-none bg-surface/40"
+            >
+              <Lock className="h-4 w-4 text-muted-foreground/50" />
+              <div className="text-left"><div className="text-muted-foreground/50">Power Query M Scripts</div><div className="text-xs text-muted-foreground/40">Locked in Demo Version</div></div>
+            </button>
+          ) : (
+            <button onClick={handleDownloadMQueries}
+              className="flex items-center gap-2 px-4 py-3 rounded-xl border border-border text-sm font-medium hover:bg-surface-elevated">
+              <FileText className="h-4 w-4 text-primary" />
+              <div className="text-left"><div>Power Query M Scripts</div><div className="text-xs text-muted-foreground">All tables as .txt</div></div>
+            </button>
+          )}
+
+          {isDemo ? (
+            <button
+              type="button"
+              disabled
+              onClick={() => toast.info("🔒 Download Full Analysis JSON is locked in Demo Version.")}
+              title="Download is locked in Demo Version"
+              className="flex items-center gap-2 px-4 py-3 rounded-xl border border-border/50 text-sm font-medium opacity-40 cursor-not-allowed select-none bg-surface/40"
+            >
+              <Lock className="h-4 w-4 text-muted-foreground/50" />
+              <div className="text-left"><div className="text-muted-foreground/50">Full Analysis JSON</div><div className="text-xs text-muted-foreground/40">Locked in Demo Version</div></div>
+            </button>
+          ) : (
+            <button onClick={handleDownloadJson}
+              className="flex items-center gap-2 px-4 py-3 rounded-xl border border-border text-sm font-medium hover:bg-surface-elevated">
+              <Braces className="h-4 w-4 text-primary" />
+              <div className="text-left"><div>Full Analysis JSON</div><div className="text-xs text-muted-foreground">Model + DAX + relationships</div></div>
+            </button>
+          )}
         </div>
         <p className="text-xs text-muted-foreground bg-surface-elevated/50 p-3 rounded-lg">
           💡 <strong>To use in Power BI Desktop:</strong> Download the <strong>PBIP (.zip)</strong>, extract the complete folder, enable <strong>Store semantic model using TMDL format</strong> in Power BI Desktop Preview features when required by your Desktop version, and open the <code>.pbip</code> file. Do not open the project from inside the ZIP.

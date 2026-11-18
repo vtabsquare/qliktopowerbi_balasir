@@ -1,8 +1,11 @@
+import { useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMigration } from "@/lib/migration/store";
-import { AlertCircle, ArrowLeft, ArrowRight } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { AlertCircle, ArrowLeft, ArrowRight, Lock } from "lucide-react";
 import { EnterpriseDaxPage } from "@/components/migration/EnterpriseDaxPage";
 import { RepairFocusNotice } from "@/components/migration/RepairFocusNotice";
+import { DemoEndedModal } from "@/components/migration/DemoEndedModal";
 
 export const Route = createFileRoute("/app/dax-measures")({
   component: DaxMeasuresPage,
@@ -11,6 +14,16 @@ export const Route = createFileRoute("/app/dax-measures")({
 function DaxMeasuresPage() {
   const navigate = useNavigate();
   const { enterpriseAnalysis } = useMigration();
+  const { isDemo } = useAuth();
+  const [showDemoEndedModal, setShowDemoEndedModal] = useState(false);
+
+  const handleProceedToSemanticModel = () => {
+    if (isDemo) {
+      setShowDemoEndedModal(true);
+      return;
+    }
+    navigate({ to: "/app/semantic-model" });
+  };
 
   if (!enterpriseAnalysis) {
     return (
@@ -35,10 +48,20 @@ function DaxMeasuresPage() {
         <button onClick={() => navigate({ to: "/app/power-query" })} className="flex items-center gap-2 px-4 py-2 rounded-lg border border-border text-sm font-medium hover:bg-surface-elevated">
           <ArrowLeft className="h-4 w-4" /> Back to Power Query
         </button>
-        <button onClick={() => navigate({ to: "/app/semantic-model" })} className="flex items-center gap-2 px-6 py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-sm shadow-lg hover:opacity-90 transition-all">
+        <button
+          onClick={handleProceedToSemanticModel}
+          className="flex items-center gap-2 px-6 py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-sm shadow-lg hover:opacity-90 transition-all"
+        >
+          {isDemo && <Lock className="h-4 w-4 mr-0.5" />}
           Semantic Model &amp; Export <ArrowRight className="h-4 w-4" />
         </button>
       </div>
+
+      {/* Demo Ended Modal shown when Demo user clicks Semantic Model & Export */}
+      <DemoEndedModal
+        isOpen={showDemoEndedModal}
+        onClose={() => setShowDemoEndedModal(false)}
+      />
     </div>
   );
 }

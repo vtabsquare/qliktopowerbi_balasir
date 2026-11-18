@@ -7,6 +7,9 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useEffect } from "react";
 import { FloatingWorkflowNav } from "@/components/migration/FloatingWorkflowNav";
 import { MigrationAiAssistant } from "@/components/migration/MigrationAiAssistant";
+import { DemoEndedModal } from "@/components/migration/DemoEndedModal";
+import { toast } from "sonner";
+import { isPathLockedInDemo, DEMO_LOCKED_MESSAGE } from "@/lib/demo-mode";
 
 export const Route = createFileRoute("/app")({
   head: () => ({
@@ -19,14 +22,37 @@ export const Route = createFileRoute("/app")({
 });
 
 function AuthGuard() {
-  const { session, loading } = useAuth();
+  const { session, loading, isDemo } = useAuth();
   const navigate = useNavigate();
+  const router = useRouterState();
+  const currentPath = router.location.pathname;
 
   useEffect(() => {
     if (!loading && !session) {
       navigate({ to: "/auth" });
+      return;
     }
-  }, [session, loading, navigate]);
+
+    if (!loading && session) {
+      // When application opens fresh, ensure it always starts on Stage 1 (Instructions)
+      const hasStartedSession = sessionStorage.getItem("app_pipeline_started");
+      if (!hasStartedSession) {
+        sessionStorage.setItem("app_pipeline_started", "true");
+        if (currentPath === "/app" || currentPath === "/app/") {
+          navigate({ to: "/app/instructions" });
+          return;
+        }
+      }
+
+      if (isDemo && isPathLockedInDemo(currentPath)) {
+        toast.warning(DEMO_LOCKED_MESSAGE, {
+          description: "This stage is locked in Demo Mode. Returning to instructions.",
+        });
+        navigate({ to: "/app/instructions" });
+        return;
+      }
+    }
+  }, [session, loading, isDemo, currentPath, navigate]);
 
   if (loading || !session) {
     return (
@@ -40,6 +66,7 @@ function AuthGuard() {
 }
 
 function MigrationLayout() {
+  const { isDemo } = useAuth();
   const { enterpriseAnalysis } = useMigration();
   const router = useRouterState();
   const currentPath = router.location.pathname;
@@ -69,6 +96,7 @@ function MigrationLayout() {
       </main>
       <FloatingWorkflowNav />
       <MigrationAiAssistant />
+      {isDemo && <DemoEndedModal />}
     </div>
   );
 }

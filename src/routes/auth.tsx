@@ -3,6 +3,8 @@ import { useState, useCallback, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 import { ArrowRight, Lock, Mail, UserPlus, KeyRound, Eye, EyeOff, ShieldCheck } from "lucide-react";
+import { DEMO_ACCOUNT_EMAIL } from "@/lib/demo-mode";
+import { useAuth } from "@/contexts/AuthContext";
 
 export const Route = createFileRoute("/auth")({
   component: AuthPage,
@@ -141,12 +143,19 @@ function PasswordStrengthMeter({ password }: { password: string }) {
 // ─── Main Auth Page ───────────────────────────────────────────────────────────
 function AuthPage() {
   const navigate = useNavigate();
+  const { session } = useAuth();
   const [authState, setAuthState] = useState<AuthState>("SIGN_IN");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [otp, setOtp] = useState("");
   const [stateToken, setStateToken] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (session) {
+      navigate({ to: "/app/instructions" });
+    }
+  }, [session, navigate]);
 
   useEffect(() => {
     const ssoToken = new URLSearchParams(window.location.search).get("token");

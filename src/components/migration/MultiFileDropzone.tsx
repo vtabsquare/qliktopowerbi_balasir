@@ -1,5 +1,6 @@
 import { useRef, useState, useEffect, useCallback } from "react";
 import JSZip from "jszip";
+import * as XLSX from "xlsx";
 import {
   FileUp,
   Upload,
@@ -82,6 +83,91 @@ async function blobToBase64(blob: Blob): Promise<string> {
     binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
   }
   return btoa(binary);
+}
+
+export async function parseExcelToCsvText(blobOrBuffer: Blob | ArrayBuffer): Promise<string | null> {
+  try {
+    const buffer = blobOrBuffer instanceof ArrayBuffer ? blobOrBuffer : await blobOrBuffer.arrayBuffer();
+    const workbook = XLSX.read(buffer, { type: "array" });
+    const firstSheetName = workbook.SheetNames[0];
+    if (!firstSheetName) return null;
+    return XLSX.utils.sheet_to_csv(workbook.Sheets[firstSheetName]);
+  } catch (err) {
+    console.warn("Failed to parse Excel sheet:", err);
+    return null;
+  }
+}
+
+export async function extractFilesFromRawList(
+  rawFiles: File[],
+  outputDir: string = "",
+): Promise<ExtractedFile[]> {
+  const result: ExtractedFile[] = [];
+  for (const file of rawFiles) {
+    const ext = "." + (file.name.split(".").pop() ?? "").toLowerCase();
+    if (ext === ".zip") {
+      try {
+        const zip = await JSZip.loadAsync(file);
+        for (const [path, zipEntry] of Object.entries(zip.files)) {
+          if (zipEntry.dir) continue;
+          const entryExt = "." + path.split(".").pop()!.toLowerCase();
+          const entryWithSize = zipEntry as unknown as { _data?: { uncompressedSize?: number } };
+          const sizeKb = parseFloat(((entryWithSize._data?.uncompressedSize ?? 0) / 1024).toFixed(2));
+          let text: string | null = null;
+          if (isTextFile(entryExt)) {
+            text = await zipEntry.async("text");
+          } else if ([".xlsx", ".xls"].includes(entryExt)) {
+            const buf = await zipEntry.async("arraybuffer");
+            text = await parseExcelToCsvText(buf);
+          }
+          const binaryBase64 = entryExt === ".qvw" ? await zipEntry.async("base64") : undefined;
+          const entry: ExtractedFile = {
+            path,
+            name: path.split("/").pop()!,
+            extension: entryExt,
+            sizeKb,
+            text,
+            parsedAsText: text !== null,
+            binaryBase64,
+            originPackage: file.name,
+          };
+          result.push(entry);
+          if (entryExt === ".qvd" && outputDir !== "__SKIP__") {
+            const qvdBlob = await zipEntry.async("blob");
+            const qvdFile = new File([qvdBlob], entry.name, { type: "application/octet-stream" });
+            const conv = await convertQvdFile(qvdFile, path, outputDir);
+            if ("csvFile" in conv) result.push(conv.csvFile);
+          }
+        }
+      } catch (e) {
+        console.warn("ZIP parse failed:", file.name, e);
+      }
+    } else {
+      const sizeKb = parseFloat((file.size / 1024).toFixed(2));
+      let text: string | null = null;
+      if (isTextFile(ext)) {
+        text = await file.text();
+      } else if ([".xlsx", ".xls"].includes(ext)) {
+        text = await parseExcelToCsvText(file);
+      }
+      const binaryBase64 = ext === ".qvw" ? await blobToBase64(file) : undefined;
+      const filePath = (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name;
+      result.push({
+        path: filePath,
+        name: file.name,
+        extension: ext,
+        sizeKb,
+        text,
+        parsedAsText: text !== null,
+        binaryBase64,
+      });
+      if (ext === ".qvd" && outputDir !== "__SKIP__") {
+        const conv = await convertQvdFile(file, filePath, outputDir);
+        if ("csvFile" in conv) result.push(conv.csvFile);
+      }
+    }
+  }
+  return result;
 }
 
 function getFileColor(ext: string): string {
@@ -503,51 +589,7 @@ export function MultiFileDropzone({ onFiles }: Props) {
       }
 
       // ── Main processing loop ──
-      for (const file of rawFiles) {
-        const ext = "." + (file.name.split(".").pop() ?? "").toLowerCase();
-        if (ext === ".zip") {
-          try {
-            const zip = await JSZip.loadAsync(file);
-            for (const [path, zipEntry] of Object.entries(zip.files)) {
-              if (zipEntry.dir) continue;
-              const entryExt = "." + path.split(".").pop()!.toLowerCase();
-              const entryWithSize = zipEntry as unknown as { _data?: { uncompressedSize?: number } };
-              const sizeKb = parseFloat(((entryWithSize._data?.uncompressedSize ?? 0) / 1024).toFixed(2));
-              const text = isTextFile(entryExt) ? await zipEntry.async("text") : null;
-              const binaryBase64 = entryExt === ".qvw" ? await zipEntry.async("base64") : undefined;
-              const entry: ExtractedFile = {
-                path,
-                name: path.split("/").pop()!,
-                extension: entryExt,
-                sizeKb,
-                text,
-                parsedAsText: text !== null,
-                binaryBase64,
-                originPackage: file.name,
-              };
-              result.push(entry);
-              if (entryExt === ".qvd" && resolvedOutputDir !== "__SKIP__") {
-                const qvdBlob = await zipEntry.async("blob");
-                const qvdFile = new File([qvdBlob], entry.name, { type: "application/octet-stream" });
-                const conv = await convertQvdFile(qvdFile, path, resolvedOutputDir);
-                if ("csvFile" in conv) result.push(conv.csvFile);
-              }
-            }
-          } catch (e) {
-            console.warn("ZIP parse failed:", file.name, e);
-          }
-        } else {
-          const sizeKb = parseFloat((file.size / 1024).toFixed(2));
-          const text = isTextFile(ext) ? await file.text() : null;
-          const binaryBase64 = ext === ".qvw" ? await blobToBase64(file) : undefined;
-          const filePath = (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name;
-          result.push({ path: filePath, name: file.name, extension: ext, sizeKb, text, parsedAsText: text !== null, binaryBase64 });
-          if (ext === ".qvd" && resolvedOutputDir !== "__SKIP__") {
-            const conv = await convertQvdFile(file, filePath, resolvedOutputDir);
-            if ("csvFile" in conv) result.push(conv.csvFile);
-          }
-        }
-      }
+      const result = await extractFilesFromRawList(rawFiles, resolvedOutputDir);
       await onFiles(result);
     } finally {
       setProcessing(false);

@@ -1,11 +1,13 @@
 import { Link, useNavigate } from "@tanstack/react-router";
-import { MoreHorizontal, ChevronDown, Upload, LogOut, Trash2 } from "lucide-react";
+import { MoreHorizontal, ChevronDown, Upload, LogOut, Trash2, Lock } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 import { useState, useRef, useEffect } from "react";
+import { useAuth } from "@/contexts/AuthContext";
 
 export function AppHeader() {
   const navigate = useNavigate();
+  const { isDemo } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -84,61 +86,156 @@ export function AppHeader() {
           >
             Pipeline
           </Link>
-          <Link
-            to="/app/calendar-analysis"
-            activeProps={{ className: "bg-primary text-primary-foreground shadow-sm" }}
-            className="rounded-full px-3.5 py-1.5 text-muted-foreground hover:text-foreground transition-all"
-          >
-            Calendars
-          </Link>
-          <Link
-            to="/app/report-designer"
-            activeProps={{ className: "bg-primary text-primary-foreground shadow-sm" }}
-            className="rounded-full px-3.5 py-1.5 text-muted-foreground hover:text-foreground transition-all"
-          >
-            Report Designer
-          </Link>
-          <Link
-            to="/app/logs"
-            activeProps={{ className: "bg-primary text-primary-foreground shadow-sm" }}
-            className="rounded-full px-3.5 py-1.5 text-muted-foreground hover:text-foreground transition-all"
-          >
-            Logs
-          </Link>
+          {isDemo ? (
+            <button
+              type="button"
+              disabled
+              onClick={() => toast.info("🔒 Calendars is locked in the Demo Version.")}
+              title="Calendars is locked in Demo Version"
+              className="inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-muted-foreground/50 opacity-40 cursor-not-allowed select-none transition-all hover:bg-muted/20"
+            >
+              <span>Calendars</span>
+              <Lock className="h-3 w-3 opacity-70" />
+            </button>
+          ) : (
+            <Link
+              to="/app/calendar-analysis"
+              activeProps={{ className: "bg-primary text-primary-foreground shadow-sm" }}
+              className="rounded-full px-3.5 py-1.5 text-muted-foreground hover:text-foreground transition-all"
+            >
+              Calendars
+            </Link>
+          )}
+
+          {isDemo ? (
+            <button
+              type="button"
+              disabled
+              onClick={() => toast.info("🔒 Report Designer is locked in the Demo Version.")}
+              title="Report Designer is locked in Demo Version"
+              className="inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-muted-foreground/50 opacity-40 cursor-not-allowed select-none transition-all hover:bg-muted/20"
+            >
+              <span>Report Designer</span>
+              <Lock className="h-3 w-3 opacity-70" />
+            </button>
+          ) : (
+            <Link
+              to="/app/report-designer"
+              activeProps={{ className: "bg-primary text-primary-foreground shadow-sm" }}
+              className="rounded-full px-3.5 py-1.5 text-muted-foreground hover:text-foreground transition-all"
+            >
+              Report Designer
+            </Link>
+          )}
+
+          {isDemo ? (
+            <button
+              type="button"
+              disabled
+              onClick={() => toast.info("🔒 Logs is locked in the Demo Version.")}
+              title="Logs is locked in Demo Version"
+              className="inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-muted-foreground/50 opacity-40 cursor-not-allowed select-none transition-all hover:bg-muted/20"
+            >
+              <span>Logs</span>
+              <Lock className="h-3 w-3 opacity-70" />
+            </button>
+          ) : (
+            <Link
+              to="/app/logs"
+              activeProps={{ className: "bg-primary text-primary-foreground shadow-sm" }}
+              className="rounded-full px-3.5 py-1.5 text-muted-foreground hover:text-foreground transition-all"
+            >
+              Logs
+            </Link>
+          )}
         </nav>
         <div className="ml-auto flex shrink-0 items-center gap-2">
+          {isDemo && (
+            <div
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400 font-bold text-xs tracking-wider shadow-xs animate-in fade-in duration-200"
+              title="Demo Mode: Restricted features are locked"
+            >
+              <Lock className="h-3.5 w-3.5 shrink-0" />
+              <span>DEMO VERSION</span>
+            </div>
+          )}
+
           <button className="hidden xl:flex items-center gap-2 px-3 py-2 rounded-xl border border-border bg-surface text-sm">
             <span className="text-muted-foreground">19 Jun</span>
             <span className="text-muted-foreground">2024</span>
             <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
           </button>
-          <button className="flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-xl bg-accent text-accent-foreground text-sm font-medium hover:bg-accent/80 transition">
-            Deploy <Upload className="h-3.5 w-3.5" />
-          </button>
-          <button
-            onClick={handleLogout}
-            title="Logout"
-            className="grid place-items-center h-10 w-10 rounded-xl border border-border bg-surface hover:bg-red-500/10 hover:border-red-500/40 hover:text-red-500 transition-colors"
-          >
-            <LogOut className="h-4 w-4" />
-          </button>
+
+          {isDemo ? (
+            <button
+              type="button"
+              disabled
+              title="Deploy is locked in Demo Version"
+              onClick={() => toast.info("🔒 Deploy is locked in the Demo Version.")}
+              className="flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-xl bg-accent/40 text-accent-foreground/50 text-sm font-medium opacity-40 cursor-not-allowed select-none border border-border/40"
+            >
+              <span>Deploy</span>
+              <Lock className="h-3.5 w-3.5" />
+            </button>
+          ) : (
+            <button className="flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-xl bg-accent text-accent-foreground text-sm font-medium hover:bg-accent/80 transition">
+              Deploy <Upload className="h-3.5 w-3.5" />
+            </button>
+          )}
+
+          {isDemo ? (
+            <button
+              type="button"
+              onClick={() => {
+                toast.info("Demo user session active.", {
+                  action: {
+                    label: "Sign Out",
+                    onClick: () => handleLogout(),
+                  },
+                });
+              }}
+              title="Sign Out of Demo"
+              className="grid place-items-center h-10 w-10 rounded-xl border border-border/40 bg-surface/40 text-muted-foreground/40 opacity-40 cursor-not-allowed select-none"
+            >
+              <LogOut className="h-4 w-4" />
+            </button>
+          ) : (
+            <button
+              onClick={handleLogout}
+              title="Logout"
+              className="grid place-items-center h-10 w-10 rounded-xl border border-border bg-surface hover:bg-red-500/10 hover:border-red-500/40 hover:text-red-500 transition-colors"
+            >
+              <LogOut className="h-4 w-4" />
+            </button>
+          )}
 
           {/* (...) menu with account deletion */}
           <div className="relative" ref={menuRef}>
-            <button
-              id="header-more-menu-btn"
-              aria-label="More options"
-              aria-expanded={menuOpen}
-              onClick={() => {
-                setMenuOpen((v) => !v);
-                setDeleteConfirm(false);
-              }}
-              className="grid place-items-center h-10 w-10 rounded-xl border border-border bg-surface hover:bg-muted transition-colors"
-            >
-              <MoreHorizontal className="h-4 w-4" />
-            </button>
+            {isDemo ? (
+              <button
+                type="button"
+                disabled
+                title="Options locked in Demo Version"
+                className="grid place-items-center h-10 w-10 rounded-xl border border-border/40 bg-surface/40 text-muted-foreground/40 opacity-40 cursor-not-allowed select-none"
+              >
+                <MoreHorizontal className="h-4 w-4" />
+              </button>
+            ) : (
+              <button
+                id="header-more-menu-btn"
+                aria-label="More options"
+                aria-expanded={menuOpen}
+                onClick={() => {
+                  setMenuOpen((v) => !v);
+                  setDeleteConfirm(false);
+                }}
+                className="grid place-items-center h-10 w-10 rounded-xl border border-border bg-surface hover:bg-muted transition-colors"
+              >
+                <MoreHorizontal className="h-4 w-4" />
+              </button>
+            )}
 
-            {menuOpen && (
+            {!isDemo && menuOpen && (
               <div className="absolute right-0 top-12 z-50 w-56 rounded-xl border border-border bg-background shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150">
                 <a
                   href="/privacy"

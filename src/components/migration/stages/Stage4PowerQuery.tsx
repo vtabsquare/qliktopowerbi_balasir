@@ -1,13 +1,16 @@
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { useMigration } from "@/lib/migration/store";
+import { useAuth } from "@/contexts/AuthContext";
 import { generatePowerQueriesFromMigrationMetadata } from "@/lib/migration/generators";
-import { AlertCircle, ArrowRight, Check, Copy, Download, GitBranch, Loader2, FileCode2 } from "lucide-react";
+import { AlertCircle, ArrowRight, Check, Copy, Download, GitBranch, Loader2, FileCode2, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { FinalTable } from "@/lib/migration/types";
 
 import { generatePowerQueryViaAi } from "@/lib/migration/gemini";
 
 export function Stage4PowerQuery({ onNext }: { onNext: () => void }) {
+  const { isDemo } = useAuth();
   const { businessMetadata, technicalMetadata, finalTables = [], ruleBookMd, validationReport, sourceQvsText, etlQvsText, setStageStatus } = useMigration();
 
   const [generated, setGenerated] = useState(false);
@@ -77,6 +80,10 @@ export function Stage4PowerQuery({ onNext }: { onNext: () => void }) {
   const current = queries[active];
 
   const downloadAll = () => {
+    if (isDemo) {
+      toast.info("🔒 Download scripts is locked in Demo Version.");
+      return;
+    }
     const blob = new Blob(
       [queries.map((q) => `// === ${q.table.name} ===\n${q.code}\n\n`).join("")],
       { type: "text/plain" },
@@ -149,9 +156,21 @@ export function Stage4PowerQuery({ onNext }: { onNext: () => void }) {
               <p className="text-sm text-muted-foreground">Generated clean coverage files for {queries.length} surviving tables.</p>
             </div>
             <div className="flex gap-2">
-              <button onClick={downloadAll} className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-border bg-surface text-sm font-medium">
-                <Download className="h-4 w-4" /> Download scripts
-              </button>
+              {isDemo ? (
+                <button
+                  type="button"
+                  disabled
+                  onClick={() => toast.info("🔒 Download scripts is locked in Demo Version.")}
+                  title="Download scripts is locked in Demo Version"
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-border/50 bg-surface/40 text-muted-foreground/50 text-sm font-medium opacity-40 cursor-not-allowed select-none"
+                >
+                  <Lock className="h-4 w-4" /> Download scripts
+                </button>
+              ) : (
+                <button onClick={downloadAll} className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-border bg-surface text-sm font-medium">
+                  <Download className="h-4 w-4" /> Download scripts
+                </button>
+              )}
               <button onClick={onNext} className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-medium">
                 Continue to Semantic Model <ArrowRight className="h-4 w-4" />
               </button>
@@ -176,16 +195,45 @@ export function Stage4PowerQuery({ onNext }: { onNext: () => void }) {
             </div>
             {current && (
               <div className="relative">
-                <button
-                  onClick={() => {
-                    navigator.clipboard.writeText(current.code);
-                    setCopied(true); setTimeout(() => setCopied(false), 1500);
+                {isDemo ? (
+                  <button
+                    type="button"
+                    disabled
+                    onClick={() => toast.warning("🔒 Copying M Query is restricted in Demo Version.")}
+                    title="Copy is locked in Demo Version"
+                    className="absolute top-3 right-3 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface/50 border border-border/50 text-xs font-medium z-10 opacity-40 cursor-not-allowed select-none text-muted-foreground/60"
+                  >
+                    <Lock className="h-3 w-3" /> Copy
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(current.code);
+                      setCopied(true); setTimeout(() => setCopied(false), 1500);
+                    }}
+                    className="absolute top-3 right-3 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface border border-border text-xs font-medium z-10 hover:bg-surface-elevated"
+                  >
+                    {copied ? <><Check className="h-3 w-3" /> Copied</> : <><Copy className="h-3 w-3" /> Copy</>}
+                  </button>
+                )}
+                <pre
+                  onCopy={(e) => {
+                    if (isDemo) {
+                      e.preventDefault();
+                      toast.warning("🔒 Copying M Query content is restricted in Demo Version.");
+                    }
                   }}
-                  className="absolute top-3 right-3 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface border border-border text-xs font-medium z-10 hover:bg-surface-elevated"
+                  onContextMenu={(e) => {
+                    if (isDemo) {
+                      e.preventDefault();
+                      toast.warning("🔒 Copying M Query content is restricted in Demo Version.");
+                    }
+                  }}
+                  className={cn(
+                    "p-6 text-xs font-mono leading-relaxed overflow-auto max-h-[42rem] min-h-[30rem] bg-surface-elevated text-foreground",
+                    isDemo && "select-none"
+                  )}
                 >
-                  {copied ? <><Check className="h-3 w-3" /> Copied</> : <><Copy className="h-3 w-3" /> Copy</>}
-                </button>
-                <pre className="p-6 text-xs font-mono leading-relaxed overflow-auto max-h-[42rem] min-h-[30rem] bg-surface-elevated text-foreground">
 {current.code}
                 </pre>
               </div>

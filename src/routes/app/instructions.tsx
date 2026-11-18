@@ -1,5 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { downloadOperationsRunbookFile } from "@/lib/migration/docs/runbook";
+import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import {
   AlertTriangle,
   ArrowRight,
@@ -12,6 +15,7 @@ import {
   FolderTree,
   Info,
   LayoutDashboard,
+  Lock,
   PackageCheck,
   ServerCog,
   ShieldCheck,
@@ -86,6 +90,8 @@ const optional = [
 ];
 
 function InstructionsPage() {
+  const { isDemo } = useAuth();
+
   return (
     <div className="space-y-8">
       <section className="surface-card overflow-hidden">
@@ -110,14 +116,25 @@ function InstructionsPage() {
               </p>
             </div>
             <div className="flex flex-col sm:flex-row items-center gap-3">
-              <button
-                type="button"
-                onClick={() => downloadOperationsRunbookFile("markdown")}
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-border/80 bg-background/90 px-4 py-3 text-sm font-semibold text-foreground shadow-sm hover:bg-muted/80 transition-all cursor-pointer"
-                title="Download offline markdown operations runbook and technical manual"
-              >
-                <Download className="h-4 w-4 text-primary" /> Operations Runbook
-              </button>
+              {isDemo ? (
+                <button
+                  type="button"
+                  onClick={() => toast.info("🔒 Operations Runbook is locked in the Demo Version.")}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-border/40 bg-background/50 px-4 py-3 text-sm font-semibold text-muted-foreground/60 shadow-sm opacity-50 cursor-not-allowed select-none transition-all"
+                  title="Operations Runbook is locked in Demo Version"
+                >
+                  <Lock className="h-4 w-4 text-muted-foreground/70" /> Operations Runbook
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => downloadOperationsRunbookFile("markdown")}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-border/80 bg-background/90 px-4 py-3 text-sm font-semibold text-foreground shadow-sm hover:bg-muted/80 transition-all cursor-pointer"
+                  title="Download offline markdown operations runbook and technical manual"
+                >
+                  <Download className="h-4 w-4 text-primary" /> Operations Runbook
+                </button>
+              )}
               <Link
                 to="/app"
                 className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground shadow-lg hover:opacity-90"
@@ -251,14 +268,27 @@ function InstructionsPage() {
         </div>
       </section>
 
-      <section className="surface-card p-7">
+      <section className={cn("surface-card p-7 transition-all", isDemo && "border-amber-500/30")}>
+        {isDemo && (
+          <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-800 dark:text-amber-300">
+            <div className="flex items-center gap-2.5 font-medium">
+              <Lock className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+              <span>
+                <strong>Demo Mode Restriction:</strong> Preparation utilities and template downloads are locked in the Demo Version.
+              </span>
+            </div>
+            <span className="inline-flex items-center gap-1 text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300 w-fit">
+              <Lock className="h-3 w-3" /> Locked
+            </span>
+          </div>
+        )}
         <div className="grid lg:grid-cols-[1fr_0.8fr] gap-8">
           <div>
             <div className="flex items-center gap-2 mb-2">
               <FileArchive className="h-5 w-5 text-primary" />
               <h3 className="font-display text-xl font-semibold">Expected ZIP/folder structure</h3>
             </div>
-            <pre className="mt-4 overflow-x-auto rounded-xl bg-slate-950 p-5 text-xs leading-6 text-slate-200 border border-slate-800">{`SalesDashboard_Migration/
+            <pre className={cn("mt-4 overflow-x-auto rounded-xl bg-slate-950 p-5 text-xs leading-6 text-slate-200 border border-slate-800", isDemo && "select-none")}>{`SalesDashboard_Migration/
 ├── SalesDashboard.qvw
 ├── SalesDashboard-prj/
 │   ├── QlikViewProject.xml
@@ -281,72 +311,162 @@ function InstructionsPage() {
 └── business-requirements.md`}</pre>
           </div>
           <div className="space-y-4">
-            <h3 className="font-display text-xl font-semibold">Preparation utilities</h3>
+            <div className="flex items-center justify-between">
+              <h3 className="font-display text-xl font-semibold">Preparation utilities</h3>
+              {isDemo && (
+                <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 flex items-center gap-1">
+                  <Lock className="h-3 w-3" /> Locked in Demo
+                </span>
+              )}
+            </div>
             <p className="text-sm text-muted-foreground leading-relaxed">
               The package includes a Windows PowerShell helper. It creates the expected{" "}
               <span className="font-mono text-foreground">-prj</span> folder next to the QVW and
               asks QlikView Desktop to save the project definition.
             </p>
-            <a
-              href="/tools/qvw-extract-prj.ps1"
-              download
-              className="flex items-center justify-between rounded-xl border border-border p-4 hover:bg-accent/30 transition-colors"
-            >
-              <div className="flex items-center gap-3">
-                <Download className="h-5 w-5 text-primary" />
-                <div>
-                  <div className="font-semibold text-sm">Windows PRJ extraction helper</div>
-                  <div className="text-xs text-muted-foreground">qvw-extract-prj.ps1</div>
-                </div>
-              </div>
-              <ArrowRight className="h-4 w-4" />
-            </a>
-            <a
-              href="/templates/sample-qvw-prj-package.zip"
-              download
-              className="flex items-center justify-between rounded-xl border border-border p-4 hover:bg-accent/30 transition-colors"
-            >
-              <div className="flex items-center gap-3">
-                <FileArchive className="h-5 w-5 text-fuchsia-500" />
-                <div>
-                  <div className="font-semibold text-sm">Sample QVW PRJ test package</div>
-                  <div className="text-xs text-muted-foreground">
-                    Upload this ZIP to validate the new analysis page
+
+            {isDemo ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => toast.info("🔒 Windows PRJ extraction helper is locked in Demo Version.")}
+                  className="w-full flex items-center justify-between rounded-xl border border-border/40 bg-surface/20 p-4 opacity-50 cursor-not-allowed select-none text-left transition-colors"
+                  title="Locked in Demo Version"
+                >
+                  <div className="flex items-center gap-3">
+                    <Lock className="h-5 w-5 text-muted-foreground/60" />
+                    <div>
+                      <div className="font-semibold text-sm text-muted-foreground flex items-center gap-2">
+                        <span>Windows PRJ extraction helper</span>
+                        <span className="text-[10px] uppercase font-bold text-amber-600/80 bg-amber-500/10 px-1.5 py-0.5 rounded">Locked</span>
+                      </div>
+                      <div className="text-xs text-muted-foreground/60">qvw-extract-prj.ps1</div>
+                    </div>
                   </div>
-                </div>
-              </div>
-              <ArrowRight className="h-4 w-4" />
-            </a>
-            <a
-              href="/templates/source-connections.template.csv"
-              download
-              className="flex items-center justify-between rounded-xl border border-border p-4 hover:bg-accent/30 transition-colors"
-            >
-              <div className="flex items-center gap-3">
-                <FileSpreadsheet className="h-5 w-5 text-emerald-500" />
-                <div>
-                  <div className="font-semibold text-sm">Source connection template</div>
-                  <div className="text-xs text-muted-foreground">CSV without passwords</div>
-                </div>
-              </div>
-              <ArrowRight className="h-4 w-4" />
-            </a>
-            <a
-              href="/templates/business-requirements.template.md"
-              download
-              className="flex items-center justify-between rounded-xl border border-border p-4 hover:bg-accent/30 transition-colors"
-            >
-              <div className="flex items-center gap-3">
-                <FileImage className="h-5 w-5 text-violet-500" />
-                <div>
-                  <div className="font-semibold text-sm">Migration requirement template</div>
-                  <div className="text-xs text-muted-foreground">
-                    Business intent and acceptance criteria
+                  <Lock className="h-4 w-4 text-muted-foreground/40" />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => toast.info("🔒 Sample QVW PRJ test package is locked in Demo Version.")}
+                  className="w-full flex items-center justify-between rounded-xl border border-border/40 bg-surface/20 p-4 opacity-50 cursor-not-allowed select-none text-left transition-colors"
+                  title="Locked in Demo Version"
+                >
+                  <div className="flex items-center gap-3">
+                    <Lock className="h-5 w-5 text-muted-foreground/60" />
+                    <div>
+                      <div className="font-semibold text-sm text-muted-foreground flex items-center gap-2">
+                        <span>Sample QVW PRJ test package</span>
+                        <span className="text-[10px] uppercase font-bold text-amber-600/80 bg-amber-500/10 px-1.5 py-0.5 rounded">Locked</span>
+                      </div>
+                      <div className="text-xs text-muted-foreground/60">Upload this ZIP to validate the new analysis page</div>
+                    </div>
                   </div>
-                </div>
-              </div>
-              <ArrowRight className="h-4 w-4" />
-            </a>
+                  <Lock className="h-4 w-4 text-muted-foreground/40" />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => toast.info("🔒 Source connection template is locked in Demo Version.")}
+                  className="w-full flex items-center justify-between rounded-xl border border-border/40 bg-surface/20 p-4 opacity-50 cursor-not-allowed select-none text-left transition-colors"
+                  title="Locked in Demo Version"
+                >
+                  <div className="flex items-center gap-3">
+                    <Lock className="h-5 w-5 text-muted-foreground/60" />
+                    <div>
+                      <div className="font-semibold text-sm text-muted-foreground flex items-center gap-2">
+                        <span>Source connection template</span>
+                        <span className="text-[10px] uppercase font-bold text-amber-600/80 bg-amber-500/10 px-1.5 py-0.5 rounded">Locked</span>
+                      </div>
+                      <div className="text-xs text-muted-foreground/60">CSV without passwords</div>
+                    </div>
+                  </div>
+                  <Lock className="h-4 w-4 text-muted-foreground/40" />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => toast.info("🔒 Migration requirement template is locked in Demo Version.")}
+                  className="w-full flex items-center justify-between rounded-xl border border-border/40 bg-surface/20 p-4 opacity-50 cursor-not-allowed select-none text-left transition-colors"
+                  title="Locked in Demo Version"
+                >
+                  <div className="flex items-center gap-3">
+                    <Lock className="h-5 w-5 text-muted-foreground/60" />
+                    <div>
+                      <div className="font-semibold text-sm text-muted-foreground flex items-center gap-2">
+                        <span>Migration requirement template</span>
+                        <span className="text-[10px] uppercase font-bold text-amber-600/80 bg-amber-500/10 px-1.5 py-0.5 rounded">Locked</span>
+                      </div>
+                      <div className="text-xs text-muted-foreground/60">Business intent and acceptance criteria</div>
+                    </div>
+                  </div>
+                  <Lock className="h-4 w-4 text-muted-foreground/40" />
+                </button>
+              </>
+            ) : (
+              <>
+                <a
+                  href="/tools/qvw-extract-prj.ps1"
+                  download
+                  className="flex items-center justify-between rounded-xl border border-border p-4 hover:bg-accent/30 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <Download className="h-5 w-5 text-primary" />
+                    <div>
+                      <div className="font-semibold text-sm">Windows PRJ extraction helper</div>
+                      <div className="text-xs text-muted-foreground">qvw-extract-prj.ps1</div>
+                    </div>
+                  </div>
+                  <ArrowRight className="h-4 w-4" />
+                </a>
+                <a
+                  href="/templates/sample-qvw-prj-package.zip"
+                  download
+                  className="flex items-center justify-between rounded-xl border border-border p-4 hover:bg-accent/30 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <FileArchive className="h-5 w-5 text-fuchsia-500" />
+                    <div>
+                      <div className="font-semibold text-sm">Sample QVW PRJ test package</div>
+                      <div className="text-xs text-muted-foreground">
+                        Upload this ZIP to validate the new analysis page
+                      </div>
+                    </div>
+                  </div>
+                  <ArrowRight className="h-4 w-4" />
+                </a>
+                <a
+                  href="/templates/source-connections.template.csv"
+                  download
+                  className="flex items-center justify-between rounded-xl border border-border p-4 hover:bg-accent/30 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <FileSpreadsheet className="h-5 w-5 text-emerald-500" />
+                    <div>
+                      <div className="font-semibold text-sm">Source connection template</div>
+                      <div className="text-xs text-muted-foreground">CSV without passwords</div>
+                    </div>
+                  </div>
+                  <ArrowRight className="h-4 w-4" />
+                </a>
+                <a
+                  href="/templates/business-requirements.template.md"
+                  download
+                  className="flex items-center justify-between rounded-xl border border-border p-4 hover:bg-accent/30 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <FileImage className="h-5 w-5 text-violet-500" />
+                    <div>
+                      <div className="font-semibold text-sm">Migration requirement template</div>
+                      <div className="text-xs text-muted-foreground">
+                        Business intent and acceptance criteria
+                      </div>
+                    </div>
+                  </div>
+                  <ArrowRight className="h-4 w-4" />
+                </a>
+              </>
+            )}
           </div>
         </div>
       </section>

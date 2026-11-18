@@ -124,7 +124,7 @@ export function MigrationAiAssistant() {
     return (
       <button
         onClick={() => setOpen(true)}
-        className="fixed right-4 bottom-[4.5rem] z-50 flex items-center gap-2 rounded-full sm:bottom-20 bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground shadow-2xl hover:opacity-95"
+        className="fixed right-4 bottom-[4.5rem] z-40 flex items-center gap-2 rounded-full sm:bottom-20 bg-primary px-4 py-2.5 text-xs sm:text-sm font-semibold text-primary-foreground shadow-lg hover:opacity-95 transition-all"
       >
         <Sparkles className="h-4 w-4" /> Migration AI <ChevronLeft className="h-4 w-4" />
       </button>

@@ -1,14 +1,34 @@
 import { useState } from "react";
-import { ArrowUp, Check, X, Layers, Sparkles } from "lucide-react";
+import { Check, X, Layers, Sparkles, Lock } from "lucide-react";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { STAGES } from "./StageNav";
 import { useMigration } from "@/lib/migration/store";
+import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "sonner";
 
 export function FloatingWorkflowNav() {
   const [open, setOpen] = useState(false);
   const path = useRouterState({ select: (state) => state.location.pathname });
   const { enterpriseFiles, enterpriseAnalysis, qvwAnalysis, expressionInventory, powerBiModel } = useMigration();
+  const { isDemo } = useAuth();
+
   const ready = (stagePath: string) => {
+    if (isDemo) {
+      // Phase 3 stages remain locked in Demo Version
+      if (
+        [
+          "/app/powerbi-model",
+          "/app/relationships",
+          "/app/semantic-model",
+          "/app/logs",
+        ].includes(stagePath)
+      ) {
+        return false;
+      }
+      // All Phase 1 and Phase 2 stages (Instructions, Upload, QVW Analysis,
+      // Expression Conversion, ETL Analysis, Power Query, DAX Measures) are unlocked in Demo Version
+      return true;
+    }
     if (["/app/instructions", "/app"].includes(stagePath)) return true;
     if (stagePath === "/app/qvw-analysis") return enterpriseFiles.length > 0;
     if (stagePath === "/app/expression-conversion") return Boolean(qvwAnalysis || enterpriseAnalysis);
@@ -18,28 +38,20 @@ export function FloatingWorkflowNav() {
     return true;
   };
   return <>
-    <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2 sm:bottom-6 sm:right-6">
-      <button
-        onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-        className="h-10 sm:h-11 px-3.5 sm:px-4 rounded-full border border-border/80 bg-background/80 backdrop-blur-xl shadow-elevated flex items-center gap-2 text-xs font-semibold hover:bg-surface hover:border-primary/40 transition-all group"
-        title="Go to top"
-      >
-        <ArrowUp className="h-3.5 w-3.5 text-primary group-hover:-translate-y-0.5 transition-transform" />
-        <span>Top</span>
-      </button>
+    <div className="fixed bottom-4 right-4 z-50 sm:bottom-6 sm:right-6">
       <button
         onClick={() => setOpen((value) => !value)}
         className="h-10 sm:h-11 px-4 sm:px-5 rounded-full bg-gradient-to-r from-primary to-[oklch(0.62_0.2_260)] text-primary-foreground shadow-elevated flex items-center gap-2 text-xs font-bold hover:scale-105 active:scale-95 transition-all"
-        title="Go to migration menu"
+        title={open ? "Close migration menu" : "Go to migration menu"}
       >
         {open ? <X className="h-4 w-4" /> : <Layers className="h-4 w-4" />}
-        <span>Quick Jump</span>
+        <span>{open ? "Close" : "Quick Jump"}</span>
       </button>
     </div>
     {open && (
-      <div className="fixed inset-0 z-40 bg-black/30 backdrop-blur-xs animate-in fade-in duration-200" onClick={() => setOpen(false)}>
+      <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs animate-in fade-in duration-200" onClick={() => setOpen(false)}>
         <aside
-          className="absolute right-4 bottom-20 w-[min(360px,calc(100vw-2rem))] max-h-[75vh] overflow-auto glass-card bg-surface/90 shadow-2xl p-5 border border-border/80 animate-in slide-in-from-bottom-4 duration-200"
+          className="absolute right-4 bottom-20 w-[min(360px,calc(100vw-2rem))] max-h-[75vh] overflow-auto glass-card bg-surface/95 shadow-2xl p-5 border border-border/80 animate-in slide-in-from-bottom-4 duration-200"
           onClick={(event) => event.stopPropagation()}
         >
           <div className="flex items-center justify-between pb-3 border-b border-border/60 mb-3">
@@ -72,10 +84,26 @@ export function FloatingWorkflowNav() {
                   {active && <span className="ml-auto text-[10px] bg-white/20 px-1.5 py-0.5 rounded">Active</span>}
                 </Link>
               ) : (
-                <div key={stage.id} className="flex items-center gap-3 rounded-xl px-3 py-2 text-xs text-muted-foreground opacity-50">
-                  <span className="grid h-6 w-6 place-items-center rounded-lg bg-muted text-[10px]">{index + 1}</span>
+                <div
+                  key={stage.id}
+                  onClick={() => {
+                    if (isDemo) {
+                      setOpen(false);
+                      window.dispatchEvent(new CustomEvent("open-demo-ended-modal"));
+                      toast.info(`🔒 ${stage.label} is locked in Demo Version. Contact for Phase 3 access.`);
+                    } else {
+                      toast.info(`🔒 ${stage.label} is locked.`);
+                    }
+                  }}
+                  className="flex items-center gap-3 rounded-xl px-3 py-2 text-xs text-muted-foreground opacity-60 hover:opacity-100 cursor-pointer select-none hover:bg-muted/30 transition-colors"
+                >
+                  <span className="grid h-6 w-6 place-items-center rounded-lg bg-amber-500/10 text-amber-600 text-[10px]">
+                    <Lock className="h-3 w-3" />
+                  </span>
                   <span className="truncate">{stage.label}</span>
-                  <span className="ml-auto text-[10px] bg-muted px-1.5 py-0.5 rounded">locked</span>
+                  <span className="ml-auto text-[10px] bg-amber-500/10 text-amber-600 px-1.5 py-0.5 rounded flex items-center gap-1">
+                    <span>locked</span>
+                  </span>
                 </div>
               );
             })}

@@ -1,18 +1,21 @@
-import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState, useMemo } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
+import { isDemoUser } from '@/lib/demo-mode';
 
 type AuthContextType = {
   session: Session | null;
   user: User | null;
   loading: boolean;
+  isDemo: boolean;
 };
 
 const AuthContext = createContext<AuthContextType>({
   session: null,
   user: null,
   loading: true,
+  isDemo: false,
 });
 
 // Inactivity timeout: 30 minutes (in milliseconds)
@@ -86,8 +89,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     return () => subscription.unsubscribe();
   }, []);
 
+  const isDemo = useMemo(() => isDemoUser(user), [user]);
+
   return (
-    <AuthContext.Provider value={{ session, user, loading }}>
+    <AuthContext.Provider value={{ session, user, loading, isDemo }}>
       {children}
     </AuthContext.Provider>
   );
@@ -95,4 +100,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
 export const useAuth = () => {
   return useContext(AuthContext);
+};
+
+export const useDemoMode = () => {
+  const { isDemo, user } = useAuth();
+  return { isDemo, user };
 };

@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMigration, downloadWorkspaceBackup } from "@/lib/migration/store";
 import {
   MultiFileDropzone,
@@ -20,6 +20,8 @@ import {
   ShieldCheck,
   Download,
   UploadCloud,
+  Lock,
+  RefreshCw,
 } from "lucide-react";
 import type { MigrationValidationReport, Requirement } from "@/lib/migration/types";
 import { runEnterpriseAnalysis } from "@/lib/migration/enterprise-parser";
@@ -28,7 +30,9 @@ import { parseQvwProject } from "@/lib/migration/qvw";
 import { LayoutDashboard, FileWarning } from "lucide-react";
 import { classifyUploadedArtifacts, type UploadClassificationResult } from "@/lib/migration/input-classifier";
 import { InputClassificationPanel } from "@/components/migration/InputClassificationPanel";
+import { DemoUploadChoice } from "@/components/migration/DemoUploadChoice";
 import { toast } from "sonner";
+import { useAuth } from "@/contexts/AuthContext";
 
 export const Route = createFileRoute("/app/")({
   component: UploadPage,
@@ -109,6 +113,7 @@ async function enrichQvwUpload(files: ExtractedFile[]): Promise<{
 
 function UploadPage() {
   const navigate = useNavigate();
+  const { isDemo } = useAuth();
   const {
     setEnterpriseFiles,
     enterpriseFiles,
@@ -137,6 +142,15 @@ function UploadPage() {
   const [complete, setComplete] = useState(!!businessMetadata && !!technicalMetadata);
   const [validationReport, setValidationReport] = useState<MigrationValidationReport | null>(null);
   const [inputClassification, setInputClassification] = useState<UploadClassificationResult | null>(null);
+  const [showUploadModal, setShowUploadModal] = useState<boolean>(
+    () => isDemo && enterpriseFiles.length === 0,
+  );
+
+  useEffect(() => {
+    const handleOpenUploadModal = () => setShowUploadModal(true);
+    window.addEventListener("open-upload-modal", handleOpenUploadModal);
+    return () => window.removeEventListener("open-upload-modal", handleOpenUploadModal);
+  }, []);
 
   const handleExportBackup = () => {
     try {
@@ -414,49 +428,180 @@ function UploadPage() {
           </div>
         </div>
         <div className="flex items-center gap-2.5 shrink-0">
-          <button
-            type="button"
-            onClick={handleExportBackup}
-            disabled={allFiles.length === 0}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-border bg-background hover:bg-surface-elevated disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            title="Download full workspace backup (.q2pbi.json)"
-          >
-            <Download className="h-3.5 w-3.5 text-primary" />
-            Export Snapshot
-          </button>
+          {isDemo ? (
+            <button
+              type="button"
+              disabled
+              onClick={() => toast.info("🔒 Export Snapshot is locked in the Demo Version.")}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-border/40 bg-background/40 text-muted-foreground/50 opacity-40 cursor-not-allowed select-none transition-colors"
+              title="Export Snapshot is locked in Demo Version"
+            >
+              <Lock className="h-3.5 w-3.5 text-muted-foreground/60" />
+              Export Snapshot
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={handleExportBackup}
+              disabled={allFiles.length === 0}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-border bg-background hover:bg-surface-elevated disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              title="Download full workspace backup (.q2pbi.json)"
+            >
+              <Download className="h-3.5 w-3.5 text-primary" />
+              Export Snapshot
+            </button>
+          )}
 
-          <label
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-primary/30 bg-primary/10 text-primary hover:bg-primary/20 cursor-pointer transition-colors"
-            title="Restore workspace from a previous .q2pbi.json file"
-          >
-            <UploadCloud className="h-3.5 w-3.5" />
-            Restore Snapshot
-            <input
-              type="file"
-              accept=".json,.q2pbi.json"
-              onChange={handleRestoreFile}
-              className="hidden"
-            />
-          </label>
+          {isDemo ? (
+            <button
+              type="button"
+              disabled
+              onClick={() => toast.info("🔒 Restore Snapshot is locked in the Demo Version.")}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-primary/20 bg-primary/5 text-primary/40 opacity-40 cursor-not-allowed select-none transition-colors"
+              title="Restore Snapshot is locked in Demo Version"
+            >
+              <Lock className="h-3.5 w-3.5 text-muted-foreground/60" />
+              Restore Snapshot
+            </button>
+          ) : (
+            <label
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-primary/30 bg-primary/10 text-primary hover:bg-primary/20 cursor-pointer transition-colors"
+              title="Restore workspace from a previous .q2pbi.json file"
+            >
+              <UploadCloud className="h-3.5 w-3.5" />
+              Restore Snapshot
+              <input
+                type="file"
+                accept=".json,.q2pbi.json"
+                onChange={handleRestoreFile}
+                className="hidden"
+              />
+            </label>
+          )}
         </div>
       </div>
 
       {/* Upload Section */}
-      <div className="surface-card p-6 space-y-4 shadow-sm border border-border/50">
-        <div className="flex items-start gap-4 mb-2">
-          <div className="grid h-11 w-11 place-items-center rounded-xl bg-primary/10 text-primary shrink-0">
-            <PackageOpen className="h-5 w-5" />
+      {isDemo ? (
+        <>
+          {/* Modal Pop-up Selection Container */}
+          <DemoUploadChoice
+            isOpen={showUploadModal}
+            onClose={() => setShowUploadModal(false)}
+            onDone={() => setShowUploadModal(false)}
+            onFiles={handleFiles}
+            activeFilesCount={allFiles.length}
+            currentDatasetName={
+              allFiles.length > 0
+                ? allFiles.some((f) => f.originPackage === "enterprise-complex-demo.zip")
+                  ? "Enterprise Demo Dataset"
+                  : "Custom Uploaded Dataset"
+                : null
+            }
+            onReset={() => {
+              setAllFiles([]);
+              setEnterpriseFiles([]);
+              setInputClassification(null);
+              setQvwAnalysis(null);
+              setSelectedSources([]);
+              setSelectedEtls([]);
+              setComplete(false);
+              toast.info("Workspace cleared. Choose your data source to start.");
+            }}
+          />
+
+          {/* Clean In-Page Dataset Status Bar (Replacing inline container) */}
+          <div className="surface-card p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 border border-border/70 rounded-xl bg-surface/50 shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="grid h-10 w-10 place-items-center rounded-lg bg-primary/10 text-primary shrink-0">
+                {allFiles.length > 0 ? (
+                  allFiles.some((f) => f.originPackage === "enterprise-complex-demo.zip") ? (
+                    <Database className="h-5 w-5" />
+                  ) : (
+                    <UploadCloud className="h-5 w-5" />
+                  )
+                ) : (
+                  <PackageOpen className="h-5 w-5 text-muted-foreground" />
+                )}
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-semibold text-foreground">
+                    {allFiles.length > 0
+                      ? allFiles.some((f) => f.originPackage === "enterprise-complex-demo.zip")
+                        ? "Enterprise Demo Dataset Active"
+                        : "Custom Uploaded Dataset Active"
+                      : "No Dataset Loaded"}
+                  </h3>
+                  {allFiles.length > 0 ? (
+                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
+                      {allFiles.length} file(s) loaded
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 border border-amber-500/20">
+                      Selection Required
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {allFiles.length > 0
+                    ? allFiles.some((f) => f.originPackage === "enterprise-complex-demo.zip")
+                      ? "Preloaded enterprise star-schema dataset with QVS scripts, CSV data, and QVW visual models."
+                      : "Your custom uploaded migration package."
+                    : "Click 'Upload / Choose Dataset' to bring in your data or explore with our demo dataset."}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => setShowUploadModal(true)}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-primary text-primary-foreground hover:opacity-90 shadow-sm transition-all"
+              >
+                <UploadCloud className="h-3.5 w-3.5" />
+                {allFiles.length > 0 ? "Change / Upload Dataset" : "Upload / Choose Dataset"}
+              </button>
+              {allFiles.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAllFiles([]);
+                    setEnterpriseFiles([]);
+                    setInputClassification(null);
+                    setQvwAnalysis(null);
+                    setSelectedSources([]);
+                    setSelectedEtls([]);
+                    setComplete(false);
+                    setShowUploadModal(true);
+                    toast.info("Workspace cleared.");
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium border border-border bg-background hover:bg-surface-elevated text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  Reset
+                </button>
+              )}
+            </div>
           </div>
-          <div>
-            <h3 className="font-display text-xl font-semibold">Upload &amp; Extraction Engine</h3>
-            <p className="text-sm text-muted-foreground">
-              Upload individual QVS/CSV files, a ZIP package, or an entire folder. The engine will
-              extract and analyse all contents automatically.
-            </p>
+        </>
+      ) : (
+        <div className="surface-card p-6 space-y-4 shadow-sm border border-border/50">
+          <div className="flex items-start gap-4 mb-2">
+            <div className="grid h-11 w-11 place-items-center rounded-xl bg-primary/10 text-primary shrink-0">
+              <PackageOpen className="h-5 w-5" />
+            </div>
+            <div>
+              <h3 className="font-display text-xl font-semibold">Upload &amp; Extraction Engine</h3>
+              <p className="text-sm text-muted-foreground">
+                Upload individual QVS/CSV files, a ZIP package, or an entire folder. The engine will
+                extract and analyse all contents automatically.
+              </p>
+            </div>
           </div>
+          <MultiFileDropzone onFiles={handleFiles} />
         </div>
-        <MultiFileDropzone onFiles={handleFiles} />
-      </div>
+      )}
 
       {inputClassification && <InputClassificationPanel result={inputClassification} />}
 
@@ -669,7 +814,12 @@ function UploadPage() {
           disabled={!complete || hasSyntaxErrors}
           className="flex items-center gap-2 px-6 py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-sm shadow-lg hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
         >
-          {qvwAnalysis ? "Proceed to QVW Analysis" : "Proceed to Enterprise Analysis"} <ArrowRight className="h-4 w-4" />
+          {isDemo
+            ? "Proceed to ETL Analysis"
+            : qvwAnalysis
+              ? "Proceed to QVW Analysis"
+              : "Proceed to Enterprise Analysis"}{" "}
+          <ArrowRight className="h-4 w-4" />
         </button>
       </div>
     </div>

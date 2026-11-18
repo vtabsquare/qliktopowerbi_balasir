@@ -472,6 +472,29 @@ async function readQvwProjectFilesRecursive(root: string): Promise<Array<{
   return result;
 }
 
+function isDemoRequest(request: Request): boolean {
+  try {
+    const authHeader = request.headers.get("authorization") || request.headers.get("x-authorization");
+    if (authHeader && authHeader.toLowerCase().startsWith("bearer ")) {
+      const token = authHeader.slice(7).trim();
+      const parts = token.split(".");
+      if (parts.length === 3) {
+        const pad = (s: string) => s + "=".repeat((4 - (s.length % 4)) % 4);
+        const b64url2b64 = (s: string) => pad(s.replace(/-/g, "+").replace(/_/g, "/"));
+        const payloadStr = atob(b64url2b64(parts[1]));
+        const payload = JSON.parse(payloadStr);
+        if (typeof payload?.email === "string" && payload.email.toLowerCase().trim() === "vtabpublicuser@gmail.com") {
+          return true;
+        }
+        if (payload?.user_metadata?.is_demo === true || payload?.app_metadata?.is_demo === true) {
+          return true;
+        }
+      }
+    }
+  } catch {}
+  return false;
+}
+
 async function handleQvwApiRequest(request: Request) {
   const url = new URL(request.url);
   if (!url.pathname.startsWith("/api/qvw/")) return null;
@@ -576,6 +599,9 @@ async function handleQvwApiRequest(request: Request) {
 async function handleTomApiRequest(request: Request) {
   const url = new URL(request.url);
   if (!url.pathname.startsWith("/api/tom/")) return null;
+  if (isDemoRequest(request)) {
+    return jsonResponse({ error: "TOM TMDL compiler is locked in Demo Version Mode." }, { status: 403 });
+  }
   if (typeof process === "undefined" || !process.versions?.node) {
     return jsonResponse({ error: "Microsoft TOM bridge requires the local Node runtime." }, { status: 503 });
   }
