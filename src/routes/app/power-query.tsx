@@ -23,9 +23,34 @@ function PowerQueryPage() {
           <h3 className="font-display text-xl font-semibold">No Analysis Data</h3>
           <p className="text-sm text-muted-foreground mt-1">Please run the Enterprise Analysis first.</p>
         </div>
-        <button onClick={() => navigate({ to: "/app/analysis" })} className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-medium">
-          <ArrowLeft className="h-4 w-4" /> Go to Analysis
-        </button>
+        <div className="flex flex-wrap justify-center items-center gap-3">
+          <button onClick={() => navigate({ to: "/app/analysis" })} className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-border text-sm font-medium">
+            <ArrowLeft className="h-4 w-4" /> Go to Analysis
+          </button>
+          <button
+            type="button"
+            data-tour="generate-m-query"
+            onClick={() => navigate({ to: "/app/analysis" })}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-border text-sm font-medium"
+          >
+            Generate M Query
+          </button>
+          <button
+            type="button"
+            data-tour="apply-regenerate-pq"
+            onClick={() => navigate({ to: "/app/analysis" })}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-border text-sm font-medium"
+          >
+            Apply and Regenerate Power Query
+          </button>
+          <button
+            data-tour="dax-measures"
+            onClick={() => navigate({ to: "/app/dax-measures" })}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-medium shadow"
+          >
+            DAX Measures <ArrowRight className="h-4 w-4" />
+          </button>
+        </div>
       </div>
     );
   }
@@ -54,7 +79,11 @@ function PowerQueryPage() {
         <button onClick={() => navigate({ to: "/app/analysis" })} className="flex items-center gap-2 px-4 py-2 rounded-lg border border-border text-sm font-medium hover:bg-surface-elevated">
           <ArrowLeft className="h-4 w-4" /> Back to Analysis
         </button>
-        <button onClick={() => navigate({ to: "/app/dax-measures" })} className="flex items-center gap-2 px-6 py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-sm shadow-lg hover:opacity-90 transition-all">
+        <button
+          data-tour="dax-measures"
+          onClick={() => navigate({ to: "/app/dax-measures" })}
+          className="flex items-center gap-2 px-6 py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-sm shadow-lg hover:opacity-90 transition-all"
+        >
           DAX Measures <ArrowRight className="h-4 w-4" />
         </button>
       </div>

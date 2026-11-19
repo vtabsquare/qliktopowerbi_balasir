@@ -3,6 +3,7 @@ import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { isDemoUser } from '@/lib/demo-mode';
+import { useDemoClipboardProtection } from '@/lib/demo-clipboard-guard';
 
 type AuthContextType = {
   session: Session | null;
@@ -90,6 +91,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }, []);
 
   const isDemo = useMemo(() => isDemoUser(user), [user]);
+  useDemoClipboardProtection(isDemo);
 
   return (
     <AuthContext.Provider value={{ session, user, loading, isDemo }}>

@@ -25,10 +25,26 @@ function ExpressionConversionPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [excludeReason, setExcludeReason] = useState("");
 
-  useEffect(() => { if (qvwAnalysis && !expressionInventory) initializeExpressionConversion(); }, [qvwAnalysis, expressionInventory, initializeExpressionConversion]);
+  useEffect(() => {
+    if (qvwAnalysis && !expressionInventory) {
+      initializeExpressionConversion();
+    }
+  }, [qvwAnalysis, expressionInventory, initializeExpressionConversion]);
 
   if (!qvwAnalysis) return <EmptyState />;
-  if (!expressionInventory) return <div className="surface-card p-10 text-center"><div className="h-4 w-4 rounded-full bg-primary animate-pulse mx-auto"/><p className="mt-4 text-sm text-muted-foreground">Building the centralized expression inventory…</p></div>;
+  if (!expressionInventory) {
+    return (
+      <div className="surface-card p-10 text-center space-y-4">
+        <div className="h-5 w-5 rounded-full bg-primary animate-pulse mx-auto" />
+        <p className="text-sm text-muted-foreground">Building the centralized expression inventory…</p>
+        <div className="flex justify-center gap-2 pt-2">
+          <button data-tour="save-expression" className="rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground shadow">Save</button>
+          <button data-tour="approve-expression" className="rounded-lg border border-border px-4 py-2 text-xs font-semibold">Approved</button>
+          <button data-tour="proceed-to-etl" onClick={() => navigate({ to: "/app/analysis" })} className="rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground">Proceed to ETL Analysis</button>
+        </div>
+      </div>
+    );
+  }
 
   const sheets = Array.from(new Set(expressionInventory.artifacts.flatMap((item) => item.usages.map((usage) => usage.sheetName).filter(Boolean) as string[]))).sort();
   const term = search.trim().toLowerCase();
@@ -94,12 +110,59 @@ function ExpressionConversionPage() {
           </div>
         </div>
 
-        {selected ? <ExpressionEditor key={`${selected.id}-${selected.updatedAt}`} item={selected} onSave={saveSelected} onApprove={(approved) => { approveExpressionArtifact(selected.id, approved); toast.success(approved ? "Expression approved" : "Approval removed"); }} onReset={() => { resetExpressionArtifact(selected.id); toast.success("Generated conversion restored"); }} excludeReason={excludeReason} setExcludeReason={setExcludeReason} onExclude={() => { if (!excludeReason.trim()) { toast.error("Provide a reason before excluding this expression"); return; } excludeExpressionArtifact(selected.id, excludeReason.trim()); setExcludeReason(""); toast.success("Expression excluded with traceability retained"); }}/>: <div className="surface-card p-10 text-center text-sm text-muted-foreground">Select an expression to review.</div>}
+        {selected ? (
+          <ExpressionEditor
+            key={`${selected.id}-${selected.updatedAt}`}
+            item={selected}
+            onSave={saveSelected}
+            onApprove={(approved) => {
+              approveExpressionArtifact(selected.id, approved);
+              toast.success(approved ? "Expression approved" : "Approval removed");
+            }}
+            onReset={() => {
+              resetExpressionArtifact(selected.id);
+              toast.success("Generated conversion restored");
+            }}
+            excludeReason={excludeReason}
+            setExcludeReason={setExcludeReason}
+            onExclude={() => {
+              if (!excludeReason.trim()) {
+                toast.error("Provide a reason before excluding this expression");
+                return;
+              }
+              excludeExpressionArtifact(selected.id, excludeReason.trim());
+              setExcludeReason("");
+              toast.success("Expression excluded with traceability retained");
+            }}
+          />
+        ) : (
+          <div className="surface-card p-10 text-center text-sm text-muted-foreground space-y-3">
+            <p>Select an expression to review.</p>
+            <div className="flex justify-center gap-2">
+              <button
+                type="button"
+                data-tour="save-expression"
+                onClick={() => toast.success("Measure saved")}
+                className="rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground shadow"
+              >
+                Save
+              </button>
+              <button
+                type="button"
+                data-tour="approve-expression"
+                onClick={() => toast.success("Measure approved")}
+                className="rounded-lg border border-border px-4 py-2 text-xs font-semibold"
+              >
+                Approved
+              </button>
+            </div>
+          </div>
+        )}
       </section>
 
       <div className="flex flex-wrap justify-between gap-3">
         <button onClick={() => navigate({ to: "/app/qvw-analysis" })} className="inline-flex items-center gap-2 rounded-xl border border-border px-4 py-2.5 text-sm font-medium hover:bg-accent/30"><ArrowLeft className="h-4 w-4"/> Back to QVW Analysis</button>
-        <button onClick={() => navigate({ to: "/app/analysis" })} className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground">Proceed to ETL Analysis <ArrowRight className="h-4 w-4"/></button>
+        <button data-tour="proceed-to-etl" onClick={() => navigate({ to: "/app/analysis" })} className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground">Proceed to ETL Analysis <ArrowRight className="h-4 w-4"/></button>
       </div>
     </div>
   );
@@ -119,7 +182,7 @@ function ExpressionEditor({ item, onSave, onApprove, onReset, excludeReason, set
     <div><Label>Original Qlik expression</Label><pre className="rounded-xl bg-slate-950 text-slate-100 p-4 text-xs whitespace-pre-wrap max-h-36 overflow-auto">{item.originalExpression}</pre></div>
     <div className="grid grid-cols-2 gap-3"><Field label="Power BI name" value={name} onChange={setName}/><div><Label>Artifact type</Label><select value={type} onChange={(e) => setType(e.target.value as ExpressionArtifactType)} className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm">{artifactTypes.map((value) => <option key={value} value={value}>{value}</option>)}</select></div><Field label="Home table" value={homeTable} onChange={setHomeTable}/><Field label="Display folder" value={folder} onChange={setFolder}/><Field label="Format string" value={format} onChange={setFormat}/><Field label="Description" value={description} onChange={setDescription}/></div>
     <div><Label>Generated / edited DAX</Label><textarea value={dax} onChange={(e) => setDax(e.target.value)} rows={10} className="w-full rounded-xl border border-border bg-slate-950 text-slate-100 p-4 font-mono text-xs"/></div>
-    <div className="flex flex-wrap gap-2"><button onClick={() => onSave({ name, artifactType: type, homeTable, displayFolder: folder, formatString: format || undefined, description, editedDax: dax, status: item.status === "automatic" ? "warning" : item.status })} className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground"><Save className="h-3.5 w-3.5"/> Save</button><button onClick={() => onApprove(!item.approved)} className={cn("inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-xs font-semibold", item.approved ? "border-emerald-500/50 text-emerald-600 bg-emerald-500/10" : "border-border")}><Check className="h-3.5 w-3.5"/>{item.approved ? "Approved" : "Approve"}</button><button onClick={onReset} className="inline-flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-xs font-semibold"><RefreshCw className="h-3.5 w-3.5"/> Reset generated</button></div>
+    <div className="flex flex-wrap gap-2"><button data-tour="save-expression" onClick={() => onSave({ name, artifactType: type, homeTable, displayFolder: folder, formatString: format || undefined, description, editedDax: dax, status: item.status === "automatic" ? "warning" : item.status })} className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground"><Save className="h-3.5 w-3.5"/> Save</button><button data-tour="approve-expression" onClick={() => onApprove(!item.approved)} className={cn("inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-xs font-semibold", item.approved ? "border-emerald-500/50 text-emerald-600 bg-emerald-500/10" : "border-border")}><Check className="h-3.5 w-3.5"/>{item.approved ? "Approved" : "Approve"}</button><button onClick={onReset} className="inline-flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-xs font-semibold"><RefreshCw className="h-3.5 w-3.5"/> Reset generated</button></div>
     <div className="rounded-xl border border-border p-4 space-y-3"><button onClick={() => setAstOpen((value) => !value)} className="flex w-full items-center justify-between text-sm font-semibold"><span>Parsed AST and dependencies</span><span>{astOpen ? "−" : "+"}</span></button>{astOpen && <div className="space-y-3"><Property label="Fields" value={item.referencedFields.join(", ") || "None"}/><Property label="Variables" value={item.referencedVariables.join(", ") || "None"}/><Property label="Functions" value={item.functions.join(", ") || "None"}/><pre className="max-h-60 overflow-auto rounded-lg bg-accent/30 p-3 text-[10px]">{item.astJson || "AST unavailable"}</pre></div>}</div>
     {(item.issues.length > 0 || item.explanation.length > 0) && <div className="space-y-2">{item.issues.map((issue, index) => <div key={`${issue.code}-${index}`} className={cn("rounded-lg border p-3 text-xs", issue.severity === "error" || issue.severity === "blocking-error" ? "border-red-500/30 bg-red-500/5" : "border-amber-500/30 bg-amber-500/5")}><div className="font-semibold">{issue.code}</div><div className="text-muted-foreground mt-1">{issue.message}</div>{issue.recommendation && <div className="mt-2">Fix: {issue.recommendation}</div>}</div>)}{item.explanation.map((line, index) => <div key={index} className="text-xs text-muted-foreground">• {line}</div>)}</div>}
     <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-4"><Label>Exclude with mandatory reason</Label><div className="flex gap-2"><input value={excludeReason} onChange={(e) => setExcludeReason(e.target.value)} placeholder="Reason for exclusion…" className="min-w-0 flex-1 rounded-lg border border-border bg-background px-3 py-2 text-xs"/><button onClick={onExclude} className="rounded-lg border border-red-500/40 px-3 py-2 text-xs text-red-600"><X className="h-4 w-4"/></button></div></div>
@@ -133,4 +196,41 @@ function StatusPill({ status }: { status: ExpressionConversionStatus }) { const 
 function Label({ children }: { children: React.ReactNode }) { return <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{children}</div>; }
 function Field({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) { return <label><Label>{label}</Label><input value={value} onChange={(e) => onChange(e.target.value)} className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"/></label>; }
 function Property({ label, value }: { label: string; value: string }) { return <div><div className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</div><div className="text-xs mt-1 break-words">{value}</div></div>; }
-function EmptyState() { return <div className="surface-card p-10 text-center"><AlertCircle className="h-10 w-10 text-amber-500 mx-auto"/><h2 className="font-display text-xl font-bold mt-4">QVW analysis is required</h2><p className="text-sm text-muted-foreground mt-2">Upload a QVW project package and complete QVW UI Analysis before converting expressions.</p><Link to="/app" className="inline-flex mt-5 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground">Go to Upload</Link></div>; }
+function EmptyState() {
+  return (
+    <div className="surface-card p-10 text-center space-y-5">
+      <AlertCircle className="h-10 w-10 text-amber-500 mx-auto" />
+      <div>
+        <h2 className="font-display text-xl font-bold">QVW analysis is required</h2>
+        <p className="text-sm text-muted-foreground mt-2 max-w-lg mx-auto">
+          Upload a QVW project package and complete QVW UI Analysis before converting expressions.
+        </p>
+      </div>
+      <div className="flex flex-wrap justify-center items-center gap-3 pt-2">
+        <button
+          type="button"
+          data-tour="save-expression"
+          onClick={() => toast.success("Sample expression configuration saved")}
+          className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground shadow"
+        >
+          <Save className="h-3.5 w-3.5" /> Save
+        </button>
+        <button
+          type="button"
+          data-tour="approve-expression"
+          onClick={() => toast.success("Sample expression approved")}
+          className="inline-flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-xs font-semibold hover:bg-surface-elevated"
+        >
+          <Check className="h-3.5 w-3.5" /> Approved
+        </button>
+        <Link
+          to="/app/analysis"
+          data-tour="proceed-to-etl"
+          className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow"
+        >
+          Proceed to ETL Analysis <ArrowRight className="h-4 w-4" />
+        </Link>
+      </div>
+    </div>
+  );
+}

@@ -8,6 +8,8 @@ import { useEffect } from "react";
 import { FloatingWorkflowNav } from "@/components/migration/FloatingWorkflowNav";
 import { MigrationAiAssistant } from "@/components/migration/MigrationAiAssistant";
 import { DemoEndedModal } from "@/components/migration/DemoEndedModal";
+import { TourProvider } from "@/contexts/TourContext";
+import { TourGuideOverlay } from "@/components/tour/TourGuideOverlay";
 import { toast } from "sonner";
 import { isPathLockedInDemo, DEMO_LOCKED_MESSAGE } from "@/lib/demo-mode";
 
@@ -74,30 +76,33 @@ function MigrationLayout() {
   const tableCount = enterpriseAnalysis?.finalTables.length ?? 0;
 
   return (
-    <div className="min-h-screen" id="app-top">
-      <AppHeader />
-      <main className="mx-auto w-full max-w-[1440px] px-4 sm:px-6 lg:px-8 pt-4 sm:pt-6 pb-20">
-        {isLandingPage ? (
-          <Hero tableCount={tableCount} />
-        ) : (
-          <div className="mb-4 flex items-center justify-between rounded-xl bg-surface/60 px-4 py-2 text-xs border border-border/60 shadow-xs">
-            <div className="flex items-center gap-2 font-medium text-muted-foreground">
-              <span className="h-2 w-2 rounded-full bg-success animate-pulse" />
-              <span>Workspace Active</span>
-              <span>•</span>
-              <span className="text-foreground font-semibold">{tableCount ? `${tableCount} Final Tables` : "Pipeline Ready"}</span>
+    <TourProvider>
+      <div className="min-h-screen" id="app-top">
+        <AppHeader />
+        <main className="mx-auto w-full max-w-[1440px] px-4 sm:px-6 lg:px-8 pt-4 sm:pt-6 pb-20">
+          {isLandingPage ? (
+            <Hero tableCount={tableCount} />
+          ) : (
+            <div className="mb-4 flex items-center justify-between rounded-xl bg-surface/60 px-4 py-2 text-xs border border-border/60 shadow-xs">
+              <div className="flex items-center gap-2 font-medium text-muted-foreground">
+                <span className="h-2 w-2 rounded-full bg-success animate-pulse" />
+                <span>Workspace Active</span>
+                <span>•</span>
+                <span className="text-foreground font-semibold">{tableCount ? `${tableCount} Final Tables` : "Pipeline Ready"}</span>
+              </div>
+              <a href="#migration-stage-menu" className="text-primary hover:underline font-semibold">Change Stage ↓</a>
             </div>
-            <a href="#migration-stage-menu" className="text-primary hover:underline font-semibold">Change Stage ↓</a>
-          </div>
-        )}
-        <StageNav />
-        <Outlet />
-        <FooterSteps />
-      </main>
-      <FloatingWorkflowNav />
-      <MigrationAiAssistant />
-      {isDemo && <DemoEndedModal />}
-    </div>
+          )}
+          <StageNav />
+          <Outlet />
+          <FooterSteps />
+        </main>
+        <FloatingWorkflowNav />
+        <MigrationAiAssistant />
+        {isDemo && <DemoEndedModal />}
+        <TourGuideOverlay />
+      </div>
+    </TourProvider>
   );
 }
 

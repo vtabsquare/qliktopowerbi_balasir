@@ -18,10 +18,6 @@ function DaxMeasuresPage() {
   const [showDemoEndedModal, setShowDemoEndedModal] = useState(false);
 
   const handleProceedToSemanticModel = () => {
-    if (isDemo) {
-      setShowDemoEndedModal(true);
-      return;
-    }
     navigate({ to: "/app/semantic-model" });
   };
 
@@ -33,9 +29,18 @@ function DaxMeasuresPage() {
           <h3 className="font-display text-xl font-semibold">No Analysis Data</h3>
           <p className="text-sm text-muted-foreground mt-1">Please run the Enterprise Analysis first.</p>
         </div>
-        <button onClick={() => navigate({ to: "/app/analysis" })} className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-medium">
-          <ArrowLeft className="h-4 w-4" /> Go to Analysis
-        </button>
+        <div className="flex flex-wrap justify-center items-center gap-3">
+          <button onClick={() => navigate({ to: "/app/analysis" })} className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-border text-sm font-medium">
+            <ArrowLeft className="h-4 w-4" /> Go to Analysis
+          </button>
+          <button
+            data-tour="semantic-model-export"
+            onClick={handleProceedToSemanticModel}
+            className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-primary text-primary-foreground font-semibold text-sm shadow"
+          >
+            Semantic Model &amp; Export <ArrowRight className="h-4 w-4" />
+          </button>
+        </div>
       </div>
     );
   }
@@ -49,10 +54,10 @@ function DaxMeasuresPage() {
           <ArrowLeft className="h-4 w-4" /> Back to Power Query
         </button>
         <button
+          data-tour="semantic-model-export"
           onClick={handleProceedToSemanticModel}
           className="flex items-center gap-2 px-6 py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-sm shadow-lg hover:opacity-90 transition-all"
         >
-          {isDemo && <Lock className="h-4 w-4 mr-0.5" />}
           Semantic Model &amp; Export <ArrowRight className="h-4 w-4" />
         </button>
       </div>

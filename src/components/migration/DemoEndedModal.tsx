@@ -50,12 +50,9 @@ export function DemoEndedModal({
   const contactEmail = "contactsales@vtabsquare.com";
 
   const handleCopyEmail = () => {
-    navigator.clipboard.writeText(contactEmail);
-    setCopied(true);
-    toast.success("Contact email copied to clipboard!", {
-      description: contactEmail,
+    toast.info("🔒 Copying content is restricted in the Demo Version.", {
+      id: "demo-clipboard-restricted",
     });
-    setTimeout(() => setCopied(false), 2500);
   };
 
   if (!isOpen) return null;
@@ -169,20 +166,11 @@ export function DemoEndedModal({
                 <button
                   type="button"
                   onClick={handleCopyEmail}
-                  className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium border border-border bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
-                  title="Copy email to clipboard"
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium border border-border/60 bg-white/70 dark:bg-slate-800/70 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors cursor-not-allowed select-none"
+                  title="Copying is restricted in Demo Version"
                 >
-                  {copied ? (
-                    <>
-                      <Check className="h-3 w-3 text-emerald-500" />
-                      <span>Copied</span>
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="h-3 w-3" />
-                      <span>Copy</span>
-                    </>
-                  )}
+                  <Lock className="h-3 w-3 text-muted-foreground/70" />
+                  <span>Copy</span>
                 </button>
               </div>
 

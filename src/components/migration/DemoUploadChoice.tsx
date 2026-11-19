@@ -239,7 +239,7 @@ export function DemoUploadChoice({
 
         {/* 2. Cards Area — Two Balanced Cards with Exact Circle Icons & Accent Borders */}
         <div className="px-8 sm:px-10 pb-8 sm:pb-9 space-y-6 overflow-y-auto">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
+          <div data-tour="select-upload-choice" className="grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
             {/* ── CARD 1: I Already Have a File (Emerald Green Accent) ── */}
             <div
               role="button"
@@ -391,8 +391,8 @@ export function DemoUploadChoice({
             </div>
           </div>
 
-          {/* 3. Active Dataset Feedback Banner inside modal (when files loaded) */}
-          {activeFilesCount > 0 && (
+          {/* 3. Active Dataset Feedback Banner inside modal */}
+          {activeFilesCount > 0 ? (
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl border border-emerald-500/30 bg-emerald-50/40 dark:bg-emerald-950/20 text-xs text-slate-900 dark:text-white animate-in fade-in duration-200">
               <div className="flex items-center gap-2.5">
                 <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
@@ -418,8 +418,37 @@ export function DemoUploadChoice({
                 )}
                 <button
                   type="button"
+                  data-tour="upload-done"
                   onClick={handleFinish}
                   className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-sm transition-all"
+                >
+                  <span>Done</span>
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl border border-blue-500/30 bg-blue-50/40 dark:bg-blue-950/20 text-xs text-slate-900 dark:text-white animate-in fade-in duration-200">
+              <div className="flex items-center gap-2.5">
+                <Sparkles className="h-4 w-4 text-blue-500 shrink-0" />
+                <div>
+                  <span className="font-semibold text-blue-700 dark:text-blue-400">
+                    Ready to Continue:
+                  </span>{" "}
+                  <span className="text-slate-600 dark:text-slate-400">
+                    Click <strong>Done</strong> to proceed with the preloaded sample dataset.
+                  </span>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  data-tour="upload-done"
+                  onClick={async () => {
+                    await handleSelectDemoDataset();
+                    handleFinish();
+                  }}
+                  className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow-sm transition-all"
                 >
                   <span>Done</span>
                   <ArrowRight className="h-3.5 w-3.5" />

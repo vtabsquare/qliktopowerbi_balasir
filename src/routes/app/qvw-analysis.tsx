@@ -1,6 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { useMigration } from "@/lib/migration/store";
+import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "sonner";
 import type {
   QvwAction,
   QvwAnalysis,
@@ -26,6 +28,7 @@ import {
   Gauge,
   LayoutDashboard,
   ListTree,
+  Lock,
   MousePointerClick,
   PackageOpen,
   Search,
@@ -40,6 +43,7 @@ export const Route = createFileRoute("/app/qvw-analysis")({
 });
 
 function QvwAnalysisPage() {
+  const { isDemo } = useAuth();
   const { qvwAnalysis } = useMigration();
   const [objectSearch, setObjectSearch] = useState("");
   const [expressionSearch, setExpressionSearch] = useState("");
@@ -56,7 +60,7 @@ function QvwAnalysisPage() {
           Upload a QVW with its PRJ folder, or upload the PRJ folder by itself. The analysis is
           generated immediately from the supplied XML and text files.
         </p>
-        <div className="mt-6 flex justify-center gap-3">
+        <div className="mt-6 flex flex-wrap justify-center gap-3">
           <Link
             to="/app/instructions"
             className="rounded-xl border border-border px-5 py-2.5 text-sm font-medium hover:bg-accent/30"
@@ -65,9 +69,16 @@ function QvwAnalysisPage() {
           </Link>
           <Link
             to="/app"
-            className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground"
+            className="rounded-xl border border-border px-5 py-2.5 text-sm font-medium hover:bg-accent/30"
           >
-            Upload package <ArrowRight className="h-4 w-4" />
+            Upload package
+          </Link>
+          <Link
+            to="/app/expression-conversion"
+            data-tour="convert-expressions"
+            className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground hover:opacity-90"
+          >
+            Convert expressions <ArrowRight className="h-4 w-4" />
           </Link>
         </div>
       </div>
@@ -103,6 +114,12 @@ function QvwAnalysisPage() {
     qvwAnalysis.objects.find((object) => object.id === selectedObjectId) ?? null;
 
   const downloadJson = () => {
+    if (isDemo) {
+      toast.info("🔒 Download metadata JSON is locked in the Demo Version.", {
+        id: "demo-download-json-locked",
+      });
+      return;
+    }
     const blob = new Blob([JSON.stringify(qvwAnalysis, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
@@ -152,14 +169,30 @@ function QvwAnalysisPage() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <button
-              onClick={downloadJson}
-              className="inline-flex items-center justify-center gap-2 rounded-xl border border-border px-4 py-2.5 text-sm font-semibold hover:bg-accent/30"
-            >
-              <Download className="h-4 w-4" /> Download metadata JSON
-            </button>
+            {isDemo ? (
+              <button
+                type="button"
+                onClick={() =>
+                  toast.info("🔒 Download metadata JSON is locked in the Demo Version.", {
+                    id: "demo-download-json-locked",
+                  })
+                }
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-border/40 bg-background/50 px-4 py-2.5 text-sm font-semibold text-muted-foreground/60 shadow-sm opacity-50 cursor-not-allowed select-none transition-all"
+                title="Download metadata JSON is locked in Demo Version"
+              >
+                <Lock className="h-4 w-4 text-muted-foreground/70" /> Download metadata JSON
+              </button>
+            ) : (
+              <button
+                onClick={downloadJson}
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-border px-4 py-2.5 text-sm font-semibold hover:bg-accent/30"
+              >
+                <Download className="h-4 w-4" /> Download metadata JSON
+              </button>
+            )}
             <Link
               to="/app/expression-conversion"
+              data-tour="convert-expressions"
               className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground"
             >
               Convert expressions <ArrowRight className="h-4 w-4" />

@@ -683,6 +683,7 @@ export function TabSourceMapping({
 
         <div className="mt-4 flex items-center gap-3">
           <button
+            data-tour="apply-mapping"
             onClick={onApply}
             disabled={applying}
             className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-medium disabled:opacity-50"
@@ -1681,6 +1682,7 @@ export function TabMQueryDataTypes({
 
           {/* Generate / Regenerate button */}
           <button
+            data-tour="generate-m-query"
             onClick={() => handleAiGenerate()}
             disabled={generatingAi || hasUnsavedChanges}
             title={hasUnsavedChanges ? "Save your data type changes first" : undefined}
@@ -2436,6 +2438,16 @@ export function EnterpriseAnalysisPanel({ files, onAnalysisComplete }: { files: 
   // Type edits
   const [columnTypeEdits, setColumnTypeEdits] = useState<Record<string, string>>({});
   const [applyingTypes, setApplyingTypes] = useState(false);
+
+  useEffect(() => {
+    const handleSetTab = (e: CustomEvent<string>) => {
+      if (e.detail && TABS.some((t) => t.id === e.detail)) {
+        setActiveTab(e.detail);
+      }
+    };
+    window.addEventListener("set-analysis-tab", handleSetTab as EventListener);
+    return () => window.removeEventListener("set-analysis-tab", handleSetTab as EventListener);
+  }, []);
 
   useEffect(() => {
     setAnalysis(null);

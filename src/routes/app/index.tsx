@@ -33,6 +33,7 @@ import { InputClassificationPanel } from "@/components/migration/InputClassifica
 import { DemoUploadChoice } from "@/components/migration/DemoUploadChoice";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTour } from "@/contexts/TourContext";
 
 export const Route = createFileRoute("/app/")({
   component: UploadPage,
@@ -145,11 +146,27 @@ function UploadPage() {
   const [showUploadModal, setShowUploadModal] = useState<boolean>(
     () => isDemo && enterpriseFiles.length === 0,
   );
+  const { isOpen: isTourOpen, currentStepIndex } = useTour();
+
+  // Keep upload modal in sync with tour steps (open for Step 2 & 3, closed for Step 4+)
+  useEffect(() => {
+    if (!isTourOpen) return;
+    if (currentStepIndex === 1 || currentStepIndex === 2) {
+      setShowUploadModal(true);
+    } else if (currentStepIndex >= 3) {
+      setShowUploadModal(false);
+    }
+  }, [isTourOpen, currentStepIndex]);
 
   useEffect(() => {
     const handleOpenUploadModal = () => setShowUploadModal(true);
+    const handleCloseUploadModal = () => setShowUploadModal(false);
     window.addEventListener("open-upload-modal", handleOpenUploadModal);
-    return () => window.removeEventListener("open-upload-modal", handleOpenUploadModal);
+    window.addEventListener("close-upload-modal", handleCloseUploadModal);
+    return () => {
+      window.removeEventListener("open-upload-modal", handleOpenUploadModal);
+      window.removeEventListener("close-upload-modal", handleCloseUploadModal);
+    };
   }, []);
 
   const handleExportBackup = () => {
@@ -605,7 +622,7 @@ function UploadPage() {
 
       {inputClassification && <InputClassificationPanel result={inputClassification} />}
 
-      {qvwAnalysis && (
+      {qvwAnalysis ? (
         <div
           className={cn(
             "surface-card p-6 border",
@@ -640,6 +657,30 @@ function UploadPage() {
               </p>
             </div>
             <button
+              data-tour="review-qvw-analysis"
+              onClick={() => navigate({ to: "/app/qvw-analysis" })}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground hover:opacity-90"
+            >
+              Review QVW Analysis <ArrowRight className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="surface-card p-6 border border-border/80 shadow-sm">
+          <div className="flex flex-col md:flex-row md:items-center gap-4">
+            <div className="grid h-12 w-12 place-items-center rounded-xl shrink-0 bg-primary/10 text-primary">
+              <LayoutDashboard className="h-6 w-6" />
+            </div>
+            <div className="flex-1">
+              <h3 className="font-display text-lg font-semibold">
+                QVW visualization package ready for review
+              </h3>
+              <p className="text-sm text-muted-foreground mt-1">
+                Explore extracted sheets, visual objects, expressions, and variables.
+              </p>
+            </div>
+            <button
+              data-tour="review-qvw-analysis"
               onClick={() => navigate({ to: "/app/qvw-analysis" })}
               className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground hover:opacity-90"
             >

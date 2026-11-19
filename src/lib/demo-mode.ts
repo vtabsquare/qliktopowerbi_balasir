@@ -30,7 +30,6 @@ export function isDemoUser(user: User | null | undefined): boolean {
 export const DEMO_LOCKED_ROUTES = [
   "/app/powerbi-model",
   "/app/relationships",
-  "/app/semantic-model",
   "/app/logs",
   "/app/calendar-analysis",
   "/app/report-designer",
@@ -45,4 +44,4 @@ export function isPathLockedInDemo(pathname: string): boolean {
 }
 
 export const DEMO_LOCKED_TOOLTIP = "Locked in Demo Version — Contact for More";
-export const DEMO_LOCKED_MESSAGE = "🔒 Demo ended at Phase 2 (DAX Measures). Phase 3 is available in the Full Enterprise Edition.";
+export const DEMO_LOCKED_MESSAGE = "🔒 Full PBIP Export and Admin Logs are available in the Full Enterprise Edition.";

@@ -6,6 +6,7 @@ import type { EnterpriseAnalysis } from "@/lib/migration/enterprise-parser";
 import { Database, Loader2, AlertCircle, RefreshCw, ArrowRight, Check, ArrowLeft } from "lucide-react";
 import { TabSourceMapping } from "@/components/migration/EnterpriseAnalysisPanel";
 import { RepairFocusNotice } from "@/components/migration/RepairFocusNotice";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/analysis")({
   component: AnalysisPage,
@@ -93,9 +94,26 @@ function AnalysisPage() {
           <h3 className="font-display text-xl font-semibold">No files uploaded</h3>
           <p className="text-sm text-muted-foreground mt-1">Please go back and upload your Qlik script files first.</p>
         </div>
-        <button onClick={() => navigate({ to: "/app" })} className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-medium">
-          <ArrowLeft className="h-4 w-4" /> Back to Upload
-        </button>
+        <div className="flex flex-wrap justify-center items-center gap-3">
+          <button onClick={() => navigate({ to: "/app" })} className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-border text-sm font-medium">
+            <ArrowLeft className="h-4 w-4" /> Back to Upload
+          </button>
+          <button
+            type="button"
+            data-tour="apply-mapping"
+            onClick={() => toast.info("Mapping configuration ready")}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-border text-sm font-medium"
+          >
+            Apply Mapping &amp; Re-run Conversion
+          </button>
+          <button
+            data-tour="power-query-m-code"
+            onClick={() => navigate({ to: "/app/power-query" })}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-medium shadow hover:opacity-90"
+          >
+            Power Query &amp; M Code <ArrowRight className="h-4 w-4" />
+          </button>
+        </div>
       </div>
     );
   }
@@ -113,12 +131,29 @@ function AnalysisPage() {
             detects final tables, maps sources, generates Power Query M, infers relationships, and validates for PBIP export.
           </p>
         </div>
-        <button
-          onClick={() => runAnalysis()}
-          className="flex items-center gap-2 px-6 py-3 rounded-xl bg-primary text-primary-foreground font-medium text-sm shadow-lg hover:opacity-90 transition-opacity"
-        >
-          <Database className="h-4 w-4" /> Run Enterprise Analysis
-        </button>
+        <div className="flex flex-wrap justify-center items-center gap-3">
+          <button
+            onClick={() => runAnalysis()}
+            className="flex items-center gap-2 px-6 py-3 rounded-xl bg-primary text-primary-foreground font-medium text-sm shadow-lg hover:opacity-90 transition-opacity"
+          >
+            <Database className="h-4 w-4" /> Run Enterprise Analysis
+          </button>
+          <button
+            type="button"
+            data-tour="apply-mapping"
+            onClick={() => runAnalysis()}
+            className="flex items-center gap-2 px-5 py-3 rounded-xl border border-border text-sm font-medium"
+          >
+            Apply Mapping &amp; Re-run Conversion
+          </button>
+          <button
+            data-tour="power-query-m-code"
+            onClick={() => navigate({ to: "/app/power-query" })}
+            className="flex items-center gap-2 px-5 py-3 rounded-xl bg-primary text-primary-foreground text-sm font-medium shadow"
+          >
+            Power Query &amp; M Code <ArrowRight className="h-4 w-4" />
+          </button>
+        </div>
       </div>
     );
   }
@@ -244,6 +279,7 @@ function AnalysisPage() {
           <ArrowLeft className="h-4 w-4" /> Back to Upload
         </button>
         <button
+          data-tour="power-query-m-code"
           onClick={() => navigate({ to: "/app/power-query" })}
           className="flex items-center gap-2 px-6 py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-sm shadow-lg hover:opacity-90 transition-all"
         >

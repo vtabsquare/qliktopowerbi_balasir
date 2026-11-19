@@ -7,6 +7,7 @@ import {
   AlertTriangle,
   ArrowRight,
   CheckCircle2,
+  Compass,
   Download,
   FileArchive,
   FileCode2,
@@ -19,6 +20,7 @@ import {
   PackageCheck,
   ServerCog,
   ShieldCheck,
+  Sparkles,
 } from "lucide-react";
 
 export const Route = createFileRoute("/app/instructions")({
@@ -135,8 +137,17 @@ function InstructionsPage() {
                   <Download className="h-4 w-4 text-primary" /> Operations Runbook
                 </button>
               )}
+              <button
+                type="button"
+                onClick={() => window.dispatchEvent(new CustomEvent("start-interactive-tour"))}
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-primary/40 bg-primary/10 px-4 py-3 text-sm font-semibold text-primary shadow-sm hover:bg-primary/20 transition-all cursor-pointer"
+                title="Start the 14-step interactive guided tour"
+              >
+                <Sparkles className="h-4 w-4" /> Start Tour
+              </button>
               <Link
                 to="/app"
+                data-tour="continue-to-upload"
                 className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground shadow-lg hover:opacity-90"
               >
                 Continue to Upload <ArrowRight className="h-4 w-4" />

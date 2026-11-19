@@ -120,7 +120,14 @@ function CalendarBuilder({ analysis, onAnalysisUpdate }: { analysis: EnterpriseA
           {config.mode === "qlik" && <>The uploaded Qlik calendar remains authoritative.</>}
           {config.mode === "disabled" && <>The selected calendar query and its relationships will be removed.</>}
         </div>
-        <button type="button" onClick={apply} className="rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow hover:opacity-90">Apply and regenerate Power Query</button>
+        <button
+          type="button"
+          data-tour="apply-regenerate-pq"
+          onClick={apply}
+          className="rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow hover:opacity-90"
+        >
+          Apply and regenerate Power Query
+        </button>
       </div>
     </div>
   );
