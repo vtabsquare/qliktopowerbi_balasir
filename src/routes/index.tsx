@@ -64,24 +64,26 @@ function LandingPage() {
             optimized Power Query (M) & DAX.
           </p>
 
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => navigate({ to: "/app/instructions" })}
-            className="group relative inline-flex items-center gap-3 px-8 py-4 bg-primary text-primary-foreground rounded-2xl font-bold text-lg overflow-hidden shadow-2xl shadow-primary/20 transition-all hover:shadow-primary/40"
-          >
-            <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out" />
-            <span className="relative z-10">Next: Launch Migration Engine</span>
-            <ArrowRight className="relative z-10 h-5 w-5 group-hover:translate-x-1 transition-transform" />
-          </motion.button>
-          <a
-            href="https://www.vtabsquare.com/?demo=1&product=qlik-to-power-bi-migration&source=qlik-migration-demo"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-5 inline-flex items-center gap-2 rounded-xl border border-primary/40 px-6 py-3 font-semibold text-primary transition-colors hover:bg-primary/10"
-          >
-            Contact for Demo <ArrowRight className="h-4 w-4" />
-          </a>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => navigate({ to: "/app/instructions" })}
+              className="group relative inline-flex items-center gap-3 px-8 py-4 bg-primary text-primary-foreground rounded-2xl font-bold text-lg overflow-hidden shadow-2xl shadow-primary/20 transition-all hover:shadow-primary/40"
+            >
+              <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out" />
+              <span className="relative z-10">Next: Launch Migration Engine</span>
+              <ArrowRight className="relative z-10 h-5 w-5 group-hover:translate-x-1 transition-transform" />
+            </motion.button>
+            <a
+              href="https://www.vtabsquare.com/?demo=1&product=qlik-to-power-bi-migration&source=qlik-migration-demo"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 rounded-xl border border-primary/40 px-6 py-3 font-semibold text-primary transition-colors hover:bg-primary/10"
+            >
+              Contact for Demo <ArrowRight className="h-4 w-4" />
+            </a>
+          </div>
         </motion.div>
       </section>
 
