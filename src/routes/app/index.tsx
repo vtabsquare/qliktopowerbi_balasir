@@ -148,15 +148,15 @@ function UploadPage() {
   );
   const { isOpen: isTourOpen, currentStepIndex } = useTour();
 
-  // Keep upload modal in sync with tour steps (open for Step 2 & 3, closed for Step 4+)
+  // Keep upload modal in sync with tour steps in Demo Version (open for Step 2 & 3, closed for Step 4+)
   useEffect(() => {
-    if (!isTourOpen) return;
+    if (!isDemo || !isTourOpen) return;
     if (currentStepIndex === 1 || currentStepIndex === 2) {
       setShowUploadModal(true);
     } else if (currentStepIndex >= 3) {
       setShowUploadModal(false);
     }
-  }, [isTourOpen, currentStepIndex]);
+  }, [isDemo, isTourOpen, currentStepIndex]);
 
   useEffect(() => {
     const handleOpenUploadModal = () => setShowUploadModal(true);

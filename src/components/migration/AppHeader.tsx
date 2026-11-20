@@ -150,15 +150,17 @@ export function AppHeader() {
           )}
         </nav>
         <div className="ml-auto flex shrink-0 items-center gap-2">
-          <button
-            type="button"
-            onClick={() => window.dispatchEvent(new CustomEvent("start-interactive-tour"))}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-primary/30 bg-primary/10 text-primary hover:bg-primary/20 text-xs font-semibold shadow-xs transition-all cursor-pointer"
-            title="Start step-by-step interactive application tour"
-          >
-            <Compass className="h-3.5 w-3.5" />
-            <span>Start Tour</span>
-          </button>
+          {isDemo && (
+            <button
+              type="button"
+              onClick={() => window.dispatchEvent(new CustomEvent("start-interactive-tour"))}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-primary/30 bg-primary/10 text-primary hover:bg-primary/20 text-xs font-semibold shadow-xs transition-all cursor-pointer"
+              title="Start step-by-step interactive application tour"
+            >
+              <Compass className="h-3.5 w-3.5" />
+              <span>Start Tour</span>
+            </button>
+          )}
           {isDemo && (
             <div
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400 font-bold text-xs tracking-wider shadow-xs animate-in fade-in duration-200"

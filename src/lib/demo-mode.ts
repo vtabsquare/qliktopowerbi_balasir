@@ -46,3 +46,12 @@ export function isPathLockedInDemo(pathname: string): boolean {
 
 export const DEMO_LOCKED_TOOLTIP = "Locked in Demo Version — Contact for More";
 export const DEMO_LOCKED_MESSAGE = "🔒 Full PBIP Export and Admin Logs are available in the Full Enterprise Edition.";
+
+/**
+ * Checks whether the guided interactive tour is permitted in the current session.
+ * The guided tour is strictly restricted to the Demo Version and must never appear
+ * or activate in normal, production, or enterprise versions.
+ */
+export function isTourAllowedInDemo(isDemo: boolean): boolean {
+  return Boolean(isDemo);
+}

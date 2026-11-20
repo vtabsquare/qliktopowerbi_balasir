@@ -137,14 +137,16 @@ function InstructionsPage() {
                   <Download className="h-4 w-4 text-primary" /> Operations Runbook
                 </button>
               )}
-              <button
-                type="button"
-                onClick={() => window.dispatchEvent(new CustomEvent("start-interactive-tour"))}
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-primary/40 bg-primary/10 px-4 py-3 text-sm font-semibold text-primary shadow-sm hover:bg-primary/20 transition-all cursor-pointer"
-                title="Start the 14-step interactive guided tour"
-              >
-                <Sparkles className="h-4 w-4" /> Start Tour
-              </button>
+              {isDemo && (
+                <button
+                  type="button"
+                  onClick={() => window.dispatchEvent(new CustomEvent("start-interactive-tour"))}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-primary/40 bg-primary/10 px-4 py-3 text-sm font-semibold text-primary shadow-sm hover:bg-primary/20 transition-all cursor-pointer"
+                  title="Start the 14-step interactive guided tour"
+                >
+                  <Sparkles className="h-4 w-4" /> Start Tour
+                </button>
+              )}
               <Link
                 to="/app"
                 data-tour="continue-to-upload"

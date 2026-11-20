@@ -99,7 +99,7 @@ function MigrationLayout() {
         <FloatingWorkflowNav />
         <MigrationAiAssistant />
         {isDemo && <DemoEndedModal />}
-        <TourGuideOverlay />
+        {isDemo && <TourGuideOverlay />}
       </div>
     </TourProvider>
   );

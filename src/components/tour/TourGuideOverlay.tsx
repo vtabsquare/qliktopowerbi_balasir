@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useTour } from "@/contexts/TourContext";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   ArrowDown,
   ArrowLeft,
@@ -74,6 +75,7 @@ export function findTourElement(step: TourStep | null): HTMLElement | null {
 }
 
 export function TourGuideOverlay() {
+  const { isDemo } = useAuth();
   const {
     isOpen,
     currentStepIndex,
@@ -83,6 +85,9 @@ export function TourGuideOverlay() {
     prevStep,
     closeTour,
   } = useTour();
+
+  // Strictly restrict the interactive tour to Demo Version: never display in normal or enterprise versions
+  if (!isDemo || !isOpen || !currentStep) return null;
 
   const [targetRect, setTargetRect] = useState<HighlightRect | null>(null);
   const [tooltipPos, setTooltipPos] = useState<{ top: number; left: number }>({ top: 120, left: 24 });

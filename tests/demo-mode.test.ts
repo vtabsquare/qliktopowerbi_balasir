@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { isDemoUser, isPathLockedInDemo, DEMO_ACCOUNT_EMAIL } from "../src/lib/demo-mode";
+import { isDemoUser, isPathLockedInDemo, isTourAllowedInDemo, DEMO_ACCOUNT_EMAIL } from "../src/lib/demo-mode";
 import type { User } from "@supabase/supabase-js";
 
 describe("Demo Version Mode", () => {
@@ -57,6 +57,30 @@ describe("Demo Version Mode", () => {
       expect(isPathLockedInDemo("/")).toBe(false);
       expect(isPathLockedInDemo("/auth")).toBe(false);
       expect(isPathLockedInDemo("/privacy")).toBe(false);
+    });
+  });
+
+  describe("isTourAllowedInDemo version restrictions", () => {
+    it("allows interactive tour exclusively in Demo Version", () => {
+      expect(isTourAllowedInDemo(true)).toBe(true);
+    });
+
+    it("strictly disallows interactive tour in normal, production, or enterprise versions", () => {
+      expect(isTourAllowedInDemo(false)).toBe(false);
+      expect(isTourAllowedInDemo(undefined as unknown as boolean)).toBe(false);
+      expect(isTourAllowedInDemo(null as unknown as boolean)).toBe(false);
+    });
+
+    it("ensures normal authenticated users are never granted tour access", () => {
+      const regularUser = { email: "engineer@company.com" } as User;
+      const isDemo = isDemoUser(regularUser);
+      expect(isTourAllowedInDemo(isDemo)).toBe(false);
+    });
+
+    it("ensures demo authenticated users are granted tour access", () => {
+      const demoUser = { email: DEMO_ACCOUNT_EMAIL } as User;
+      const isDemo = isDemoUser(demoUser);
+      expect(isTourAllowedInDemo(isDemo)).toBe(true);
     });
   });
 });

@@ -40,8 +40,12 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
     [currentPath, navigate],
   );
 
+  const { loading: authLoading, isDemo } = useAuth();
+  const hasAutoStartedRef = useRef(false);
+
   const goToStep = useCallback(
     (index: number) => {
+      if (!isDemo) return;
       if (index < 0 || index >= TOUR_STEPS.length) return;
       setCurrentStepIndex(index);
       const step = TOUR_STEPS[index];
@@ -53,47 +57,62 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
         }, 120);
       }
     },
-    [navigateToStepRoute],
+    [isDemo, navigateToStepRoute],
   );
 
   const startTour = useCallback(() => {
+    // Strictly restrict the interactive tour to Demo Version
+    if (!isDemo) return;
     // Ensure demo dataset is loaded so all 14 steps have active, valid buttons
     loadDemoDatasetToStore();
     setIsOpen(true);
     goToStep(0);
-  }, [goToStep]);
+  }, [isDemo, goToStep]);
 
   const nextStep = useCallback(() => {
+    if (!isDemo) {
+      setIsOpen(false);
+      return;
+    }
     if (currentStepIndex < TOUR_STEPS.length - 1) {
       goToStep(currentStepIndex + 1);
     } else {
       setIsOpen(false);
     }
-  }, [currentStepIndex, goToStep]);
+  }, [isDemo, currentStepIndex, goToStep]);
 
   const prevStep = useCallback(() => {
+    if (!isDemo) {
+      setIsOpen(false);
+      return;
+    }
     if (currentStepIndex > 0) {
       goToStep(currentStepIndex - 1);
     }
-  }, [currentStepIndex, goToStep]);
+  }, [isDemo, currentStepIndex, goToStep]);
 
   const closeTour = useCallback(() => {
     setIsOpen(false);
   }, []);
 
   const restartTour = useCallback(() => {
+    if (!isDemo) return;
     goToStep(0);
     setIsOpen(true);
-  }, [goToStep]);
+  }, [isDemo, goToStep]);
 
-  const { loading: authLoading } = useAuth();
-  const hasAutoStartedRef = useRef(false);
-
-  // Auto-start tour for every user on every visit to the application
+  // Ensure tour is immediately closed if user is in normal/enterprise version
   useEffect(() => {
-    if (authLoading) return;
+    if (!isDemo && isOpen) {
+      setIsOpen(false);
+    }
+  }, [isDemo, isOpen]);
 
-    // Load demo dataset automatically in background on visit
+  // Auto-start tour ONLY for demo version users on visit to the application
+  useEffect(() => {
+    if (authLoading || !isDemo) return;
+
+    // Load demo dataset automatically in background on visit for demo users
     loadDemoDatasetToStore();
 
     if (!hasAutoStartedRef.current) {
@@ -103,14 +122,18 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
       }, 350);
       return () => clearTimeout(timer);
     }
-  }, [authLoading, startTour]);
+  }, [authLoading, isDemo, startTour]);
 
-  // Listen for global custom event to trigger tour
+  // Listen for global custom event to trigger tour (strictly Demo version only)
   useEffect(() => {
-    const handleStartTourEvent = () => startTour();
+    const handleStartTourEvent = () => {
+      if (isDemo) {
+        startTour();
+      }
+    };
     window.addEventListener("start-interactive-tour", handleStartTourEvent);
     return () => window.removeEventListener("start-interactive-tour", handleStartTourEvent);
-  }, [startTour]);
+  }, [isDemo, startTour]);
 
   return (
     <TourContext.Provider

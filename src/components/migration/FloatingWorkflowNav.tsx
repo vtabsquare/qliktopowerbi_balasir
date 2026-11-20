@@ -108,19 +108,21 @@ export function FloatingWorkflowNav() {
               );
             })}
           </div>
-          <div className="pt-3 mt-3 border-t border-border/60">
-            <button
-              type="button"
-              onClick={() => {
-                setOpen(false);
-                window.dispatchEvent(new CustomEvent("start-interactive-tour"));
-              }}
-              className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-primary/10 border border-primary/20 text-primary hover:bg-primary/20 text-xs font-semibold transition-all cursor-pointer"
-            >
-              <Compass className="h-3.5 w-3.5" />
-              <span>Start Interactive Tour (14 Steps)</span>
-            </button>
-          </div>
+          {isDemo && (
+            <div className="pt-3 mt-3 border-t border-border/60">
+              <button
+                type="button"
+                onClick={() => {
+                  setOpen(false);
+                  window.dispatchEvent(new CustomEvent("start-interactive-tour"));
+                }}
+                className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-primary/10 border border-primary/20 text-primary hover:bg-primary/20 text-xs font-semibold transition-all cursor-pointer"
+              >
+                <Compass className="h-3.5 w-3.5" />
+                <span>Start Interactive Tour (14 Steps)</span>
+              </button>
+            </div>
+          )}
         </aside>
       </div>
     )}
