@@ -993,8 +993,9 @@ function applySecurityHeaders(response: Response): Response {
   // Prevent MIME-type sniffing
   headers.set("X-Content-Type-Options", "nosniff");
 
-  // Clickjacking protection
-  headers.set("X-Frame-Options", "DENY");
+  // Clickjacking protection & iframe embedding support for demo version
+  // frame-ancestors in Content-Security-Policy allows vtabsquare and authorized websites to embed the demo
+  // headers.set("X-Frame-Options", "DENY"); // Omitted to allow iframe embedding via CSP frame-ancestors
 
   // Force HTTPS for 1 year, include subdomains
   headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
@@ -1022,7 +1023,7 @@ function applySecurityHeaders(response: Response): Response {
       "font-src 'self' https://fonts.gstatic.com",
       "img-src 'self' data: blob:",
       "connect-src 'self' https://*.supabase.co https://api.brevo.com https://generativelanguage.googleapis.com https://api.openai.com",
-      "frame-ancestors 'none'",
+      "frame-ancestors 'self' https://*.vtabsquare.com https://vtabsquare.com *",
       "base-uri 'self'",
       "form-action 'self'",
     ].join("; ")

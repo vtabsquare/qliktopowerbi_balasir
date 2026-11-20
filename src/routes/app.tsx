@@ -76,7 +76,7 @@ function MigrationLayout() {
 
   return (
     <TourProvider>
-      <div className="min-h-screen" id="app-top">
+      <div className="min-h-screen" id="vtab-demo-app" data-testid="vtab-demo-app">
         <AppHeader />
         <main className="mx-auto w-full max-w-[1440px] px-4 sm:px-6 lg:px-8 pt-4 sm:pt-6 pb-20">
           {isLandingPage ? (
