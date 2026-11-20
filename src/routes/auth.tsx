@@ -7,6 +7,12 @@ import { DEMO_ACCOUNT_EMAIL } from "@/lib/demo-mode";
 import { useAuth } from "@/contexts/AuthContext";
 
 export const Route = createFileRoute("/auth")({
+  head: () => ({
+    meta: [
+      { title: "Qlik to Power BI" },
+      { name: "description", content: "Authenticate to Qlik to Power BI Migration Engine." },
+    ],
+  }),
   component: AuthPage,
 });
 

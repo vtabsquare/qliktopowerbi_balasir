@@ -4,7 +4,7 @@ import { Shield } from "lucide-react";
 export const Route = createFileRoute("/privacy")({
   head: () => ({
     meta: [
-      { title: "Privacy Policy — VTAB Square" },
+      { title: "Privacy Policy — Qlik to Power BI" },
       { name: "description", content: "VTAB Square privacy policy: what data we collect, how we use it, and your rights." },
     ],
   }),

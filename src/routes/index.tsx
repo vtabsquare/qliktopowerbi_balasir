@@ -15,6 +15,12 @@ import {
 } from "lucide-react";
 
 export const Route = createFileRoute("/")({
+  head: () => ({
+    meta: [
+      { title: "Qlik to Power BI" },
+      { name: "description", content: "Automate migration from Qlik to Power BI." },
+    ],
+  }),
   component: LandingPage,
 });
 

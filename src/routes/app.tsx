@@ -16,7 +16,7 @@ import { isPathLockedInDemo, DEMO_LOCKED_MESSAGE } from "@/lib/demo-mode";
 export const Route = createFileRoute("/app")({
   head: () => ({
     meta: [
-      { title: "VTAB Square — Qlik to Power BI Migration" },
+      { title: "Qlik to Power BI" },
       { name: "description", content: "AI-assisted Qlik to Power BI migration." },
     ],
   }),
