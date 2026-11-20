@@ -2,7 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, useCallback, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
-import { ArrowRight, Lock, Mail, UserPlus, KeyRound, Eye, EyeOff, ShieldCheck } from "lucide-react";
+import { ArrowRight, Lock, Mail, UserPlus, KeyRound, Eye, EyeOff, ShieldCheck, Sparkles } from "lucide-react";
 import { DEMO_ACCOUNT_EMAIL } from "@/lib/demo-mode";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -156,6 +156,15 @@ function AuthPage() {
       navigate({ to: "/app/instructions" });
     }
   }, [session, navigate]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const isDemoParam = params.get("demo") === "true" || params.get("demo") === "1" || params.get("embed") === "true";
+    if (isDemoParam) {
+      setLoading(true);
+      window.location.href = "/api/auth/demo-login";
+    }
+  }, []);
 
   useEffect(() => {
     const ssoToken = new URLSearchParams(window.location.search).get("token");
@@ -408,6 +417,18 @@ function AuthPage() {
                   {loading ? "Signing in…" : "Sign In"}
                   {!loading && <ArrowRight className="ml-2 h-4 w-4" />}
                 </button>
+                <div className="relative flex py-2 items-center">
+                  <div className="flex-grow border-t border-border"></div>
+                  <span className="flex-shrink mx-3 text-[11px] uppercase text-muted-foreground font-semibold">Or Demo Access</span>
+                  <div className="flex-grow border-t border-border"></div>
+                </div>
+                <a
+                  href="/api/auth/demo-login"
+                  className="w-full inline-flex items-center justify-center gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 font-bold text-xs py-2.5 transition-all cursor-pointer shadow-xs"
+                >
+                  <Sparkles className="h-4 w-4" />
+                  <span>Explore Demo (vtabpublicuser@gmail.com)</span>
+                </a>
               </form>
               <div className="mt-6 text-center text-sm">
                 <span className="text-muted-foreground">Don't have an account? </span>

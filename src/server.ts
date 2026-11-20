@@ -360,7 +360,7 @@ export async function handleVtabSso(request: Request, runtimeEnv: RuntimeEnv) {
     
     if (!linkRes.ok) throw new Error("Could not generate login link");
     const linkData = await linkRes.json();
-    const actionLink = linkData.action_link;
+    const actionLink = linkData.properties?.action_link || linkData.action_link;
     if (!actionLink) throw new Error("Missing action_link");
 
     return jsonResponse({ success: true, magicLink: actionLink });
@@ -369,11 +369,105 @@ export async function handleVtabSso(request: Request, runtimeEnv: RuntimeEnv) {
   }
 }
 
+export async function handleDemoLogin(request: Request, runtimeEnv: RuntimeEnv) {
+  try {
+    const email = "vtabpublicuser@gmail.com";
+    const supabaseUrl = (runtimeEnv.SUPABASE_URL || runtimeEnv.VITE_SUPABASE_URL || "https://tdljizujlzbylsvdbjtu.supabase.co").replace(/\/$/, "");
+    const serviceRoleKey = runtimeEnv.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!serviceRoleKey) {
+      return jsonResponse({ error: "Server authentication service role key is not configured." }, { status: 500 });
+    }
+
+    // 1. Ensure vtabpublicuser@gmail.com exists in Supabase
+    try {
+      const usersRes = await fetch(`${supabaseUrl}/auth/v1/admin/users`, {
+        method: "GET",
+        headers: {
+          "authorization": `Bearer ${serviceRoleKey}`,
+          "apikey": serviceRoleKey,
+        },
+      });
+      if (usersRes.ok) {
+        const { users } = await usersRes.json();
+        const exists = Array.isArray(users) && users.some((u: any) => u.email?.toLowerCase() === email);
+        if (!exists) {
+          await fetch(`${supabaseUrl}/auth/v1/admin/users`, {
+            method: "POST",
+            headers: {
+              "authorization": `Bearer ${serviceRoleKey}`,
+              "apikey": serviceRoleKey,
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({
+              email,
+              email_confirm: true,
+              user_metadata: { is_demo: true, demo_mode: true },
+            }),
+          });
+        }
+      }
+    } catch (checkErr) {
+      console.warn("Demo user existence verification warning:", checkErr);
+    }
+
+    // 2. Generate Magic Link for vtabpublicuser@gmail.com
+    const redirectUrl = "https://qlik-to-pbi-bridge.onrender.com/app/instructions";
+    const linkRes = await fetch(`${supabaseUrl}/auth/v1/admin/generate_link`, {
+      method: "POST",
+      headers: {
+        "authorization": `Bearer ${serviceRoleKey}`,
+        "apikey": serviceRoleKey,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        type: "magiclink",
+        email,
+        options: {
+          redirect_to: redirectUrl,
+        },
+      }),
+    });
+
+    if (!linkRes.ok) {
+      const errText = await linkRes.text();
+      throw new Error(`Could not generate demo magic link: ${errText}`);
+    }
+
+    const linkData = await linkRes.json();
+    const actionLink = linkData.properties?.action_link || linkData.action_link;
+    if (!actionLink) {
+      throw new Error("Missing action_link in Supabase response.");
+    }
+
+    // If accessed via browser or iframe GET, 302 redirect directly into Supabase auth session verification!
+    if (request.method === "GET") {
+      return new Response(null, {
+        status: 302,
+        headers: {
+          "Location": actionLink,
+          "Cache-Control": "no-store, no-cache, must-revalidate",
+        },
+      });
+    }
+
+    return jsonResponse({ success: true, magicLink: actionLink });
+  } catch (error) {
+    console.error("Demo login failed:", error);
+    const message = error instanceof Error ? error.message : "Demo login failed.";
+    return jsonResponse({ error: message }, { status: 500 });
+  }
+}
 
 export async function handleAuthApiRequest(request: Request, runtimeEnv: RuntimeEnv) {
   try {
     const url = new URL(request.url);
-    if (!url.pathname.startsWith("/api/auth/")) return null;
+    if (!url.pathname.startsWith("/api/auth/") && url.pathname !== "/demo") return null;
+
+    if (url.pathname === "/api/auth/demo-login" || url.pathname === "/demo") {
+      return await handleDemoLogin(request, runtimeEnv);
+    }
+
     if (request.method !== "POST") return new Response("Method not allowed", { status: 405 });
 
     if (url.pathname === "/api/auth/signup/send-otp") return await handleSendSignupOtp(request, runtimeEnv);
