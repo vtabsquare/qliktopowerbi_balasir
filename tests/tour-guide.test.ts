@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { TOUR_STEPS } from "../src/lib/tour/tour-config";
+import { checkElementViewportVisibility } from "../src/components/tour/TourGuideOverlay";
 
 describe("Interactive Tour Guide Configuration", () => {
   it("contains exactly 14 steps", () => {
@@ -77,6 +78,55 @@ describe("Interactive Tour Guide Configuration", () => {
       expect(step.id).toBeTruthy();
       expect(step.shortLabel).toBeTruthy();
       expect(step.actionHint).toBeTruthy();
+    });
+  });
+});
+
+describe("Tour Guide Viewport Visibility and Scroll Indicator Logic", () => {
+  const viewportHeight = 800;
+
+  it("detects when target element is below the fold / viewport (triggers scroll down animation)", () => {
+    // E.g. Step 9 "Apply Mapping & Re-run Conversion" located at top = 1200px
+    const rectBelow = { top: 1200, bottom: 1240, width: 220, height: 40 };
+    const visibility = checkElementViewportVisibility(rectBelow, viewportHeight);
+
+    expect(visibility.isBelow).toBe(true);
+    expect(visibility.isAbove).toBe(false);
+    expect(visibility.isInView).toBe(false);
+  });
+
+  it("detects when target element is visible in the active viewport (shows guided tour popup and spotlight)", () => {
+    // E.g. When user has scrolled down to the button
+    const rectInView = { top: 400, bottom: 440, width: 220, height: 40 };
+    const visibility = checkElementViewportVisibility(rectInView, viewportHeight);
+
+    expect(visibility.isBelow).toBe(false);
+    expect(visibility.isAbove).toBe(false);
+    expect(visibility.isInView).toBe(true);
+  });
+
+  it("detects when target element has scrolled above the viewport fold", () => {
+    // E.g. User scrolled past the button to the footer
+    const rectAbove = { top: -100, bottom: 20, width: 220, height: 40 };
+    const visibility = checkElementViewportVisibility(rectAbove, viewportHeight);
+
+    expect(visibility.isBelow).toBe(false);
+    expect(visibility.isAbove).toBe(true);
+    expect(visibility.isInView).toBe(false);
+  });
+
+  it("handles null or zero-dimension rects safely", () => {
+    expect(checkElementViewportVisibility(null, viewportHeight)).toEqual({
+      isBelow: false,
+      isAbove: false,
+      isInView: false,
+    });
+
+    const zeroRect = { top: 0, bottom: 0, width: 0, height: 0 };
+    expect(checkElementViewportVisibility(zeroRect, viewportHeight)).toEqual({
+      isBelow: false,
+      isAbove: false,
+      isInView: false,
     });
   });
 });

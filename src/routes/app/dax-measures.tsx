@@ -18,6 +18,11 @@ function DaxMeasuresPage() {
   const [showDemoEndedModal, setShowDemoEndedModal] = useState(false);
 
   const handleProceedToSemanticModel = () => {
+    if (isDemo) {
+      window.dispatchEvent(new CustomEvent("open-demo-ended-modal"));
+      setShowDemoEndedModal(true);
+      return;
+    }
     navigate({ to: "/app/semantic-model" });
   };
 

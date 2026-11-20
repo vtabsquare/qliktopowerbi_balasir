@@ -1,5 +1,7 @@
+import { useEffect } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMigration } from "@/lib/migration/store";
+import { useAuth } from "@/contexts/AuthContext";
 import { AlertCircle, ArrowLeft, ArrowRight, RotateCcw } from "lucide-react";
 import { EnterpriseExportPage } from "@/components/migration/EnterpriseExportPage";
 import { RepairFocusNotice } from "@/components/migration/RepairFocusNotice";
@@ -11,6 +13,18 @@ export const Route = createFileRoute("/app/semantic-model")({
 function SemanticModelPage() {
   const navigate = useNavigate();
   const { enterpriseAnalysis } = useMigration();
+  const { isDemo } = useAuth();
+
+  useEffect(() => {
+    if (isDemo) {
+      window.dispatchEvent(new CustomEvent("open-demo-ended-modal"));
+      navigate({ to: "/app/dax-measures" });
+    }
+  }, [isDemo, navigate]);
+
+  if (isDemo) {
+    return null;
+  }
 
   if (!enterpriseAnalysis) {
     return (

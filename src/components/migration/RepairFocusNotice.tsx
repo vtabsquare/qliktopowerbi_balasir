@@ -3,6 +3,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, MapPin, MousePointerClick, X } from "lucide-react";
 import { repairDomId, type RepairArea } from "@/lib/migration/autofix";
 import { useMigration } from "@/lib/migration/store";
+import { useAuth } from "@/contexts/AuthContext";
 
 function openParents(element: HTMLElement): void {
   let current: HTMLElement | null = element.parentElement;
@@ -26,6 +27,7 @@ function focusEditor(element: HTMLElement): void {
 
 export function RepairFocusNotice({ areas }: { areas: RepairArea[] }) {
   const navigate = useNavigate();
+  const { isDemo } = useAuth();
   const { repairFocus, setRepairFocus } = useMigration();
   const active = repairFocus && areas.includes(repairFocus.area) ? repairFocus : null;
 
@@ -79,7 +81,18 @@ export function RepairFocusNotice({ areas }: { areas: RepairArea[] }) {
           {active.message && <div className="mt-1 text-[11px] text-foreground/80">{active.message}</div>}
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <button onClick={() => navigate({ to: "/app/semantic-model" })} className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-[11px] font-semibold hover:bg-muted"><ArrowLeft className="h-3.5 w-3.5" />Auto-Fix</button>
+          <button
+            onClick={() => {
+              if (isDemo) {
+                window.dispatchEvent(new CustomEvent("open-demo-ended-modal"));
+                return;
+              }
+              navigate({ to: "/app/semantic-model" });
+            }}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-[11px] font-semibold hover:bg-muted"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />Auto-Fix
+          </button>
           <button onClick={() => setRepairFocus(null)} className="rounded-lg p-2 hover:bg-muted" title="Close fix guidance"><X className="h-4 w-4" /></button>
         </div>
       </div>

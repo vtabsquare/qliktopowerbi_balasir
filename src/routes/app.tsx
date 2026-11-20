@@ -47,10 +47,9 @@ function AuthGuard() {
       }
 
       if (isDemo && isPathLockedInDemo(currentPath)) {
-        toast.warning(DEMO_LOCKED_MESSAGE, {
-          description: "This stage is locked in Demo Mode. Returning to instructions.",
-        });
-        navigate({ to: "/app/instructions" });
+        window.dispatchEvent(new CustomEvent("open-demo-ended-modal"));
+        toast.info(DEMO_LOCKED_MESSAGE);
+        navigate({ to: "/app/dax-measures" });
         return;
       }
     }

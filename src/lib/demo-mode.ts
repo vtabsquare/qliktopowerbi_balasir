@@ -30,6 +30,7 @@ export function isDemoUser(user: User | null | undefined): boolean {
 export const DEMO_LOCKED_ROUTES = [
   "/app/powerbi-model",
   "/app/relationships",
+  "/app/semantic-model",
   "/app/logs",
   "/app/calendar-analysis",
   "/app/report-designer",

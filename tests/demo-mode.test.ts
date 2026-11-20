@@ -33,15 +33,16 @@ describe("Demo Version Mode", () => {
   });
 
   describe("isPathLockedInDemo route restrictions", () => {
-    it("locks Phase 3 routes in Demo Version (Power BI Model, Relationships, Logs, etc.)", () => {
+    it("locks Phase 3 routes in Demo Version (Power BI Model, Relationships, Validation & Export / Semantic Model, Logs, etc.)", () => {
       expect(isPathLockedInDemo("/app/powerbi-model")).toBe(true);
       expect(isPathLockedInDemo("/app/relationships")).toBe(true);
+      expect(isPathLockedInDemo("/app/semantic-model")).toBe(true);
       expect(isPathLockedInDemo("/app/logs")).toBe(true);
       expect(isPathLockedInDemo("/app/calendar-analysis")).toBe(true);
       expect(isPathLockedInDemo("/app/report-designer")).toBe(true);
     });
 
-    it("opens Phase 1, Phase 2, and Semantic Model review in Demo Version", () => {
+    it("opens Phase 1 and Phase 2 stages in Demo Version", () => {
       expect(isPathLockedInDemo("/app/instructions")).toBe(false);
       expect(isPathLockedInDemo("/app")).toBe(false);
       expect(isPathLockedInDemo("/app/")).toBe(false);
@@ -50,7 +51,6 @@ describe("Demo Version Mode", () => {
       expect(isPathLockedInDemo("/app/analysis")).toBe(false);
       expect(isPathLockedInDemo("/app/power-query")).toBe(false);
       expect(isPathLockedInDemo("/app/dax-measures")).toBe(false);
-      expect(isPathLockedInDemo("/app/semantic-model")).toBe(false);
     });
 
     it("allows public authentication and root routes", () => {
