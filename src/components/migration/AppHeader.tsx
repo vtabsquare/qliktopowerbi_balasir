@@ -7,7 +7,7 @@ import { useAuth } from "@/contexts/AuthContext";
 
 export function AppHeader() {
   const navigate = useNavigate();
-  const { isDemo } = useAuth();
+  const { isDemo, isDemoEnv, signOut } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -26,12 +26,11 @@ export function AppHeader() {
   }, []);
 
   const handleLogout = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) {
-      toast.error("Failed to log out. Please try again.");
-    } else {
+    try {
+      await signOut();
       toast.success("Logged out successfully!");
-      navigate({ to: "/auth" });
+    } catch {
+      toast.error("Failed to log out. Please try again.");
     }
   };
 
@@ -42,14 +41,11 @@ export function AppHeader() {
     }
     setDeleting(true);
     try {
-      // Sign out the user first — full account deletion requires a backend
-      // admin call (SUPABASE_SERVICE_ROLE_KEY) which should be done server-side.
-      await supabase.auth.signOut();
+      await signOut();
       toast.success(
         "Your account deletion request has been submitted. All your data will be removed within 30 days per our Privacy Policy.",
         { duration: 6000 },
       );
-      navigate({ to: "/auth" });
     } catch {
       toast.error("Could not process account deletion. Please contact support.");
     } finally {

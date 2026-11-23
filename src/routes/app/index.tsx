@@ -34,6 +34,8 @@ import { DemoUploadChoice } from "@/components/migration/DemoUploadChoice";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTour } from "@/contexts/TourContext";
+import { markStepCompleted } from "@/lib/migration/workflow-gating";
+import { useNavigationLoading } from "@/components/common/NavigationLoadingOverlay";
 
 export const Route = createFileRoute("/app/")({
   component: UploadPage,
@@ -112,9 +114,10 @@ async function enrichQvwUpload(files: ExtractedFile[]): Promise<{
   return { files: [...merged.values()], diagnostics };
 }
 
-function UploadPage() {
+export function UploadPage() {
   const navigate = useNavigate();
   const { isDemo } = useAuth();
+  const { withLoading } = useNavigationLoading();
   const {
     setEnterpriseFiles,
     enterpriseFiles,
@@ -405,14 +408,29 @@ function UploadPage() {
 
   const handleNext = () => {
     setEnterpriseFiles(allFiles);
+    markStepCompleted(1, isDemo);
+    toast.success("Step 2 (Upload Qlik Files) Completed! Step 3 (QVW Analysis) is now unlocked.");
+
     if (!qvwAnalysis) {
+      markStepCompleted(2, isDemo);
+      markStepCompleted(3, isDemo);
       toast.info("No QVW content detected", {
         description: "Skipping visualization and expression analysis stages (Steps 3 & 4) because no QVW package was found.",
         duration: 6000,
       });
-      navigate({ to: "/app/analysis" });
+      withLoading(
+        async () => {
+          navigate({ to: "/app/analysis" });
+        },
+        { message: "Loading Step 5: ETL Analysis...", subMessage: "Analyzing script lineage..." },
+      );
     } else {
-      navigate({ to: "/app/qvw-analysis" });
+      withLoading(
+        async () => {
+          navigate({ to: "/app/qvw-analysis" });
+        },
+        { message: "Loading Step 3: QVW Analysis...", subMessage: "Parsing sheets and visual objects..." },
+      );
     }
   };
 
@@ -658,8 +676,16 @@ function UploadPage() {
             </div>
             <button
               data-tour="review-qvw-analysis"
-              onClick={() => navigate({ to: "/app/qvw-analysis" })}
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground hover:opacity-90"
+              onClick={() => {
+                markStepCompleted(1, isDemo);
+                withLoading(
+                  async () => {
+                    navigate({ to: "/app/qvw-analysis" });
+                  },
+                  { message: "Loading Step 3: QVW Analysis...", subMessage: "Parsing sheets and visual objects..." },
+                );
+              }}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground hover:opacity-90 cursor-pointer"
             >
               Review QVW Analysis <ArrowRight className="h-4 w-4" />
             </button>
@@ -681,8 +707,16 @@ function UploadPage() {
             </div>
             <button
               data-tour="review-qvw-analysis"
-              onClick={() => navigate({ to: "/app/qvw-analysis" })}
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground hover:opacity-90"
+              onClick={() => {
+                markStepCompleted(1, isDemo);
+                withLoading(
+                  async () => {
+                    navigate({ to: "/app/qvw-analysis" });
+                  },
+                  { message: "Loading Step 3: QVW Analysis...", subMessage: "Parsing sheets and visual objects..." },
+                );
+              }}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground hover:opacity-90 cursor-pointer"
             >
               Review QVW Analysis <ArrowRight className="h-4 w-4" />
             </button>

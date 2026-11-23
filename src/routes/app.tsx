@@ -12,6 +12,11 @@ import { TourProvider } from "@/contexts/TourContext";
 import { TourGuideOverlay } from "@/components/tour/TourGuideOverlay";
 import { toast } from "sonner";
 import { isPathLockedInDemo, DEMO_LOCKED_MESSAGE } from "@/lib/demo-mode";
+import {
+  getStepByPath,
+  isStepUnlocked,
+  getFirstIncompleteStep,
+} from "@/lib/migration/workflow-gating";
 
 export const Route = createFileRoute("/app")({
   head: () => ({
@@ -57,6 +62,28 @@ function AuthGuard() {
         toast.info(DEMO_LOCKED_MESSAGE);
         navigate({ to: "/app/dax-measures" });
         return;
+      }
+
+      // Step-by-Step sequential workflow route protection:
+      // Prevent users from bypassing locked steps via direct browser URL entry
+      const currentStep = getStepByPath(currentPath);
+      if (currentStep && currentStep.id > 0) {
+        const unlocked = isStepUnlocked(currentStep.id, isDemo);
+        if (!unlocked) {
+          const incomplete = getFirstIncompleteStep(currentStep.id, isDemo);
+          toast.error(
+            `Access Restricted: Please complete Step ${incomplete.stepNumber} (${incomplete.label}) before proceeding to Step ${currentStep.stepNumber} (${currentStep.label}).`,
+            {
+              action: {
+                label: `Go to Step ${incomplete.stepNumber}`,
+                onClick: () => navigate({ to: incomplete.path }),
+              },
+              duration: 6000,
+            },
+          );
+          navigate({ to: incomplete.path });
+          return;
+        }
       }
     }
   }, [session, loading, isDemo, currentPath, navigate]);

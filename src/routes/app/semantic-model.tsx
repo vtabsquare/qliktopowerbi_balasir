@@ -10,7 +10,7 @@ export const Route = createFileRoute("/app/semantic-model")({
   component: SemanticModelPage,
 });
 
-function SemanticModelPage() {
+export function SemanticModelPage() {
   const navigate = useNavigate();
   const { enterpriseAnalysis } = useMigration();
   const { isDemo } = useAuth();

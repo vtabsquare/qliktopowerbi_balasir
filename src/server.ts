@@ -459,12 +459,45 @@ export async function handleDemoLogin(request: Request, runtimeEnv: RuntimeEnv) 
   }
 }
 
+export async function handleWorkflowApiRequest(request: Request, runtimeEnv: RuntimeEnv) {
+  try {
+    const url = new URL(request.url);
+    if (!url.pathname.startsWith("/api/workflow/")) return null;
+
+    if (url.pathname === "/api/workflow/validate-step" && request.method === "POST") {
+      const body = await readJsonBody(request);
+      const stepId = Number(body?.stepId ?? 0);
+      const isDemo = Boolean(body?.isDemo);
+
+      // Server-side validation rules:
+      // In Demo mode, stepId >= 7 (Phase 3) is strictly locked
+      if (isDemo && stepId >= 7) {
+        return jsonResponse(
+          { ok: false, error: "Phase 3 (Steps 8-11) is locked in Demo Version.", stepId },
+          { status: 403 }
+        );
+      }
+
+      return jsonResponse({
+        ok: true,
+        stepId,
+        unlocked: true,
+        validatedAt: new Date().toISOString(),
+      });
+    }
+
+    return new Response("Not found", { status: 404 });
+  } catch (error) {
+    return jsonResponse({ error: "Workflow validation error" }, { status: 500 });
+  }
+}
+
 export async function handleAuthApiRequest(request: Request, runtimeEnv: RuntimeEnv) {
   try {
     const url = new URL(request.url);
-    if (!url.pathname.startsWith("/api/auth/") && url.pathname !== "/demo") return null;
+    if (!url.pathname.startsWith("/api/auth/")) return null;
 
-    if (url.pathname === "/api/auth/demo-login" || url.pathname === "/demo") {
+    if (url.pathname === "/api/auth/demo-login") {
       return await handleDemoLogin(request, runtimeEnv);
     }
 
@@ -1140,6 +1173,8 @@ export default {
       if (qvdCsvApiResponse) return applySecurityHeaders(qvdCsvApiResponse);
       const tomApiResponse = await handleTomApiRequest(request);
       if (tomApiResponse) return applySecurityHeaders(tomApiResponse);
+      const workflowApiResponse = await handleWorkflowApiRequest(request, runtimeEnv);
+      if (workflowApiResponse) return applySecurityHeaders(workflowApiResponse);
       const authApiResponse = await handleAuthApiRequest(request, runtimeEnv);
       if (authApiResponse) return applySecurityHeaders(authApiResponse);
       const agentApiResponse = await handleAgentApiRequest(request, runtimeEnv);

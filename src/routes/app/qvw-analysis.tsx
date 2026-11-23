@@ -1,8 +1,10 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { useMigration } from "@/lib/migration/store";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import { markStepCompleted } from "@/lib/migration/workflow-gating";
+import { useNavigationLoading } from "@/components/common/NavigationLoadingOverlay";
 import type {
   QvwAction,
   QvwAnalysis,
@@ -42,9 +44,22 @@ export const Route = createFileRoute("/app/qvw-analysis")({
   component: QvwAnalysisPage,
 });
 
-function QvwAnalysisPage() {
+export function QvwAnalysisPage() {
   const { isDemo } = useAuth();
+  const navigate = useNavigate();
+  const { withLoading } = useNavigationLoading();
   const { qvwAnalysis } = useMigration();
+
+  const handleProceedToExpressions = () => {
+    markStepCompleted(2, isDemo);
+    toast.success("Step 3 (QVW Analysis) Completed! Step 4 (Expression Conversion) is now unlocked.");
+    withLoading(
+      async () => {
+        navigate({ to: "/app/expression-conversion" });
+      },
+      { message: "Loading Step 4: Expression Conversion...", subMessage: "Parsing expressions and DAX rules..." },
+    );
+  };
   const [objectSearch, setObjectSearch] = useState("");
   const [expressionSearch, setExpressionSearch] = useState("");
   const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
@@ -73,13 +88,14 @@ function QvwAnalysisPage() {
           >
             Upload package
           </Link>
-          <Link
-            to="/app/expression-conversion"
+          <button
+            type="button"
+            onClick={handleProceedToExpressions}
             data-tour="convert-expressions"
-            className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground hover:opacity-90"
+            className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground hover:opacity-90 cursor-pointer"
           >
             Convert expressions <ArrowRight className="h-4 w-4" />
-          </Link>
+          </button>
         </div>
       </div>
     );
@@ -190,13 +206,14 @@ function QvwAnalysisPage() {
                 <Download className="h-4 w-4" /> Download metadata JSON
               </button>
             )}
-            <Link
-              to="/app/expression-conversion"
+            <button
+              type="button"
+              onClick={handleProceedToExpressions}
               data-tour="convert-expressions"
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground"
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:opacity-90 cursor-pointer"
             >
               Convert expressions <ArrowRight className="h-4 w-4" />
-            </Link>
+            </button>
           </div>
         </div>
       </section>

@@ -12,6 +12,7 @@ import {
   ServerCog,
   Wand2,
   FileBox,
+  Sparkles,
 } from "lucide-react";
 
 export const Route = createFileRoute("/")({
@@ -81,6 +82,12 @@ function LandingPage() {
               <span className="relative z-10">Next: Launch Migration Engine</span>
               <ArrowRight className="relative z-10 h-5 w-5 group-hover:translate-x-1 transition-transform" />
             </motion.button>
+            <a
+              href="/demo"
+              className="inline-flex items-center gap-2 rounded-xl border border-amber-500/40 bg-amber-500/10 px-6 py-3 font-semibold text-amber-600 dark:text-amber-400 transition-colors hover:bg-amber-500/20"
+            >
+              <Sparkles className="h-4 w-4" /> Try Live Demo (/demo)
+            </a>
             <a
               href="https://www.vtabsquare.com/?demo=1&product=qlik-to-power-bi-migration&source=qlik-migration-demo"
               target="_blank"

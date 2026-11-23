@@ -167,8 +167,7 @@ function AuthPage() {
     const params = new URLSearchParams(window.location.search);
     const isDemoParam = params.get("demo") === "true" || params.get("demo") === "1" || params.get("embed") === "true";
     if (isDemoParam) {
-      setLoading(true);
-      window.location.href = "/api/auth/demo-login";
+      window.location.href = "/demo";
     }
   }, []);
 
@@ -425,15 +424,15 @@ function AuthPage() {
                 </button>
                 <div className="relative flex py-2 items-center">
                   <div className="flex-grow border-t border-border"></div>
-                  <span className="flex-shrink mx-3 text-[11px] uppercase text-muted-foreground font-semibold">Or Demo Access</span>
+                  <span className="flex-shrink mx-3 text-[11px] uppercase text-muted-foreground font-semibold">Separate Demo Environment</span>
                   <div className="flex-grow border-t border-border"></div>
                 </div>
                 <a
-                  href="/api/auth/demo-login"
+                  href="/demo"
                   className="w-full inline-flex items-center justify-center gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 font-bold text-xs py-2.5 transition-all cursor-pointer shadow-xs"
                 >
                   <Sparkles className="h-4 w-4" />
-                  <span>Explore Demo (vtabpublicuser@gmail.com)</span>
+                  <span>Open Dedicated Demo URL (/demo)</span>
                 </a>
               </form>
               <div className="mt-6 text-center text-sm">

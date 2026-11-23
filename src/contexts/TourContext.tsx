@@ -2,6 +2,8 @@ import React, { createContext, useContext, useState, useCallback, useEffect, use
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { TOUR_STEPS, type TourStep } from "@/lib/tour/tour-config";
 import { useAuth } from "@/contexts/AuthContext";
+import { isDemoEnvironment } from "@/lib/supabase";
+import { getStepByPath, markStepCompleted } from "@/lib/migration/workflow-gating";
 import { loadDemoDatasetToStore } from "@/lib/migration/demo-dataset-loader";
 
 interface TourContextType {
@@ -29,8 +31,19 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
   const currentStep = TOUR_STEPS[currentStepIndex] || TOUR_STEPS[0];
   const totalSteps = TOUR_STEPS.length;
 
+  const { loading: authLoading, isDemo: authIsDemo } = useAuth();
+  const isDemo = authIsDemo || isDemoEnvironment();
+
   const navigateToStepRoute = useCallback(
     (targetRoute: string) => {
+      if (currentPath.startsWith("/demo")) {
+        const step = getStepByPath(targetRoute);
+        if (step) {
+          markStepCompleted(Math.max(0, step.id - 1), true);
+          window.dispatchEvent(new CustomEvent("demo-set-active-step", { detail: { stepId: step.id } }));
+        }
+        return;
+      }
       const normalizedCurrent = currentPath === "/app/" ? "/app" : currentPath;
       const normalizedTarget = targetRoute === "/app/" ? "/app" : targetRoute;
       if (normalizedCurrent !== normalizedTarget) {
@@ -39,9 +52,6 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
     },
     [currentPath, navigate],
   );
-
-  const { loading: authLoading, isDemo } = useAuth();
-  const hasAutoStartedRef = useRef(false);
 
   const goToStep = useCallback(
     (index: number) => {
@@ -97,8 +107,9 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
 
   const restartTour = useCallback(() => {
     if (!isDemo) return;
-    goToStep(0);
+    loadDemoDatasetToStore();
     setIsOpen(true);
+    goToStep(0);
   }, [isDemo, goToStep]);
 
   // Ensure tour is immediately closed if user is in normal/enterprise version
@@ -108,20 +119,19 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
     }
   }, [isDemo, isOpen]);
 
-  // Auto-start tour ONLY for demo version users on visit to the application
+  // Auto-start tour ALWAYS for demo version users on visit to the application
   useEffect(() => {
     if (authLoading || !isDemo) return;
 
     // Load demo dataset automatically in background on visit for demo users
     loadDemoDatasetToStore();
 
-    if (!hasAutoStartedRef.current) {
-      hasAutoStartedRef.current = true;
-      const timer = setTimeout(() => {
-        startTour();
-      }, 350);
-      return () => clearTimeout(timer);
-    }
+    // Auto-launch the guided tour so it always shows on visit
+    const timer = setTimeout(() => {
+      startTour();
+    }, 450);
+
+    return () => clearTimeout(timer);
   }, [authLoading, isDemo, startTour]);
 
   // Listen for global custom event to trigger tour (strictly Demo version only)

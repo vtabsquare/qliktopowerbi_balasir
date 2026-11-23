@@ -1,19 +1,34 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMigration } from "@/lib/migration/store";
 import { AlertCircle, ArrowLeft, ArrowRight } from "lucide-react";
-// Re-use the full TabMQueryDataTypes, TabFinalTables from EnterpriseAnalysisPanel internals
-// by rendering the EnterpriseAnalysisPanel with a forced active tab prop
 import { EnterprisePowerQueryPage } from "@/components/migration/EnterprisePowerQueryPage";
 import { applyDataTypeOverrides } from "@/lib/migration/enterprise-parser";
 import { RepairFocusNotice } from "@/components/migration/RepairFocusNotice";
+import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "sonner";
+import { markStepCompleted } from "@/lib/migration/workflow-gating";
+import { useNavigationLoading } from "@/components/common/NavigationLoadingOverlay";
 
 export const Route = createFileRoute("/app/power-query")({
   component: PowerQueryPage,
 });
 
-function PowerQueryPage() {
+export function PowerQueryPage() {
   const navigate = useNavigate();
+  const { isDemo } = useAuth();
+  const { withLoading } = useNavigationLoading();
   const { enterpriseAnalysis, enterpriseColumnTypeEdits, setEnterpriseColumnTypeEdits, setEnterpriseAnalysis } = useMigration();
+
+  const handleProceedToDax = () => {
+    markStepCompleted(5, isDemo);
+    toast.success("Step 6 (Power Query) Completed! Step 7 (DAX Measures) is now unlocked.");
+    withLoading(
+      async () => {
+        navigate({ to: "/app/dax-measures" });
+      },
+      { message: "Loading Step 7: DAX Measures...", subMessage: "Translating expressions to DAX syntax..." },
+    );
+  };
 
   if (!enterpriseAnalysis) {
     return (
@@ -45,8 +60,8 @@ function PowerQueryPage() {
           </button>
           <button
             data-tour="dax-measures"
-            onClick={() => navigate({ to: "/app/dax-measures" })}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-medium shadow"
+            onClick={handleProceedToDax}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-medium shadow cursor-pointer hover:opacity-90"
           >
             DAX Measures <ArrowRight className="h-4 w-4" />
           </button>
@@ -81,8 +96,8 @@ function PowerQueryPage() {
         </button>
         <button
           data-tour="dax-measures"
-          onClick={() => navigate({ to: "/app/dax-measures" })}
-          className="flex items-center gap-2 px-6 py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-sm shadow-lg hover:opacity-90 transition-all"
+          onClick={handleProceedToDax}
+          className="flex items-center gap-2 px-6 py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-sm shadow-lg hover:opacity-90 transition-all cursor-pointer"
         >
           DAX Measures <ArrowRight className="h-4 w-4" />
         </button>

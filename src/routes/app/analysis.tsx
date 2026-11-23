@@ -7,12 +7,15 @@ import { Database, Loader2, AlertCircle, RefreshCw, ArrowRight, Check, ArrowLeft
 import { TabSourceMapping } from "@/components/migration/EnterpriseAnalysisPanel";
 import { RepairFocusNotice } from "@/components/migration/RepairFocusNotice";
 import { toast } from "sonner";
+import { useAuth } from "@/contexts/AuthContext";
+import { markStepCompleted } from "@/lib/migration/workflow-gating";
+import { useNavigationLoading } from "@/components/common/NavigationLoadingOverlay";
 
 export const Route = createFileRoute("/app/analysis")({
   component: AnalysisPage,
 });
 
-function AnalysisPage() {
+export function AnalysisPage() {
   const navigate = useNavigate();
   const {
     enterpriseFiles,
@@ -28,6 +31,19 @@ function AnalysisPage() {
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [applying, setApplying] = useState(false);
+  const { isDemo } = useAuth();
+  const { withLoading } = useNavigationLoading();
+
+  const handleProceedToPowerQuery = () => {
+    markStepCompleted(4, isDemo);
+    toast.success("Step 5 (ETL Analysis) Completed! Step 6 (Power Query) is now unlocked.");
+    withLoading(
+      async () => {
+        navigate({ to: "/app/power-query" });
+      },
+      { message: "Loading Step 6: Power Query...", subMessage: "Generating clean M scripts for final tables..." },
+    );
+  };
 
   const files = enterpriseFiles;
 
@@ -108,8 +124,8 @@ function AnalysisPage() {
           </button>
           <button
             data-tour="power-query-m-code"
-            onClick={() => navigate({ to: "/app/power-query" })}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-medium shadow hover:opacity-90"
+            onClick={handleProceedToPowerQuery}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-medium shadow hover:opacity-90 cursor-pointer"
           >
             Power Query &amp; M Code <ArrowRight className="h-4 w-4" />
           </button>
@@ -148,8 +164,8 @@ function AnalysisPage() {
           </button>
           <button
             data-tour="power-query-m-code"
-            onClick={() => navigate({ to: "/app/power-query" })}
-            className="flex items-center gap-2 px-5 py-3 rounded-xl bg-primary text-primary-foreground text-sm font-medium shadow"
+            onClick={handleProceedToPowerQuery}
+            className="flex items-center gap-2 px-5 py-3 rounded-xl bg-primary text-primary-foreground text-sm font-medium shadow cursor-pointer hover:opacity-90"
           >
             Power Query &amp; M Code <ArrowRight className="h-4 w-4" />
           </button>
@@ -280,8 +296,8 @@ function AnalysisPage() {
         </button>
         <button
           data-tour="power-query-m-code"
-          onClick={() => navigate({ to: "/app/power-query" })}
-          className="flex items-center gap-2 px-6 py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-sm shadow-lg hover:opacity-90 transition-all"
+          onClick={handleProceedToPowerQuery}
+          className="flex items-center gap-2 px-6 py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-sm shadow-lg hover:opacity-90 transition-all cursor-pointer"
         >
           Power Query &amp; M Code <ArrowRight className="h-4 w-4" />
         </button>

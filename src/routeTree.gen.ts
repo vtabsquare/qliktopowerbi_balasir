@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as PrivacyRouteImport } from './routes/privacy'
+import { Route as DemoRouteImport } from './routes/demo'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AppRouteImport } from './routes/app'
 import { Route as IndexRouteImport } from './routes/index'
@@ -30,6 +31,11 @@ import { Route as AppAnalysisRouteImport } from './routes/app/analysis'
 const PrivacyRoute = PrivacyRouteImport.update({
   id: '/privacy',
   path: '/privacy',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DemoRoute = DemoRouteImport.update({
+  id: '/demo',
+  path: '/demo',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthRoute = AuthRouteImport.update({
@@ -117,6 +123,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/app': typeof AppRouteWithChildren
   '/auth': typeof AuthRoute
+  '/demo': typeof DemoRoute
   '/privacy': typeof PrivacyRoute
   '/app/analysis': typeof AppAnalysisRoute
   '/app/calendar-analysis': typeof AppCalendarAnalysisRoute
@@ -135,6 +142,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/demo': typeof DemoRoute
   '/privacy': typeof PrivacyRoute
   '/app/analysis': typeof AppAnalysisRoute
   '/app/calendar-analysis': typeof AppCalendarAnalysisRoute
@@ -155,6 +163,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/app': typeof AppRouteWithChildren
   '/auth': typeof AuthRoute
+  '/demo': typeof DemoRoute
   '/privacy': typeof PrivacyRoute
   '/app/analysis': typeof AppAnalysisRoute
   '/app/calendar-analysis': typeof AppCalendarAnalysisRoute
@@ -176,6 +185,7 @@ export interface FileRouteTypes {
     | '/'
     | '/app'
     | '/auth'
+    | '/demo'
     | '/privacy'
     | '/app/analysis'
     | '/app/calendar-analysis'
@@ -194,6 +204,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/auth'
+    | '/demo'
     | '/privacy'
     | '/app/analysis'
     | '/app/calendar-analysis'
@@ -213,6 +224,7 @@ export interface FileRouteTypes {
     | '/'
     | '/app'
     | '/auth'
+    | '/demo'
     | '/privacy'
     | '/app/analysis'
     | '/app/calendar-analysis'
@@ -233,6 +245,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AppRoute: typeof AppRouteWithChildren
   AuthRoute: typeof AuthRoute
+  DemoRoute: typeof DemoRoute
   PrivacyRoute: typeof PrivacyRoute
 }
 
@@ -243,6 +256,13 @@ declare module '@tanstack/react-router' {
       path: '/privacy'
       fullPath: '/privacy'
       preLoaderRoute: typeof PrivacyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/demo': {
+      id: '/demo'
+      path: '/demo'
+      fullPath: '/demo'
+      preLoaderRoute: typeof DemoRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/auth': {
@@ -398,6 +418,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppRoute: AppRouteWithChildren,
   AuthRoute: AuthRoute,
+  DemoRoute: DemoRoute,
   PrivacyRoute: PrivacyRoute,
 }
 export const routeTree = rootRouteImport

@@ -1,10 +1,13 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useMigration } from "@/lib/migration/store";
+import { useAuth } from "@/contexts/AuthContext";
 import type { ExpressionArtifact, ExpressionArtifactType, ExpressionConversionStatus } from "@/lib/migration/expression";
 import { AlertCircle, ArrowLeft, ArrowRight, Braces, Check, CircleAlert, Code2, Filter, FunctionSquare, RefreshCw, Save, Search, Variable, X } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { markStepCompleted } from "@/lib/migration/workflow-gating";
+import { useNavigationLoading } from "@/components/common/NavigationLoadingOverlay";
 
 export const Route = createFileRoute("/app/expression-conversion")({ component: ExpressionConversionPage });
 
@@ -15,8 +18,10 @@ const artifactTypes: ExpressionArtifactType[] = [
   "dynamic-title-measure", "bookmark-navigation", "manual-redesign",
 ];
 
-function ExpressionConversionPage() {
+export function ExpressionConversionPage() {
   const navigate = useNavigate();
+  const { isDemo } = useAuth();
+  const { withLoading } = useNavigationLoading();
   const { qvwAnalysis, expressionInventory, initializeExpressionConversion, updateExpressionArtifact, approveExpressionArtifact, excludeExpressionArtifact, resetExpressionArtifact } = useMigration();
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
@@ -24,6 +29,17 @@ function ExpressionConversionPage() {
   const [sheet, setSheet] = useState("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [excludeReason, setExcludeReason] = useState("");
+
+  const handleProceedToEtl = () => {
+    markStepCompleted(3, isDemo);
+    toast.success("Step 4 (Expression Conversion) Completed! Step 5 (ETL Analysis) is now unlocked.");
+    withLoading(
+      async () => {
+        navigate({ to: "/app/analysis" });
+      },
+      { message: "Loading Step 5: ETL Analysis...", subMessage: "Parsing script lineage and final tables..." },
+    );
+  };
 
   useEffect(() => {
     if (qvwAnalysis && !expressionInventory) {
@@ -40,7 +56,7 @@ function ExpressionConversionPage() {
         <div className="flex justify-center gap-2 pt-2">
           <button data-tour="save-expression" className="rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground shadow">Save</button>
           <button data-tour="approve-expression" className="rounded-lg border border-border px-4 py-2 text-xs font-semibold">Approved</button>
-          <button data-tour="proceed-to-etl" onClick={() => navigate({ to: "/app/analysis" })} className="rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground">Proceed to ETL Analysis</button>
+          <button data-tour="proceed-to-etl" onClick={handleProceedToEtl} className="rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground cursor-pointer hover:opacity-90">Proceed to ETL Analysis</button>
         </div>
       </div>
     );
@@ -162,7 +178,7 @@ function ExpressionConversionPage() {
 
       <div className="flex flex-wrap justify-between gap-3">
         <button onClick={() => navigate({ to: "/app/qvw-analysis" })} className="inline-flex items-center gap-2 rounded-xl border border-border px-4 py-2.5 text-sm font-medium hover:bg-accent/30"><ArrowLeft className="h-4 w-4"/> Back to QVW Analysis</button>
-        <button data-tour="proceed-to-etl" onClick={() => navigate({ to: "/app/analysis" })} className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground">Proceed to ETL Analysis <ArrowRight className="h-4 w-4"/></button>
+        <button data-tour="proceed-to-etl" onClick={handleProceedToEtl} className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground cursor-pointer hover:opacity-90">Proceed to ETL Analysis <ArrowRight className="h-4 w-4"/></button>
       </div>
     </div>
   );

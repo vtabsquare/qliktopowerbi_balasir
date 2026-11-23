@@ -6,24 +6,35 @@ import { AlertCircle, ArrowLeft, ArrowRight, Lock } from "lucide-react";
 import { EnterpriseDaxPage } from "@/components/migration/EnterpriseDaxPage";
 import { RepairFocusNotice } from "@/components/migration/RepairFocusNotice";
 import { DemoEndedModal } from "@/components/migration/DemoEndedModal";
+import { toast } from "sonner";
+import { markStepCompleted } from "@/lib/migration/workflow-gating";
+import { useNavigationLoading } from "@/components/common/NavigationLoadingOverlay";
 
 export const Route = createFileRoute("/app/dax-measures")({
   component: DaxMeasuresPage,
 });
 
-function DaxMeasuresPage() {
+export function DaxMeasuresPage() {
   const navigate = useNavigate();
   const { enterpriseAnalysis } = useMigration();
   const { isDemo } = useAuth();
+  const { withLoading } = useNavigationLoading();
   const [showDemoEndedModal, setShowDemoEndedModal] = useState(false);
 
   const handleProceedToSemanticModel = () => {
+    markStepCompleted(6, isDemo);
     if (isDemo) {
       window.dispatchEvent(new CustomEvent("open-demo-ended-modal"));
       setShowDemoEndedModal(true);
       return;
     }
-    navigate({ to: "/app/semantic-model" });
+    toast.success("Step 7 (DAX Measures) Completed! Step 8 (Power BI Model) is now unlocked.");
+    withLoading(
+      async () => {
+        navigate({ to: "/app/powerbi-model" });
+      },
+      { message: "Loading Step 8: Power BI Model...", subMessage: "Constructing star-schema dimensional model..." },
+    );
   };
 
   if (!enterpriseAnalysis) {

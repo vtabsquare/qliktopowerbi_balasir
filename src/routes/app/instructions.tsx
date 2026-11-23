@@ -1,8 +1,10 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { downloadOperationsRunbookFile } from "@/lib/migration/docs/runbook";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { markStepCompleted } from "@/lib/migration/workflow-gating";
+import { useNavigationLoading } from "@/components/common/NavigationLoadingOverlay";
 import {
   AlertTriangle,
   ArrowRight,
@@ -91,8 +93,21 @@ const optional = [
   ],
 ];
 
-function InstructionsPage() {
+export function InstructionsPage() {
   const { isDemo } = useAuth();
+  const navigate = useNavigate();
+  const { withLoading } = useNavigationLoading();
+
+  const handleContinueToUpload = () => {
+    markStepCompleted(0, isDemo);
+    toast.success("Step 1 (Instructions) Completed! Step 2 (Upload Qlik Files) is now unlocked.");
+    withLoading(
+      async () => {
+        navigate({ to: "/app" });
+      },
+      { message: "Loading Step 2: Upload Qlik Files...", subMessage: "Preparing file dropzone and intake engine..." },
+    );
+  };
 
   return (
     <div className="space-y-8">
@@ -147,13 +162,14 @@ function InstructionsPage() {
                   <Sparkles className="h-4 w-4" /> Start Tour
                 </button>
               )}
-              <Link
-                to="/app"
+              <button
+                type="button"
+                onClick={handleContinueToUpload}
                 data-tour="continue-to-upload"
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground shadow-lg hover:opacity-90"
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground shadow-lg hover:opacity-90 cursor-pointer"
               >
                 Continue to Upload <ArrowRight className="h-4 w-4" />
-              </Link>
+              </button>
             </div>
           </div>
         </div>

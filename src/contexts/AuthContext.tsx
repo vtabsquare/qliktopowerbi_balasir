@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState, useMemo } from 'react';
 import { Session, User } from '@supabase/supabase-js';
-import { supabase } from '@/lib/supabase';
+import { supabaseProd, supabaseDemo, isDemoEnvironment, getSupabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { isDemoUser } from '@/lib/demo-mode';
 import { useDemoClipboardProtection } from '@/lib/demo-clipboard-guard';
@@ -10,6 +10,8 @@ type AuthContextType = {
   user: User | null;
   loading: boolean;
   isDemo: boolean;
+  isDemoEnv: boolean;
+  signOut: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextType>({
@@ -17,6 +19,8 @@ const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
   isDemo: false,
+  isDemoEnv: false,
+  signOut: async () => {},
 });
 
 // Inactivity timeout: 30 minutes (in milliseconds)
@@ -28,16 +32,19 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [loading, setLoading] = useState(true);
   const inactivityTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const isDemoEnv = useMemo(() => isDemoEnvironment(), []);
+  const activeClient = useMemo(() => getSupabase(isDemoEnv), [isDemoEnv]);
+
   // ── Inactivity auto-logout ──────────────────────────────────────────────────
   const resetInactivityTimer = useCallback(() => {
     if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
     inactivityTimer.current = setTimeout(async () => {
-      if (supabase) {
-        await supabase.auth.signOut();
+      if (activeClient) {
+        await activeClient.auth.signOut();
         toast.warning('You have been logged out due to 30 minutes of inactivity.');
       }
     }, INACTIVITY_TIMEOUT_MS);
-  }, []);
+  }, [activeClient]);
 
   const clearInactivityTimer = useCallback(() => {
     if (inactivityTimer.current) {
@@ -60,7 +67,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const handleActivity = () => resetInactivityTimer();
 
     events.forEach((e) => window.addEventListener(e, handleActivity, { passive: true }));
-    resetInactivityTimer(); // Start the timer immediately on session
+    resetInactivityTimer(); // Start timer immediately on session
 
     return () => {
       events.forEach((e) => window.removeEventListener(e, handleActivity));
@@ -70,31 +77,44 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   // ── Supabase auth state listener ─────────────────────────────────────────────
   useEffect(() => {
-    if (!supabase) {
+    if (!activeClient) {
       setLoading(false);
       return;
     }
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    activeClient.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = activeClient.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
     });
 
     return () => subscription.unsubscribe();
-  }, []);
+  }, [activeClient]);
 
-  const isDemo = useMemo(() => isDemoUser(user), [user]);
+  const signOut = useCallback(async () => {
+    if (activeClient) {
+      await activeClient.auth.signOut();
+    }
+    setSession(null);
+    setUser(null);
+    if (isDemoEnv) {
+      window.location.href = '/demo';
+    } else {
+      window.location.href = '/auth';
+    }
+  }, [activeClient, isDemoEnv]);
+
+  const isDemo = useMemo(() => isDemoEnv || isDemoUser(user), [isDemoEnv, user]);
   useDemoClipboardProtection(isDemo);
 
   return (
-    <AuthContext.Provider value={{ session, user, loading, isDemo }}>
+    <AuthContext.Provider value={{ session, user, loading, isDemo, isDemoEnv, signOut }}>
       {children}
     </AuthContext.Provider>
   );
