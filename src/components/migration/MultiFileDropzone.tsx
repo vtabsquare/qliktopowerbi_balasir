@@ -23,8 +23,10 @@ import {
   LayoutDashboard,
   Download,
   FolderInput,
+  FolderCheck,
   RefreshCw,
 } from "lucide-react";
+import { toast } from "sonner";
 import { qvdToCSV } from "@/lib/migration/qvd-parser";
 import { cn } from "@/lib/utils";
 
@@ -101,6 +103,7 @@ export async function parseExcelToCsvText(blobOrBuffer: Blob | ArrayBuffer): Pro
 export async function extractFilesFromRawList(
   rawFiles: File[],
   outputDir: string = "",
+  dirHandle?: any,
 ): Promise<ExtractedFile[]> {
   const result: ExtractedFile[] = [];
   for (const file of rawFiles) {
@@ -135,7 +138,7 @@ export async function extractFilesFromRawList(
           if (entryExt === ".qvd" && outputDir !== "__SKIP__") {
             const qvdBlob = await zipEntry.async("blob");
             const qvdFile = new File([qvdBlob], entry.name, { type: "application/octet-stream" });
-            const conv = await convertQvdFile(qvdFile, path, outputDir);
+            const conv = await convertQvdFile(qvdFile, path, outputDir, dirHandle);
             if ("csvFile" in conv) result.push(conv.csvFile);
           }
         }
@@ -162,7 +165,7 @@ export async function extractFilesFromRawList(
         binaryBase64,
       });
       if (ext === ".qvd" && outputDir !== "__SKIP__") {
-        const conv = await convertQvdFile(file, filePath, outputDir);
+        const conv = await convertQvdFile(file, filePath, outputDir, dirHandle);
         if ("csvFile" in conv) result.push(conv.csvFile);
       }
     }
@@ -344,6 +347,7 @@ async function convertQvdFile(
   file: File,
   filePath: string,
   outputDir: string,
+  dirHandle?: any,
 ): Promise<{ csvFile: ExtractedFile; savedPath: string } | { error: string }> {
   try {
     const csvName = file.name.replace(/\.qvd$/i, ".csv");
@@ -406,6 +410,21 @@ async function convertQvdFile(
       } catch { /* Server not available — in-memory only */ }
     }
 
+    // ── Attempt 3: If a client-side FileSystemDirectoryHandle was selected via Browse Folder ──
+    if (dirHandle && typeof dirHandle.getFileHandle === "function" && csvText) {
+      try {
+        const fileHandle = await dirHandle.getFileHandle(csvName, { create: true });
+        const writable = await fileHandle.createWritable();
+        await writable.write(csvText);
+        await writable.close();
+        if (!savedPath) {
+          savedPath = `${dirHandle.name}\\${csvName}`;
+        }
+      } catch (fsWriteErr) {
+        console.warn("[QVD→CSV] Direct write to directory handle failed:", fsWriteErr);
+      }
+    }
+
     const sizeKb = parseFloat((new Blob([csvText]).size / 1024).toFixed(2));
     const csvFile: ExtractedFile = {
       path: csvPath,
@@ -429,8 +448,8 @@ async function convertQvdFile(
 }
 
 
-// ─── QVD Folder Pick Modal ────────────────────────────────────────────────────
-// Shown ONLY when QVD files are detected, before any conversion runs.
+// ─── QVD Folder Pick Modal (Production Only) ──────────────────────────────────
+// Shown ONLY when QVD files are detected in Production, before conversion runs.
 function QvdFolderModal({
   qvdNames,
   initialPath,
@@ -441,18 +460,80 @@ function QvdFolderModal({
   qvdNames: string[];
   initialPath: string;
   defaultPath: string;
-  onConfirm: (path: string) => void;
+  onConfirm: (path: string, dirHandle?: any) => void;
   onSkip: () => void;
 }) {
-  const [draft, setDraft] = useState(initialPath);
-  const inputRef = useRef<HTMLInputElement>(null);
-  useEffect(() => { setTimeout(() => inputRef.current?.focus(), 80); }, []);
+  const [selectedPath, setSelectedPath] = useState(initialPath || "");
+  const [dirHandle, setDirHandle] = useState<any>(null);
+  const [isPicking, setIsPicking] = useState(false);
+  const folderInputRef = useRef<HTMLInputElement>(null);
 
-  const placeholder = defaultPath || "e.g. C:\\MyData\\QvdExports";
+  const fallbackDefault = defaultPath || "/app/qvd-output";
+
+  // Native File Explorer / Folder Picker
+  const handleBrowseFolder = async () => {
+    setIsPicking(true);
+    try {
+      // 1. Try modern native browser directory picker
+      if (typeof window !== "undefined" && "showDirectoryPicker" in window) {
+        try {
+          const handle = await (window as any).showDirectoryPicker({
+            id: "qvd-output-directory",
+            mode: "readwrite",
+          });
+          if (handle) {
+            setDirHandle(handle);
+            setSelectedPath(handle.name);
+            toast.success(`Selected destination folder: "${handle.name}"`);
+            return;
+          }
+        } catch (pickerErr: any) {
+          if (pickerErr.name === "AbortError") {
+            // User cancelled the file explorer picker
+            return;
+          }
+          console.warn("[FolderPicker] showDirectoryPicker error, trying input fallback:", pickerErr);
+        }
+      }
+
+      // 2. Fallback to hidden directory file input
+      folderInputRef.current?.click();
+    } finally {
+      setIsPicking(false);
+    }
+  };
+
+  const handleNativeFolderInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      const firstFile = files[0];
+      const relativePath = (firstFile as any).webkitRelativePath || "";
+      const folderName = relativePath.split("/")[0] || firstFile.name;
+      setSelectedPath(folderName);
+      toast.success(`Selected destination folder: "${folderName}"`);
+    }
+    e.target.value = "";
+  };
+
+  const handleConfirm = () => {
+    const pathToUse = selectedPath.trim() || fallbackDefault;
+    onConfirm(pathToUse, dirHandle);
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
       <div className="relative w-full max-w-lg mx-4 rounded-2xl border border-teal-500/30 bg-gradient-to-br from-surface-elevated to-surface shadow-2xl p-6 space-y-5 animate-in slide-in-from-bottom-4 duration-300">
+        {/* Hidden native directory input fallback */}
+        <input
+          ref={folderInputRef}
+          type="file"
+          // @ts-ignore
+          webkitdirectory=""
+          directory=""
+          onChange={handleNativeFolderInputChange}
+          className="hidden"
+        />
+
         {/* Header */}
         <div className="flex items-start gap-3">
           <div className="grid place-items-center h-10 w-10 rounded-xl bg-gradient-to-br from-teal-500 to-emerald-600 shrink-0 shadow-lg">
@@ -482,23 +563,76 @@ function QvdFolderModal({
           </div>
         )}
 
-        {/* Path input */}
-        <div className="space-y-1.5">
-          <label htmlFor="qvd-modal-path" className="text-xs font-medium text-foreground">
-            Output folder path
+        {/* Native Folder Selection Interface */}
+        <div className="space-y-2">
+          <label className="text-xs font-semibold text-foreground flex items-center justify-between">
+            <span>Destination folder for converted CSVs</span>
+            {selectedPath && (
+              <span className="text-[10px] text-teal-400 font-normal">Folder selected</span>
+            )}
           </label>
-          <input
-            ref={inputRef}
-            id="qvd-modal-path"
-            type="text"
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") onConfirm(draft.trim()); }}
-            placeholder={placeholder}
-            className="w-full rounded-xl border border-teal-500/40 bg-black/30 px-4 py-2.5 text-sm font-mono text-foreground placeholder:text-muted-foreground/40 outline-none focus:border-teal-400 transition-colors"
-          />
-          <p className="text-[10px] text-muted-foreground/60">
-            Leave blank to use the default folder: <span className="font-mono">{defaultPath || "<project>/qvd-output"}</span>
+
+          {selectedPath ? (
+            /* Selected Folder Display */
+            <div className="flex items-center justify-between gap-3 p-3 rounded-xl border border-teal-500/50 bg-teal-950/30 text-teal-100 shadow-inner">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="grid place-items-center h-8 w-8 rounded-lg bg-teal-500/20 text-teal-400 shrink-0">
+                  <FolderCheck className="h-4 w-4" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xs font-mono font-medium truncate text-teal-200" title={selectedPath}>
+                    {selectedPath}
+                  </div>
+                  <div className="text-[10px] text-teal-400/70">
+                    CSVs will be saved in this folder
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleBrowseFolder}
+                className="shrink-0 text-xs text-teal-400 hover:text-teal-300 font-semibold px-2.5 py-1.5 rounded-lg border border-teal-500/30 hover:bg-teal-500/10 transition-colors flex items-center gap-1.5 cursor-pointer"
+              >
+                <FolderOpen className="h-3.5 w-3.5" />
+                <span>Change Folder</span>
+              </button>
+            </div>
+          ) : (
+            /* No Folder Selected: Browse Folder Button with Placeholder */
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl border border-dashed border-teal-500/40 bg-teal-950/20 hover:border-teal-400 transition-colors">
+              <div className="flex items-center gap-2.5">
+                <div className="grid place-items-center h-9 w-9 rounded-lg bg-teal-500/10 text-teal-400 shrink-0">
+                  <FolderOpen className="h-4 w-4" />
+                </div>
+                <div>
+                  <div className="text-xs font-semibold text-foreground">
+                    Choose an output folder
+                  </div>
+                  <div className="text-[11px] text-muted-foreground mt-0.5">
+                    Select a destination folder using File Explorer.
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleBrowseFolder}
+                disabled={isPicking}
+                className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold shadow-sm transition-all active:scale-95 shrink-0 cursor-pointer"
+              >
+                <FolderOpen className="h-4 w-4" />
+                <span>Browse Folder</span>
+              </button>
+            </div>
+          )}
+
+          <p className="text-[10px] text-muted-foreground/70">
+            {selectedPath ? (
+              <span>Destination: <span className="font-mono text-teal-300">{selectedPath}</span></span>
+            ) : (
+              <span>Default folder will be used: <span className="font-mono text-teal-400/80">{fallbackDefault}</span></span>
+            )}
           </p>
         </div>
 
@@ -506,15 +640,15 @@ function QvdFolderModal({
         <div className="flex gap-3 pt-1">
           <button
             id="qvd-modal-confirm"
-            onClick={() => onConfirm(draft.trim())}
-            className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white text-sm font-semibold transition-all active:scale-95 shadow-md"
+            onClick={handleConfirm}
+            className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white text-sm font-semibold transition-all active:scale-95 shadow-md cursor-pointer"
           >
             Convert &amp; Save Here
           </button>
           <button
             id="qvd-modal-skip"
             onClick={onSkip}
-            className="px-5 py-2.5 rounded-xl bg-accent hover:bg-accent/80 text-accent-foreground text-sm font-semibold transition-all"
+            className="px-5 py-2.5 rounded-xl bg-accent hover:bg-accent/80 text-accent-foreground text-sm font-semibold transition-all cursor-pointer"
           >
             Skip Conversion
           </button>
@@ -536,11 +670,11 @@ export function MultiFileDropzone({ onFiles }: Props) {
   const [pendingQvdModal, setPendingQvdModal] = useState<{
     qvdNames: string[];
     defaultPath: string;
-    resolve: (path: string | null) => void;
+    resolve: (result: { path: string | null; dirHandle?: any }) => void;
   } | null>(null);
 
   /** Ask the user for an output folder via the modal. Returns the chosen path or null if skipped. */
-  function askForOutputDir(qvdNames: string[], defaultPath: string): Promise<string | null> {
+  function askForOutputDir(qvdNames: string[], defaultPath: string): Promise<{ path: string | null; dirHandle?: any }> {
     return new Promise((resolve) => {
       setPendingQvdModal({ qvdNames, defaultPath, resolve });
     });
@@ -569,6 +703,7 @@ export function MultiFileDropzone({ onFiles }: Props) {
 
       // ── If QVDs detected: show modal and wait for user's folder choice ──
       let resolvedOutputDir = qvdOutputDir;
+      let chosenDirHandle: any = null;
       if (qvdFileNames.length > 0) {
         let defaultPath = "";
         try {
@@ -580,16 +715,22 @@ export function MultiFileDropzone({ onFiles }: Props) {
         } catch { /* ignore */ }
 
         const chosen = await askForOutputDir(qvdFileNames, defaultPath);
-        if (chosen === null) {
+        if (chosen.path === null) {
           resolvedOutputDir = "__SKIP__"; // user skipped — don't convert
         } else {
-          resolvedOutputDir = chosen;
-          setQvdOutputDir(chosen);
+          resolvedOutputDir = chosen.path;
+          setQvdOutputDir(chosen.path);
+          chosenDirHandle = chosen.dirHandle;
         }
       }
 
       // ── Main processing loop ──
-      const result = await extractFilesFromRawList(rawFiles, resolvedOutputDir);
+      const result = await extractFilesFromRawList(rawFiles, resolvedOutputDir, chosenDirHandle);
+      if (qvdFileNames.length > 0 && resolvedOutputDir !== "__SKIP__") {
+        toast.success(`Converted ${qvdFileNames.length} QVD file(s) to CSV`, {
+          description: `Saved to: ${resolvedOutputDir}`,
+        });
+      }
       await onFiles(result);
     } finally {
       setProcessing(false);
@@ -610,8 +751,14 @@ export function MultiFileDropzone({ onFiles }: Props) {
           qvdNames={pendingQvdModal.qvdNames}
           initialPath={qvdOutputDir}
           defaultPath={pendingQvdModal.defaultPath}
-          onConfirm={(path) => { setPendingQvdModal(null); pendingQvdModal.resolve(path); }}
-          onSkip={() => { setPendingQvdModal(null); pendingQvdModal.resolve(null); }}
+          onConfirm={(path, dirHandle) => {
+            setPendingQvdModal(null);
+            pendingQvdModal.resolve({ path, dirHandle });
+          }}
+          onSkip={() => {
+            setPendingQvdModal(null);
+            pendingQvdModal.resolve({ path: null });
+          }}
         />
       )}
       <div

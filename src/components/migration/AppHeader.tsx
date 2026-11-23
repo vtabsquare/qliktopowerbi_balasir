@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "@tanstack/react-router";
-import { MoreHorizontal, ChevronDown, Upload, LogOut, Trash2, Lock, Compass } from "lucide-react";
+import { MoreHorizontal, LogOut, Trash2, Lock, Compass } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 import { useState, useRef, useEffect } from "react";
@@ -165,29 +165,6 @@ export function AppHeader() {
               <Lock className="h-3.5 w-3.5 shrink-0" />
               <span>DEMO VERSION</span>
             </div>
-          )}
-
-          <button className="hidden xl:flex items-center gap-2 px-3 py-2 rounded-xl border border-border bg-surface text-sm">
-            <span className="text-muted-foreground">19 Jun</span>
-            <span className="text-muted-foreground">2024</span>
-            <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-          </button>
-
-          {isDemo ? (
-            <button
-              type="button"
-              disabled
-              title="Deploy is locked in Demo Version"
-              onClick={() => toast.info("🔒 Deploy is locked in the Demo Version.")}
-              className="flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-xl bg-accent/40 text-accent-foreground/50 text-sm font-medium opacity-40 cursor-not-allowed select-none border border-border/40"
-            >
-              <span>Deploy</span>
-              <Lock className="h-3.5 w-3.5" />
-            </button>
-          ) : (
-            <button className="flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-xl bg-accent text-accent-foreground text-sm font-medium hover:bg-accent/80 transition">
-              Deploy <Upload className="h-3.5 w-3.5" />
-            </button>
           )}
 
           {isDemo ? (
