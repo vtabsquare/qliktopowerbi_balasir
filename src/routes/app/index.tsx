@@ -467,9 +467,9 @@ export function UploadPage() {
       {(!isDemo || !showUploadModal) && (
         <>
           {/* Contextual Guidance */}
-          <div className="surface-card p-5 sm:p-6 border-l-4 border-l-primary bg-primary/5 shadow-sm">
-            <h2 className="font-display text-xl font-bold text-foreground">Phase 1: Upload & Extraction</h2>
-            <p className="text-sm text-muted-foreground mt-1.5 max-w-2xl">
+          <div className="surface-card p-4 sm:p-5 border-l-4 border-l-primary bg-primary/5 shadow-sm">
+            <h2 className="font-display text-lg font-bold text-foreground">Phase 1: Upload & Extraction</h2>
+            <p className="text-xs sm:text-sm text-muted-foreground mt-1 max-w-2xl">
               Upload your Qlik files here. The engine will automatically parse QVS scripts, classify ETL logic, and extract any visualization packages needed for the migration pipeline.
             </p>
           </div>
@@ -625,20 +625,20 @@ export function UploadPage() {
           </div>
         </>
       ) : (
-        <div className="surface-card p-6 space-y-4 shadow-sm border border-border/50">
-          <div className="flex items-start gap-4 mb-2">
-            <div className="grid h-11 w-11 place-items-center rounded-xl bg-primary/10 text-primary shrink-0">
-              <PackageOpen className="h-5 w-5" />
+        <div className="surface-card p-4 sm:p-5 space-y-3.5 shadow-sm border border-border/50">
+          <div className="flex items-center gap-3">
+            <div className="grid h-9 w-9 place-items-center rounded-lg bg-primary/10 text-primary shrink-0">
+              <PackageOpen className="h-4.5 w-4.5" />
             </div>
             <div>
-              <h3 className="font-display text-xl font-semibold">Upload &amp; Extraction Engine</h3>
-              <p className="text-sm text-muted-foreground">
+              <h3 className="font-display text-base sm:text-lg font-semibold leading-snug">Upload &amp; Extraction Engine</h3>
+              <p className="text-xs text-muted-foreground">
                 Upload individual QVS/CSV files, a ZIP package, or an entire folder. The engine will
                 extract and analyse all contents automatically.
               </p>
             </div>
           </div>
-          <MultiFileDropzone onFiles={handleFiles} />
+          <MultiFileDropzone onFiles={handleFiles} compact />
         </div>
       )}
 

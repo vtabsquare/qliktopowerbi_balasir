@@ -53,6 +53,7 @@ export interface AutoAssignedFiles {
 
 interface Props {
   onFiles: (files: ExtractedFile[]) => void | Promise<void>;
+  compact?: boolean;
 }
 
 const TEXT_EXTENSIONS = new Set([
@@ -658,7 +659,7 @@ function QvdFolderModal({
   );
 }
 
-export function MultiFileDropzone({ onFiles }: Props) {
+export function MultiFileDropzone({ onFiles, compact = false }: Props) {
   const inputFileRef = useRef<HTMLInputElement>(null);
   const inputFolderRef = useRef<HTMLInputElement>(null);
   const inputZipRef = useRef<HTMLInputElement>(null);
@@ -773,24 +774,42 @@ export function MultiFileDropzone({ onFiles }: Props) {
         {dragging && (
           <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-violet-500/10 pointer-events-none animate-pulse" />
         )}
-        <div className="px-6 py-10 text-center relative z-10">
-          <div className={cn("grid place-items-center h-16 w-16 rounded-2xl mx-auto mb-4 shadow-lg transition-all duration-300", processing ? "bg-primary/20" : "bg-gradient-to-br from-primary to-violet-600")}>
-            {processing ? <div className="h-7 w-7 rounded-full border-[3px] border-white/30 border-t-white animate-spin" /> : <Package className="h-7 w-7 text-white" />}
+        <div className={cn("text-center relative z-10", compact ? "px-4 sm:px-6 py-5 sm:py-6" : "px-6 py-10")}>
+          <div
+            className={cn(
+              "grid place-items-center mx-auto shadow-md transition-all duration-300",
+              compact ? "h-11 w-11 rounded-xl mb-2.5" : "h-16 w-16 rounded-2xl mb-4 shadow-lg",
+              processing ? "bg-primary/20" : "bg-gradient-to-br from-primary to-violet-600"
+            )}
+          >
+            {processing ? (
+              <div className={cn("rounded-full border-white/30 border-t-white animate-spin", compact ? "h-5 w-5 border-2" : "h-7 w-7 border-[3px]")} />
+            ) : (
+              <Package className={cn("text-white", compact ? "h-5 w-5" : "h-7 w-7")} />
+            )}
           </div>
-          <div className="font-display font-bold text-xl mb-1">
+          <div className={cn("font-display font-bold", compact ? "text-base sm:text-lg mb-0.5" : "text-xl mb-1")}>
             {processing ? "Extracting & Analysing Package…" : "Drop your Qlik project here"}
           </div>
-          <div className="text-xs text-muted-foreground font-mono mb-7">
+          <div className={cn("text-muted-foreground font-mono", compact ? "text-[11px] sm:text-xs mb-3.5" : "text-xs mb-7")}>
             Single QVS · QVW + PRJ folder · ZIP package · Entire folder
           </div>
-          <div className="flex flex-wrap justify-center gap-3">
+          <div className={cn("flex flex-wrap justify-center", compact ? "gap-2.5" : "gap-3")}>
             {[
-              { icon: Upload, label: "Browse Files", ref: inputFileRef, cls: "bg-accent text-accent-foreground" },
-              { icon: FolderOpen, label: "Upload Folder", ref: inputFolderRef, cls: "bg-accent text-accent-foreground" },
-              { icon: Archive, label: "Upload ZIP", ref: inputZipRef, cls: "bg-gradient-to-r from-primary to-violet-600 text-white shadow-md" },
+              { icon: Upload, label: "Browse Files", ref: inputFileRef, cls: "bg-accent text-accent-foreground border border-border/50 hover:bg-accent/80" },
+              { icon: FolderOpen, label: "Upload Folder", ref: inputFolderRef, cls: "bg-accent text-accent-foreground border border-border/50 hover:bg-accent/80" },
+              { icon: Archive, label: "Upload ZIP", ref: inputZipRef, cls: "bg-gradient-to-r from-primary to-violet-600 text-white shadow-sm hover:opacity-95" },
             ].map(({ icon: Icon, label, ref, cls }) => (
-              <button key={label} onClick={() => ref.current?.click()} className={cn("inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium hover:opacity-90 transition-all active:scale-95", cls)}>
-                <Icon className="h-4 w-4" /> {label}
+              <button
+                key={label}
+                onClick={() => ref.current?.click()}
+                className={cn(
+                  "inline-flex items-center gap-1.5 font-medium transition-all active:scale-95 cursor-pointer",
+                  compact ? "px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm" : "px-5 py-2.5 rounded-xl text-sm hover:opacity-90",
+                  cls
+                )}
+              >
+                <Icon className={cn(compact ? "h-3.5 w-3.5 sm:h-4 sm:w-4" : "h-4 w-4")} /> {label}
               </button>
             ))}
           </div>
