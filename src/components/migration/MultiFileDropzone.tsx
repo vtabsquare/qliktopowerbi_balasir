@@ -25,6 +25,7 @@ import {
   FolderInput,
   FolderCheck,
   RefreshCw,
+  AlertCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { qvdToCSV } from "@/lib/migration/qvd-parser";
@@ -453,23 +454,17 @@ async function convertQvdFile(
 // Shown ONLY when QVD files are detected in Production, before conversion runs.
 function QvdFolderModal({
   qvdNames,
-  initialPath,
-  defaultPath,
   onConfirm,
   onSkip,
 }: {
   qvdNames: string[];
-  initialPath: string;
-  defaultPath: string;
   onConfirm: (path: string, dirHandle?: any) => void;
   onSkip: () => void;
 }) {
-  const [selectedPath, setSelectedPath] = useState(initialPath || "");
+  const [selectedPath, setSelectedPath] = useState("");
   const [dirHandle, setDirHandle] = useState<any>(null);
   const [isPicking, setIsPicking] = useState(false);
   const folderInputRef = useRef<HTMLInputElement>(null);
-
-  const fallbackDefault = defaultPath || "/app/qvd-output";
 
   // Native File Explorer / Folder Picker
   const handleBrowseFolder = async () => {
@@ -517,8 +512,11 @@ function QvdFolderModal({
   };
 
   const handleConfirm = () => {
-    const pathToUse = selectedPath.trim() || fallbackDefault;
-    onConfirm(pathToUse, dirHandle);
+    if (!selectedPath.trim()) {
+      toast.error("Please select a destination folder.");
+      return;
+    }
+    onConfirm(selectedPath.trim(), dirHandle);
   };
 
   return (
@@ -628,13 +626,17 @@ function QvdFolderModal({
             </div>
           )}
 
-          <p className="text-[10px] text-muted-foreground/70">
+          <div>
             {selectedPath ? (
-              <span>Destination: <span className="font-mono text-teal-300">{selectedPath}</span></span>
+              <p className="text-[10px] text-muted-foreground/70">
+                Destination: <span className="font-mono text-teal-300">{selectedPath}</span>
+              </p>
             ) : (
-              <span>Default folder will be used: <span className="font-mono text-teal-400/80">{fallbackDefault}</span></span>
+              <p className="text-[11px] text-amber-400/90 flex items-center gap-1.5 font-medium">
+                <AlertCircle className="h-3.5 w-3.5 shrink-0" /> Please select a destination folder.
+              </p>
             )}
-          </p>
+          </div>
         </div>
 
         {/* Actions */}
@@ -642,7 +644,13 @@ function QvdFolderModal({
           <button
             id="qvd-modal-confirm"
             onClick={handleConfirm}
-            className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white text-sm font-semibold transition-all active:scale-95 shadow-md cursor-pointer"
+            disabled={!selectedPath.trim()}
+            className={cn(
+              "flex-1 py-2.5 rounded-xl text-white text-sm font-semibold transition-all shadow-md",
+              selectedPath.trim()
+                ? "bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 active:scale-95 cursor-pointer"
+                : "bg-teal-800/30 text-white/40 cursor-not-allowed opacity-50 shadow-none hover:scale-100"
+            )}
           >
             Convert &amp; Save Here
           </button>
@@ -667,17 +675,16 @@ export function MultiFileDropzone({ onFiles, compact = false }: Props) {
   const [processing, setProcessing] = useState(false);
   const [qvdOutputDir, setQvdOutputDir] = useQvdOutputDir();
 
-  // Modal state: null = hidden, object = pending QVD batch waiting for path
+  // Modal state: null = hidden, object = pending QVD batch waiting for user's folder selection
   const [pendingQvdModal, setPendingQvdModal] = useState<{
     qvdNames: string[];
-    defaultPath: string;
     resolve: (result: { path: string | null; dirHandle?: any }) => void;
   } | null>(null);
 
   /** Ask the user for an output folder via the modal. Returns the chosen path or null if skipped. */
-  function askForOutputDir(qvdNames: string[], defaultPath: string): Promise<{ path: string | null; dirHandle?: any }> {
+  function askForOutputDir(qvdNames: string[]): Promise<{ path: string | null; dirHandle?: any }> {
     return new Promise((resolve) => {
-      setPendingQvdModal({ qvdNames, defaultPath, resolve });
+      setPendingQvdModal({ qvdNames, resolve });
     });
   }
 
@@ -703,19 +710,10 @@ export function MultiFileDropzone({ onFiles, compact = false }: Props) {
       }
 
       // ── If QVDs detected: show modal and wait for user's folder choice ──
-      let resolvedOutputDir = qvdOutputDir;
+      let resolvedOutputDir = "";
       let chosenDirHandle: any = null;
       if (qvdFileNames.length > 0) {
-        let defaultPath = "";
-        try {
-          const r = await fetch("/api/qvd/status");
-          if (r.ok) {
-            const d = await r.json() as { defaultPath?: string };
-            defaultPath = d.defaultPath || "";
-          }
-        } catch { /* ignore */ }
-
-        const chosen = await askForOutputDir(qvdFileNames, defaultPath);
+        const chosen = await askForOutputDir(qvdFileNames);
         if (chosen.path === null) {
           resolvedOutputDir = "__SKIP__"; // user skipped — don't convert
         } else {
@@ -750,8 +748,6 @@ export function MultiFileDropzone({ onFiles, compact = false }: Props) {
       {pendingQvdModal && (
         <QvdFolderModal
           qvdNames={pendingQvdModal.qvdNames}
-          initialPath={qvdOutputDir}
-          defaultPath={pendingQvdModal.defaultPath}
           onConfirm={(path, dirHandle) => {
             setPendingQvdModal(null);
             pendingQvdModal.resolve({ path, dirHandle });
