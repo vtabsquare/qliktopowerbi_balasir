@@ -60,6 +60,12 @@ function DemoPageRoot() {
   const [session, setSession] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
+  useEffect(() => {
+    if (typeof document !== "undefined") {
+      document.title = "Qlik to Power BI – Demo Version";
+    }
+  }, []);
+
   // Initialize and listen to dedicated Demo session in supabaseDemo
   useEffect(() => {
     if (!supabaseDemo) {
@@ -325,7 +331,7 @@ function DemoWorkspace({ session, onLoggedOut }: { session: any; onLoggedOut: ()
         <AppHeader />
 
         {/* Main Content Area */}
-        <main className="mx-auto w-full max-w-[1440px] px-4 sm:px-6 lg:px-8 pt-4 sm:pt-6 pb-20">
+        <main className="mx-auto w-full max-w-[1440px] px-4 sm:px-6 lg:px-8 pt-4 sm:pt-6 pb-12 sm:pb-16">
           {/* Demo Hero Banner */}
           <section className="mb-6 glass-card p-6 sm:p-8 bg-gradient-to-br from-amber-500/10 via-surface/60 to-primary/10 border border-amber-500/30 shadow-lg rounded-2xl">
             <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">

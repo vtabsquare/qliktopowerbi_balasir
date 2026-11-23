@@ -89,6 +89,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "twitter:site", content: "@VTABSquare" },
     ],
     links: [
+      { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       {
@@ -108,6 +109,8 @@ function RootShell({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <head>
+        <title>Qlik to Power BI</title>
+        <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
         <HeadContent />
       </head>
       <body>
@@ -123,6 +126,14 @@ import { NavigationLoadingProvider } from "@/components/common/NavigationLoading
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+
+  useEffect(() => {
+    if (typeof document !== "undefined") {
+      if (!document.title || document.title.toLowerCase().includes("lovable") || document.title === "Vite App") {
+        document.title = "Qlik to Power BI";
+      }
+    }
+  }, []);
 
   return (
     <QueryClientProvider client={queryClient}>

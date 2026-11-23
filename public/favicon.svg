@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <defs>
+    <linearGradient id="qlikGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#009845"/>
+      <stop offset="100%" stop-color="#006c31"/>
+    </linearGradient>
+    <linearGradient id="pbiGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F2C811"/>
+      <stop offset="100%" stop-color="#D99B00"/>
+    </linearGradient>
+  </defs>
+  <!-- Background rounded pill/squircle -->
+  <rect width="32" height="32" rx="8" fill="#0F172A"/>
+  
+  <!-- Qlik Green Arc/Node -->
+  <circle cx="11" cy="16" r="6" fill="url(#qlikGrad)"/>
+  <circle cx="11" cy="16" r="3" fill="#0F172A"/>
+  
+  <!-- Bridge Connector -->
+  <path d="M15 16H18" stroke="#94A3B8" stroke-width="2" stroke-linecap="round"/>
+  
+  <!-- Power BI Yellow Bar Group -->
+  <rect x="20" y="16" width="2.5" height="6" rx="1.25" fill="url(#pbiGrad)"/>
+  <rect x="23.5" y="12" width="2.5" height="10" rx="1.25" fill="url(#pbiGrad)"/>
+  <rect x="27" y="9" width="2.5" height="13" rx="1.25" fill="url(#pbiGrad)"/>
+</svg>

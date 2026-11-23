@@ -36,7 +36,7 @@ export const TOUR_STEPS: TourStep[] = [
     selector: '[data-tour="select-upload-choice"]',
     fallbackSelector: ".upload-cards-container",
     targetRoute: "/app",
-    placement: "bottom",
+    placement: "top",
     actionHint: "Choose 'I Already Have a File' or 'Use a Demo File'.",
     prepareStep: () => {
       if (typeof window !== "undefined") {

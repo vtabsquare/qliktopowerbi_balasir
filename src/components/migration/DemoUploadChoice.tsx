@@ -1,4 +1,5 @@
 import { useRef, useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import JSZip from "jszip";
 import { toast } from "sonner";
 import {
@@ -183,26 +184,28 @@ export function DemoUploadChoice({
     }
   };
 
-  // Lock body scroll when modal is open to prevent background bleed and scrolling
+  // Lock body scroll and mark modal-open class when modal is open
   useEffect(() => {
     if (isOpen) {
       const originalOverflow = document.body.style.overflow;
       document.body.style.overflow = "hidden";
+      document.body.classList.add("modal-open");
       return () => {
         document.body.style.overflow = originalOverflow;
+        document.body.classList.remove("modal-open");
       };
     }
   }, [isOpen]);
 
   if (!isOpen) return null;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-slate-950/85 backdrop-blur-xl overflow-y-auto animate-in fade-in duration-200">
+  const modalNode = (
+    <div className="fixed inset-0 z-[9900] w-screen h-screen flex items-center justify-center p-3 sm:p-5 bg-slate-950/80 backdrop-blur-md overflow-hidden animate-in fade-in duration-200">
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="upload-popup-title"
-        className="w-full max-w-[880px] max-h-[85vh] flex flex-col rounded-[28px] border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 my-auto"
+        className="w-full max-w-[860px] max-h-[88vh] flex flex-col rounded-[24px] border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 my-auto"
       >
         {/* Hidden File Input for Option 1 */}
         <input
@@ -214,13 +217,13 @@ export function DemoUploadChoice({
           className="hidden"
         />
 
-        {/* 1. Header Section — Pristine Seamless White Header matching Mockup */}
-        <div className="px-8 sm:px-10 pt-8 sm:pt-9 pb-6 sm:pb-7 shrink-0">
+        {/* 1. Header Section — Pristine Seamless Header matching Mockup */}
+        <div className="px-6 sm:px-8 pt-5 pb-3 shrink-0 border-b border-slate-100 dark:border-slate-800/60">
           <div className="flex items-center justify-between gap-3">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold tracking-wider uppercase bg-amber-50/80 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 border border-amber-300/80 dark:border-amber-900/60">
-              <Lock className="h-3.5 w-3.5" /> DEMO VERSION MODE
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase bg-amber-50/80 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 border border-amber-300/80 dark:border-amber-900/60">
+              <Lock className="h-3 w-3" /> DEMO VERSION MODE
             </div>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3">
               <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500 hidden sm:inline">
                 TARGET DATABASE PREREQUISITE
               </span>
@@ -228,7 +231,7 @@ export function DemoUploadChoice({
                 <button
                   type="button"
                   onClick={onClose}
-                  className="h-8 w-8 rounded-full grid place-items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                  className="h-7 w-7 rounded-full grid place-items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
                   aria-label="Close popup"
                 >
                   <X className="h-4 w-4" />
@@ -239,18 +242,18 @@ export function DemoUploadChoice({
 
           <h2
             id="upload-popup-title"
-            className="text-2xl sm:text-[28px] font-bold tracking-tight text-slate-900 dark:text-white mt-4 font-display"
+            className="text-lg sm:text-xl font-bold tracking-tight text-slate-900 dark:text-white mt-2 font-display"
           >
             How would you like to get started?
           </h2>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1.5">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
             Choose how you want to bring your data into the platform.
           </p>
         </div>
 
         {/* 2. Cards Area — Two Balanced Cards with Exact Circle Icons & Accent Borders */}
-        <div className="px-8 sm:px-10 pb-8 sm:pb-9 space-y-6 overflow-y-auto">
-          <div data-tour="select-upload-choice" className="grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
+        <div className="flex-1 overflow-y-auto px-6 sm:px-8 py-4 space-y-4">
+          <div data-tour="select-upload-choice" className="grid grid-cols-1 md:grid-cols-2 gap-4 items-stretch">
             {/* ── CARD 1: I Already Have a File (Emerald Green Accent) ── */}
             <div
               role="button"
@@ -269,7 +272,7 @@ export function DemoUploadChoice({
               onDragLeave={() => setIsDragOver(false)}
               onDrop={handleDropUserFile}
               className={cn(
-                "group relative flex flex-col justify-between p-7 sm:p-8 rounded-[24px] border transition-all duration-200 cursor-pointer select-none text-left outline-none",
+                "group relative flex flex-col justify-between p-5 sm:p-6 rounded-[20px] border transition-all duration-200 cursor-pointer select-none text-left outline-none",
                 isDragOver
                   ? "border-emerald-500 bg-emerald-50/20 ring-2 ring-emerald-500/20 shadow-lg"
                   : activeChoice === "own"
@@ -280,34 +283,34 @@ export function DemoUploadChoice({
               {/* Top Bar: Circular Icon (Left) & Pill Badge (Right) */}
               <div>
                 <div className="flex items-start justify-between gap-3">
-                  <div className="grid h-14 w-14 place-items-center rounded-full bg-white dark:bg-slate-800 text-emerald-500 border border-emerald-300 dark:border-emerald-700 shadow-xs group-hover:scale-105 transition-transform shrink-0">
-                    <UploadCloud className="h-6 w-6 text-emerald-500" />
+                  <div className="grid h-11 w-11 place-items-center rounded-full bg-white dark:bg-slate-800 text-emerald-500 border border-emerald-300 dark:border-emerald-700 shadow-xs group-hover:scale-105 transition-transform shrink-0">
+                    <UploadCloud className="h-5 w-5 text-emerald-500" />
                   </div>
-                  <span className="inline-flex items-center px-3 py-1 rounded-full text-[10px] font-bold tracking-wider uppercase bg-emerald-100/70 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[9px] font-bold tracking-wider uppercase bg-emerald-100/70 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
                     UPLOAD YOUR DATA
                   </span>
                 </div>
 
                 {/* Title & Description */}
-                <div className="mt-6 space-y-2">
-                  <h3 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">
+                <div className="mt-4 space-y-1.5">
+                  <h3 className="text-lg font-bold text-slate-900 dark:text-white tracking-tight">
                     I Already Have a File
                   </h3>
-                  <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed min-h-[44px]">
+                  <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed min-h-[32px]">
                     Upload your own dataset and let us process your data.
                   </p>
                 </div>
               </div>
 
               {/* Bottom: Solid Emerald CTA Button & Footnote */}
-              <div className="pt-6 space-y-3.5">
+              <div className="pt-4 space-y-2.5">
                 <button
                   type="button"
                   onClick={handleSelectUserFile}
                   disabled={loadingUserFile || loadingDemo}
                   className={cn(
-                    "w-full py-3 px-5 rounded-2xl font-bold text-sm shadow-sm flex items-center justify-center gap-2 transition-all duration-150",
-                    "bg-emerald-600 hover:bg-emerald-500 text-white active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed",
+                    "w-full py-2.5 px-4 rounded-xl font-bold text-xs sm:text-sm shadow-sm flex items-center justify-center gap-2 transition-all duration-150",
+                    "bg-emerald-600 hover:bg-emerald-500 text-white active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer",
                   )}
                 >
                   {loadingUserFile ? (
@@ -323,8 +326,8 @@ export function DemoUploadChoice({
                   )}
                 </button>
 
-                <div className="text-center text-xs text-slate-700 dark:text-slate-300 font-medium flex items-center justify-center gap-1.5">
-                  <Check className="h-3.5 w-3.5 text-emerald-600 font-bold" />
+                <div className="text-center text-[11px] text-slate-600 dark:text-slate-300 font-medium flex items-center justify-center gap-1.5">
+                  <Check className="h-3 w-3 text-emerald-600 font-bold" />
                   <span>Supported formats: CSV, XLSX, XLS</span>
                 </div>
               </div>
@@ -342,7 +345,7 @@ export function DemoUploadChoice({
                 }
               }}
               className={cn(
-                "group relative flex flex-col justify-between p-7 sm:p-8 rounded-[24px] border transition-all duration-200 cursor-pointer select-none text-left outline-none",
+                "group relative flex flex-col justify-between p-5 sm:p-6 rounded-[20px] border transition-all duration-200 cursor-pointer select-none text-left outline-none",
                 activeChoice === "demo"
                   ? "border-blue-500 bg-white dark:bg-slate-900 shadow-md ring-1 ring-blue-500/30"
                   : "border-blue-400 dark:border-blue-700 bg-white dark:bg-slate-900 hover:border-blue-500 hover:shadow-lg hover:-translate-y-0.5",
@@ -351,34 +354,34 @@ export function DemoUploadChoice({
               {/* Top Bar: Circular Icon (Left) & Pill Badge (Right) */}
               <div>
                 <div className="flex items-start justify-between gap-3">
-                  <div className="grid h-14 w-14 place-items-center rounded-full bg-white dark:bg-slate-800 text-blue-500 border border-blue-200 dark:border-blue-700 shadow-xs group-hover:scale-105 transition-transform shrink-0">
-                    <Database className="h-6 w-6 text-blue-500" />
+                  <div className="grid h-11 w-11 place-items-center rounded-full bg-white dark:bg-slate-800 text-blue-500 border border-blue-200 dark:border-blue-700 shadow-xs group-hover:scale-105 transition-transform shrink-0">
+                    <Database className="h-5 w-5 text-blue-500" />
                   </div>
-                  <span className="inline-flex items-center px-3 py-1 rounded-full text-[10px] font-bold tracking-wider uppercase bg-blue-100/70 dark:bg-blue-950/70 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[9px] font-bold tracking-wider uppercase bg-blue-100/70 dark:bg-blue-950/70 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
                     INSTANT ACCESS
                   </span>
                 </div>
 
                 {/* Title & Description — Title is Vibrant Blue matching Mockup */}
-                <div className="mt-6 space-y-2">
-                  <h3 className="text-xl font-bold text-blue-600 dark:text-blue-400 tracking-tight">
+                <div className="mt-4 space-y-1.5">
+                  <h3 className="text-lg font-bold text-blue-600 dark:text-blue-400 tracking-tight">
                     Use a Demo File
                   </h3>
-                  <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed min-h-[44px]">
+                  <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed min-h-[32px]">
                     Explore platform features using our preloaded sample dataset.
                   </p>
                 </div>
               </div>
 
               {/* Bottom: Solid Blue CTA Button & Footnote */}
-              <div className="pt-6 space-y-3.5">
+              <div className="pt-4 space-y-2.5">
                 <button
                   type="button"
                   onClick={handleSelectDemoDataset}
                   disabled={loadingDemo || loadingUserFile}
                   className={cn(
-                    "w-full py-3 px-5 rounded-2xl font-bold text-sm shadow-sm flex items-center justify-center gap-2 transition-all duration-150",
-                    "bg-blue-600 hover:bg-blue-500 text-white active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed",
+                    "w-full py-2.5 px-4 rounded-xl font-bold text-xs sm:text-sm shadow-sm flex items-center justify-center gap-2 transition-all duration-150",
+                    "bg-blue-600 hover:bg-blue-500 text-white active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer",
                   )}
                 >
                   {loadingDemo ? (
@@ -394,8 +397,8 @@ export function DemoUploadChoice({
                   )}
                 </button>
 
-                <div className="text-center text-xs text-blue-600 dark:text-blue-400 font-medium flex items-center justify-center gap-1.5">
-                  <Sparkles className="h-3.5 w-3.5 text-blue-500" />
+                <div className="text-center text-[11px] text-blue-600 dark:text-blue-400 font-medium flex items-center justify-center gap-1.5">
+                  <Sparkles className="h-3 w-3 text-blue-500" />
                   <span>Ready-to-use sample data. Zero setup</span>
                 </div>
               </div>
@@ -404,15 +407,15 @@ export function DemoUploadChoice({
 
           {/* 3. Active Dataset Feedback Banner inside modal */}
           {activeFilesCount > 0 ? (
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl border border-emerald-500/30 bg-emerald-50/40 dark:bg-emerald-950/20 text-xs text-slate-900 dark:text-white animate-in fade-in duration-200">
-              <div className="flex items-center gap-2.5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-3 sm:p-3.5 rounded-xl border border-emerald-500/30 bg-emerald-50/40 dark:bg-emerald-950/20 text-xs text-slate-900 dark:text-white animate-in fade-in duration-200">
+              <div className="flex items-center gap-2">
                 <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
                 <div>
                   <span className="font-semibold text-emerald-700 dark:text-emerald-400">
                     Dataset Ready for Inspection:
                   </span>{" "}
                   <span className="text-slate-600 dark:text-slate-400">
-                    {activeFilesCount} file(s) loaded. Click <strong>Done</strong> to close this popup and continue.
+                    {activeFilesCount} file(s) loaded. Click <strong>Done</strong> to continue.
                   </span>
                 </div>
               </div>
@@ -421,7 +424,7 @@ export function DemoUploadChoice({
                   <button
                     type="button"
                     onClick={onReset}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-xs font-medium text-slate-600 dark:text-slate-300 transition-colors"
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-xs font-medium text-slate-600 dark:text-slate-300 transition-colors"
                   >
                     <RefreshCw className="h-3 w-3" />
                     Clear
@@ -431,7 +434,7 @@ export function DemoUploadChoice({
                   type="button"
                   data-tour="upload-done"
                   onClick={handleFinish}
-                  className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-sm transition-all"
+                  className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-sm transition-all cursor-pointer"
                 >
                   <span>Done</span>
                   <ArrowRight className="h-3.5 w-3.5" />
@@ -439,8 +442,8 @@ export function DemoUploadChoice({
               </div>
             </div>
           ) : (
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl border border-blue-500/30 bg-blue-50/40 dark:bg-blue-950/20 text-xs text-slate-900 dark:text-white animate-in fade-in duration-200">
-              <div className="flex items-center gap-2.5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-3 sm:p-3.5 rounded-xl border border-blue-500/30 bg-blue-50/40 dark:bg-blue-950/20 text-xs text-slate-900 dark:text-white animate-in fade-in duration-200">
+              <div className="flex items-center gap-2">
                 <Sparkles className="h-4 w-4 text-blue-500 shrink-0" />
                 <div>
                   <span className="font-semibold text-blue-700 dark:text-blue-400">
@@ -459,7 +462,7 @@ export function DemoUploadChoice({
                     await handleSelectDemoDataset();
                     handleFinish();
                   }}
-                  className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow-sm transition-all"
+                  className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow-sm transition-all cursor-pointer"
                 >
                   <span>Done</span>
                   <ArrowRight className="h-3.5 w-3.5" />
@@ -469,17 +472,17 @@ export function DemoUploadChoice({
           )}
         </div>
 
-        {/* 4. Privacy Disclaimer Footer (Replacing old footer) */}
-        <div className="border-t border-slate-100 dark:border-slate-800/80 px-8 sm:px-10 py-4 sm:py-5 bg-slate-50/50 dark:bg-slate-950/40 shrink-0">
-          <div className="flex items-start sm:items-center gap-3 p-3.5 sm:p-4 rounded-xl border border-slate-200/80 dark:border-slate-800/80 bg-white dark:bg-slate-900 shadow-xs">
-            <div className="grid h-8 w-8 place-items-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shrink-0">
-              <ShieldCheck className="h-4 w-4" />
+        {/* 4. Privacy Disclaimer Footer */}
+        <div className="border-t border-slate-100 dark:border-slate-800/80 px-6 sm:px-8 py-2.5 bg-slate-50/50 dark:bg-slate-950/40 shrink-0">
+          <div className="flex items-center gap-2.5 p-2 rounded-lg border border-slate-200/80 dark:border-slate-800/80 bg-white dark:bg-slate-900 shadow-xs">
+            <div className="grid h-6 w-6 place-items-center rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shrink-0">
+              <ShieldCheck className="h-3.5 w-3.5" />
             </div>
             <div className="space-y-0.5 text-left">
-              <div className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+              <div className="text-[10px] font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
                 <span>🔒 Your Data Privacy Matters</span>
               </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+              <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-normal">
                 Your uploaded files and data are not stored or saved by us. Your data is used only for processing within this session.
               </p>
             </div>
@@ -488,4 +491,6 @@ export function DemoUploadChoice({
       </div>
     </div>
   );
+
+  return typeof document !== "undefined" ? createPortal(modalNode, document.body) : modalNode;
 }

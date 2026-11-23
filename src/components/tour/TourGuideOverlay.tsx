@@ -130,22 +130,33 @@ export function TourGuideOverlay() {
 
         if (preferredPlacement === "left") {
           left = highlight.left - tooltipWidth - 14;
-          top = highlight.top + (highlight.height - tooltipHeight) / 2;
+          // For targets in the bottom section of a modal (such as upload-done), align top near the target to avoid overlapping cards above
+          if (currentStep.id === "upload-done" || highlight.top > viewportHeight * 0.58) {
+            top = Math.max(16, highlight.top - 6);
+          } else {
+            top = highlight.top + (highlight.height - tooltipHeight) / 2;
+          }
           if (left < 16) {
-            left = highlight.left + highlight.width + 14;
+            if (highlight.left + highlight.width + 14 + tooltipWidth <= viewportWidth - 16) {
+              left = highlight.left + highlight.width + 14;
+            } else {
+              left = 16;
+            }
           }
         } else if (preferredPlacement === "right") {
           left = highlight.left + highlight.width + 14;
           top = highlight.top + (highlight.height - tooltipHeight) / 2;
           if (left + tooltipWidth > viewportWidth - 16) {
-            left = highlight.left - tooltipWidth - 14;
+            if (highlight.left - tooltipWidth - 14 >= 16) {
+              left = highlight.left - tooltipWidth - 14;
+            } else {
+              left = viewportWidth - tooltipWidth - 16;
+            }
           }
         } else if (preferredPlacement === "top") {
-          top = highlight.top - tooltipHeight - 14;
+          // Place directly above the highlight, clamped safely within top viewport margin
+          top = Math.max(16, highlight.top - tooltipHeight - 12);
           left = highlight.left + (highlight.width - tooltipWidth) / 2;
-          if (top < 16) {
-            top = highlight.top + highlight.height + 14;
-          }
         } else {
           // bottom or auto
           top = highlight.top + highlight.height + 14;
@@ -155,7 +166,7 @@ export function TourGuideOverlay() {
             if (spaceAbove > 20) {
               top = spaceAbove;
             } else {
-              top = Math.max(20, (viewportHeight - tooltipHeight) / 2);
+              top = Math.max(16, (viewportHeight - tooltipHeight) / 2);
             }
           }
         }
@@ -322,7 +333,7 @@ export function TourGuideOverlay() {
   const progressPercent = Math.round(((currentStepIndex + 1) / totalSteps) * 100);
 
   return (
-    <div className="tour-guide-root fixed inset-0 z-[9990] pointer-events-none select-none">
+    <div className="tour-guide-root fixed inset-0 z-[9995] pointer-events-none select-none">
       {/* ── 1. Spotlight Cutout Overlay (Only when element is visible in viewport) ── */}
       {targetRect && isElementVisible ? (
         <div
@@ -338,7 +349,7 @@ export function TourGuideOverlay() {
             border: "2px solid oklch(0.55 0.22 265)",
             transition: "all 0.15s cubic-bezier(0.16, 1, 0.3, 1)",
             pointerEvents: "none",
-            zIndex: 9991,
+            zIndex: 9996,
           }}
         >
           <div className="absolute -inset-1 rounded-[18px] ring-2 ring-primary/30 animate-pulse pointer-events-none" />
@@ -353,13 +364,13 @@ export function TourGuideOverlay() {
             position: "fixed",
             top: `${tooltipPos.top}px`,
             left: `${tooltipPos.left}px`,
-            zIndex: 9995,
+            zIndex: 9998,
           }}
           className={cn(
-            "w-[min(380px,calc(100vw-2rem))] pointer-events-auto",
+            "w-[min(360px,calc(100vw-2rem))] pointer-events-auto",
             "rounded-2xl border border-slate-200/90 dark:border-slate-800/90 shadow-2xl shadow-slate-900/15",
             "bg-white/98 dark:bg-slate-900/98 backdrop-blur-xl",
-            "p-5 space-y-4 transition-all duration-200 animate-in fade-in zoom-in-95",
+            "p-4 space-y-3 transition-all duration-200 animate-in fade-in zoom-in-95",
           )}
         >
           {/* Top Progress & Header */}

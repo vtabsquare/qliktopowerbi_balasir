@@ -436,16 +436,46 @@ export function UploadPage() {
 
   return (
     <div className="space-y-6">
-      {/* Contextual Guidance */}
-      <div className="surface-card p-5 sm:p-6 border-l-4 border-l-primary bg-primary/5 shadow-sm">
-        <h2 className="font-display text-xl font-bold text-foreground">Phase 1: Upload & Extraction</h2>
-        <p className="text-sm text-muted-foreground mt-1.5 max-w-2xl">
-          Upload your Qlik files here. The engine will automatically parse QVS scripts, classify ETL logic, and extract any visualization packages needed for the migration pipeline.
-        </p>
-      </div>
+      {isDemo && (
+        <DemoUploadChoice
+          isOpen={showUploadModal}
+          onClose={() => setShowUploadModal(false)}
+          onDone={() => setShowUploadModal(false)}
+          onFiles={handleFiles}
+          activeFilesCount={allFiles.length}
+          currentDatasetName={
+            allFiles.length > 0
+              ? allFiles.some((f) => f.originPackage === "enterprise-complex-demo.zip")
+                ? "Enterprise Demo Dataset"
+                : "Custom Uploaded Dataset"
+              : null
+          }
+          onReset={() => {
+            setAllFiles([]);
+            setEnterpriseFiles([]);
+            setInputClassification(null);
+            setQvwAnalysis(null);
+            setSelectedSources([]);
+            setSelectedEtls([]);
+            setComplete(false);
+            toast.info("Workspace cleared. Choose your data source to start.");
+          }}
+        />
+      )}
 
-      {/* Workspace Snapshot & Recovery Bar */}
-      <div className="surface-card p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 border border-border/70 rounded-xl bg-surface/50">
+      {/* When upload modal is open in Demo, hide background panels to prevent layout bleed */}
+      {(!isDemo || !showUploadModal) && (
+        <>
+          {/* Contextual Guidance */}
+          <div className="surface-card p-5 sm:p-6 border-l-4 border-l-primary bg-primary/5 shadow-sm">
+            <h2 className="font-display text-xl font-bold text-foreground">Phase 1: Upload & Extraction</h2>
+            <p className="text-sm text-muted-foreground mt-1.5 max-w-2xl">
+              Upload your Qlik files here. The engine will automatically parse QVS scripts, classify ETL logic, and extract any visualization packages needed for the migration pipeline.
+            </p>
+          </div>
+
+          {/* Workspace Snapshot & Recovery Bar */}
+          <div className="surface-card p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 border border-border/70 rounded-xl bg-surface/50">
         <div className="flex items-center gap-3">
           <div className="grid h-10 w-10 place-items-center rounded-lg bg-emerald-500/10 text-emerald-500 shrink-0">
             <ShieldCheck className="h-5 w-5" />
@@ -519,32 +549,6 @@ export function UploadPage() {
       {/* Upload Section */}
       {isDemo ? (
         <>
-          {/* Modal Pop-up Selection Container */}
-          <DemoUploadChoice
-            isOpen={showUploadModal}
-            onClose={() => setShowUploadModal(false)}
-            onDone={() => setShowUploadModal(false)}
-            onFiles={handleFiles}
-            activeFilesCount={allFiles.length}
-            currentDatasetName={
-              allFiles.length > 0
-                ? allFiles.some((f) => f.originPackage === "enterprise-complex-demo.zip")
-                  ? "Enterprise Demo Dataset"
-                  : "Custom Uploaded Dataset"
-                : null
-            }
-            onReset={() => {
-              setAllFiles([]);
-              setEnterpriseFiles([]);
-              setInputClassification(null);
-              setQvwAnalysis(null);
-              setSelectedSources([]);
-              setSelectedEtls([]);
-              setComplete(false);
-              toast.info("Workspace cleared. Choose your data source to start.");
-            }}
-          />
-
           {/* Clean In-Page Dataset Status Bar (Replacing inline container) */}
           <div className="surface-card p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 border border-border/70 rounded-xl bg-surface/50 shadow-sm">
             <div className="flex items-center gap-3">
@@ -897,6 +901,8 @@ export function UploadPage() {
           <ArrowRight className="h-4 w-4" />
         </button>
       </div>
+        </>
+      )}
     </div>
   );
 }
