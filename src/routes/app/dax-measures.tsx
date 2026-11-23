@@ -7,7 +7,7 @@ import { EnterpriseDaxPage } from "@/components/migration/EnterpriseDaxPage";
 import { RepairFocusNotice } from "@/components/migration/RepairFocusNotice";
 import { DemoEndedModal } from "@/components/migration/DemoEndedModal";
 import { toast } from "sonner";
-import { markStepCompleted } from "@/lib/migration/workflow-gating";
+import { markStepCompleted, navigateWorkflow } from "@/lib/migration/workflow-gating";
 import { useNavigationLoading } from "@/components/common/NavigationLoadingOverlay";
 
 export const Route = createFileRoute("/app/dax-measures")({
@@ -31,7 +31,7 @@ export function DaxMeasuresPage() {
     toast.success("Step 7 (DAX Measures) Completed! Step 8 (Power BI Model) is now unlocked.");
     withLoading(
       async () => {
-        navigate({ to: "/app/powerbi-model" });
+        navigateWorkflow("/app/powerbi-model", navigate);
       },
       { message: "Loading Step 8: Power BI Model...", subMessage: "Constructing star-schema dimensional model..." },
     );
@@ -46,7 +46,7 @@ export function DaxMeasuresPage() {
           <p className="text-sm text-muted-foreground mt-1">Please run the Enterprise Analysis first.</p>
         </div>
         <div className="flex flex-wrap justify-center items-center gap-3">
-          <button onClick={() => navigate({ to: "/app/analysis" })} className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-border text-sm font-medium">
+          <button onClick={() => navigateWorkflow("/app/analysis", navigate)} className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-border text-sm font-medium">
             <ArrowLeft className="h-4 w-4" /> Go to Analysis
           </button>
           <button
@@ -66,7 +66,7 @@ export function DaxMeasuresPage() {
       <RepairFocusNotice areas={["dax"]} />
       <EnterpriseDaxPage analysis={enterpriseAnalysis} />
       <div className="flex justify-between items-center pt-2">
-        <button onClick={() => navigate({ to: "/app/power-query" })} className="flex items-center gap-2 px-4 py-2 rounded-lg border border-border text-sm font-medium hover:bg-surface-elevated">
+        <button onClick={() => navigateWorkflow("/app/power-query", navigate)} className="flex items-center gap-2 px-4 py-2 rounded-lg border border-border text-sm font-medium hover:bg-surface-elevated">
           <ArrowLeft className="h-4 w-4" /> Back to Power Query
         </button>
         <button

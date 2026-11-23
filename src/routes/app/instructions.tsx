@@ -3,7 +3,7 @@ import { downloadOperationsRunbookFile } from "@/lib/migration/docs/runbook";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { markStepCompleted } from "@/lib/migration/workflow-gating";
+import { markStepCompleted, navigateWorkflow } from "@/lib/migration/workflow-gating";
 import { useNavigationLoading } from "@/components/common/NavigationLoadingOverlay";
 import {
   AlertTriangle,
@@ -103,7 +103,7 @@ export function InstructionsPage() {
     toast.success("Step 1 (Instructions) Completed! Step 2 (Upload Qlik Files) is now unlocked.");
     withLoading(
       async () => {
-        navigate({ to: "/app" });
+        navigateWorkflow("/app", navigate);
       },
       { message: "Loading Step 2: Upload Qlik Files...", subMessage: "Preparing file dropzone and intake engine..." },
     );

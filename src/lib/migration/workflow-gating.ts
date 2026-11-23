@@ -311,3 +311,32 @@ export function resetWorkflow(isDemo: boolean): void {
     console.error("Failed to reset workflow:", e);
   }
 }
+
+/**
+ * Universal Workflow Navigation helper
+ * In Demo mode, keeps the user on /demo?step=... without reloading or leaving demo.
+ * In Production mode, uses TanStack navigate({ to: path }).
+ */
+export function navigateWorkflow(targetPath: string, navigate?: any): void {
+  if (typeof window !== "undefined" && window.location.pathname.startsWith("/demo")) {
+    const step = getStepByPath(targetPath);
+    if (step) {
+      window.dispatchEvent(new CustomEvent("demo-set-active-step", { detail: { stepId: step.id } }));
+      try {
+        const targetUrl = new URL(window.location.href);
+        targetUrl.searchParams.set("step", step.demoStepParam || String(step.id));
+        window.history.pushState({}, "", targetUrl.toString());
+      } catch {
+        // ignore
+      }
+      return;
+    }
+  }
+
+  if (navigate) {
+    navigate({ to: targetPath });
+  } else if (typeof window !== "undefined") {
+    window.location.href = targetPath;
+  }
+}
+

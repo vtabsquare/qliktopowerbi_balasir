@@ -8,7 +8,7 @@ import { TabSourceMapping } from "@/components/migration/EnterpriseAnalysisPanel
 import { RepairFocusNotice } from "@/components/migration/RepairFocusNotice";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
-import { markStepCompleted } from "@/lib/migration/workflow-gating";
+import { markStepCompleted, navigateWorkflow } from "@/lib/migration/workflow-gating";
 import { useNavigationLoading } from "@/components/common/NavigationLoadingOverlay";
 
 export const Route = createFileRoute("/app/analysis")({
@@ -39,7 +39,7 @@ export function AnalysisPage() {
     toast.success("Step 5 (ETL Analysis) Completed! Step 6 (Power Query) is now unlocked.");
     withLoading(
       async () => {
-        navigate({ to: "/app/power-query" });
+        navigateWorkflow("/app/power-query", navigate);
       },
       { message: "Loading Step 6: Power Query...", subMessage: "Generating clean M scripts for final tables..." },
     );
@@ -111,7 +111,7 @@ export function AnalysisPage() {
           <p className="text-sm text-muted-foreground mt-1">Please go back and upload your Qlik script files first.</p>
         </div>
         <div className="flex flex-wrap justify-center items-center gap-3">
-          <button onClick={() => navigate({ to: "/app" })} className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-border text-sm font-medium">
+          <button onClick={() => navigateWorkflow("/app", navigate)} className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-border text-sm font-medium">
             <ArrowLeft className="h-4 w-4" /> Back to Upload
           </button>
           <button
@@ -291,7 +291,7 @@ export function AnalysisPage() {
 
       {/* Navigation */}
       <div className="flex justify-between items-center pt-2">
-        <button onClick={() => navigate({ to: "/app" })} className="flex items-center gap-2 px-4 py-2 rounded-lg border border-border text-sm font-medium hover:bg-surface-elevated">
+        <button onClick={() => navigateWorkflow("/app", navigate)} className="flex items-center gap-2 px-4 py-2 rounded-lg border border-border text-sm font-medium hover:bg-surface-elevated">
           <ArrowLeft className="h-4 w-4" /> Back to Upload
         </button>
         <button

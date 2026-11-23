@@ -57,6 +57,15 @@ function AuthGuard() {
         }
       }
 
+      // Dedicated environment isolation:
+      // Demo users accessing /app/* are redirected to their dedicated /demo route
+      if (isDemo && currentPath.startsWith("/app")) {
+        const step = getStepByPath(currentPath);
+        const stepParam = step?.demoStepParam || "instructions";
+        navigate({ to: `/demo?step=${stepParam}` as any });
+        return;
+      }
+
       if (isDemo && isPathLockedInDemo(currentPath)) {
         window.dispatchEvent(new CustomEvent("open-demo-ended-modal"));
         toast.info(DEMO_LOCKED_MESSAGE);

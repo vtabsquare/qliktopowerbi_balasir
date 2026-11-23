@@ -24,12 +24,19 @@ export const STAGES = WORKFLOW_STEPS.map((s) => ({
 
 export type NavViewMode = "default" | "compact" | "all-stages";
 
-export function StageNav() {
+export interface StageNavProps {
+  activeStepId?: number;
+  onStepSelect?: (stage: (typeof STAGES)[number]) => void;
+}
+
+export function StageNav({ activeStepId, onStepSelect }: StageNavProps = {}) {
   const router = useRouterState();
   const navigate = useNavigate();
   const currentPath = router.location.pathname;
+  const isDemoRoute = currentPath.startsWith("/demo");
   const { enterpriseAnalysis, enterpriseFiles, qvwAnalysis, expressionInventory, powerBiModel } = useMigration();
-  const { isDemo } = useAuth();
+  const { isDemo: authIsDemo } = useAuth();
+  const isDemo = authIsDemo || isDemoRoute;
   const { withLoading } = useNavigationLoading();
 
   const [completedStepsState, setCompletedStepsState] = useState<number[]>(() => getCompletedSteps(isDemo));
@@ -44,7 +51,26 @@ export function StageNav() {
   }, [isDemo]);
 
   const normalizedPath = currentPath === "/app/" ? "/app" : currentPath;
-  const activeIndex = STAGES.findIndex((stage) => stage.path === normalizedPath);
+
+  const activeIndex = useMemo(() => {
+    if (typeof activeStepId === "number") {
+      return activeStepId;
+    }
+    if (isDemoRoute) {
+      if (typeof window !== "undefined") {
+        const urlSearchStep = new URLSearchParams(window.location.search).get("step");
+        if (urlSearchStep) {
+          const found = STAGES.findIndex(
+            (s) => WORKFLOW_STEPS[s.id]?.demoStepParam === urlSearchStep || s.id === Number(urlSearchStep),
+          );
+          if (found >= 0) return found;
+        }
+      }
+      return 0;
+    }
+    const idx = STAGES.findIndex((stage) => stage.path === normalizedPath);
+    return idx >= 0 ? idx : 0;
+  }, [activeStepId, currentPath, isDemoRoute, normalizedPath]);
 
   const phases = [
     { id: 1, name: "Capture & Extract", subtitle: "Steps 1–3", start: 0, end: 2 },
@@ -84,6 +110,14 @@ export function StageNav() {
             action: {
               label: `Go to Step ${incomplete.stepNumber}`,
               onClick: () => {
+                if (isDemoRoute) {
+                  if (onStepSelect) {
+                    onStepSelect(STAGES[incomplete.id]);
+                  } else {
+                    window.dispatchEvent(new CustomEvent("demo-set-active-step", { detail: { stepId: incomplete.id } }));
+                  }
+                  return;
+                }
                 withLoading(async () => {
                   navigate({ to: incomplete.path });
                 }, { message: `Loading Step ${incomplete.stepNumber}: ${incomplete.label}...` });
@@ -91,6 +125,27 @@ export function StageNav() {
             },
             duration: 6000,
           },
+        );
+        return;
+      }
+
+      if (isDemoRoute) {
+        if (targetIdx === activeIndex) return;
+        withLoading(
+          async () => {
+            if (targetStage.id === 1) {
+              window.dispatchEvent(new CustomEvent("open-upload-modal"));
+            }
+            if (onStepSelect) {
+              onStepSelect(targetStage);
+            } else {
+              window.dispatchEvent(new CustomEvent("demo-set-active-step", { detail: { stepId: targetStage.id } }));
+              const targetUrl = new URL(window.location.href);
+              targetUrl.searchParams.set("step", WORKFLOW_STEPS[targetStage.id]?.demoStepParam || String(targetStage.id));
+              window.history.pushState({}, "", targetUrl.toString());
+            }
+          },
+          { message: `Loading ${targetStage.label}...`, subMessage: "Preparing demo stage workspace..." },
         );
         return;
       }
@@ -107,7 +162,7 @@ export function StageNav() {
         { message: `Loading ${targetStage.label}...`, subMessage: "Preparing stage workspace..." },
       );
     },
-    [isDemo, navigate, normalizedPath, withLoading],
+    [activeIndex, isDemo, isDemoRoute, navigate, normalizedPath, onStepSelect, withLoading],
   );
 
   return (

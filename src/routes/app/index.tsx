@@ -34,7 +34,7 @@ import { DemoUploadChoice } from "@/components/migration/DemoUploadChoice";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTour } from "@/contexts/TourContext";
-import { markStepCompleted } from "@/lib/migration/workflow-gating";
+import { markStepCompleted, navigateWorkflow } from "@/lib/migration/workflow-gating";
 import { useNavigationLoading } from "@/components/common/NavigationLoadingOverlay";
 
 export const Route = createFileRoute("/app/")({
@@ -638,9 +638,9 @@ export function UploadPage() {
         </div>
       )}
 
-      {inputClassification && <InputClassificationPanel result={inputClassification} />}
+      {!showUploadModal && inputClassification && <InputClassificationPanel result={inputClassification} />}
 
-      {qvwAnalysis ? (
+      {!showUploadModal && (qvwAnalysis ? (
         <div
           className={cn(
             "surface-card p-6 border",
@@ -680,7 +680,7 @@ export function UploadPage() {
                 markStepCompleted(1, isDemo);
                 withLoading(
                   async () => {
-                    navigate({ to: "/app/qvw-analysis" });
+                    navigateWorkflow("/app/qvw-analysis", navigate);
                   },
                   { message: "Loading Step 3: QVW Analysis...", subMessage: "Parsing sheets and visual objects..." },
                 );
@@ -711,7 +711,7 @@ export function UploadPage() {
                 markStepCompleted(1, isDemo);
                 withLoading(
                   async () => {
-                    navigate({ to: "/app/qvw-analysis" });
+                    navigateWorkflow("/app/qvw-analysis", navigate);
                   },
                   { message: "Loading Step 3: QVW Analysis...", subMessage: "Parsing sheets and visual objects..." },
                 );
@@ -722,7 +722,7 @@ export function UploadPage() {
             </button>
           </div>
         </div>
-      )}
+      ))}
 
       {/* File Analysis Panel */}
       {allFiles.length > 0 && (

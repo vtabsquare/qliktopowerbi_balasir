@@ -54,7 +54,7 @@ export const TOUR_STEPS: TourStep[] = [
     selector: '[data-tour="upload-done"]',
     fallbackSelector: 'button[data-tour="upload-done"]',
     targetRoute: "/app",
-    placement: "top",
+    placement: "left",
     actionHint: "Click Done to close the popup and inspect the extracted package.",
     prepareStep: () => {
       if (typeof window !== "undefined") {

@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useMigration } from "@/lib/migration/store";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
-import { markStepCompleted } from "@/lib/migration/workflow-gating";
+import { markStepCompleted, navigateWorkflow } from "@/lib/migration/workflow-gating";
 import { useNavigationLoading } from "@/components/common/NavigationLoadingOverlay";
 import type {
   QvwAction,
@@ -55,7 +55,7 @@ export function QvwAnalysisPage() {
     toast.success("Step 3 (QVW Analysis) Completed! Step 4 (Expression Conversion) is now unlocked.");
     withLoading(
       async () => {
-        navigate({ to: "/app/expression-conversion" });
+        navigateWorkflow("/app/expression-conversion", navigate);
       },
       { message: "Loading Step 4: Expression Conversion...", subMessage: "Parsing expressions and DAX rules..." },
     );

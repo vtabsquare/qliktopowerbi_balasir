@@ -5,6 +5,7 @@ import { STAGES } from "./StageNav";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import {
+  WORKFLOW_STEPS,
   isStepCompleted,
   isStepUnlocked,
   getFirstIncompleteStep,
@@ -37,6 +38,10 @@ export function FloatingWorkflowNav() {
             label: `Go to Step ${incomplete.stepNumber}`,
             onClick: () => {
               setOpen(false);
+              if (path.startsWith("/demo")) {
+                window.dispatchEvent(new CustomEvent("demo-set-active-step", { detail: { stepId: incomplete.id } }));
+                return;
+              }
               withLoading(async () => {
                 navigate({ to: incomplete.path });
               }, { message: `Loading Step ${incomplete.stepNumber}: ${incomplete.label}...` });
@@ -49,6 +54,23 @@ export function FloatingWorkflowNav() {
     }
 
     setOpen(false);
+
+    if (path.startsWith("/demo")) {
+      withLoading(
+        async () => {
+          if (stage.id === 1) {
+            window.dispatchEvent(new CustomEvent("open-upload-modal"));
+          }
+          window.dispatchEvent(new CustomEvent("demo-set-active-step", { detail: { stepId: stage.id } }));
+          const targetUrl = new URL(window.location.href);
+          targetUrl.searchParams.set("step", WORKFLOW_STEPS[stage.id]?.demoStepParam || String(stage.id));
+          window.history.pushState({}, "", targetUrl.toString());
+        },
+        { message: `Loading ${stage.label}...`, subMessage: "Preparing demo stage workspace..." },
+      );
+      return;
+    }
+
     if (path === stage.path || (path === "/app/" && stage.path === "/app")) return;
 
     withLoading(

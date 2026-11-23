@@ -6,7 +6,7 @@ import { applyDataTypeOverrides } from "@/lib/migration/enterprise-parser";
 import { RepairFocusNotice } from "@/components/migration/RepairFocusNotice";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
-import { markStepCompleted } from "@/lib/migration/workflow-gating";
+import { markStepCompleted, navigateWorkflow } from "@/lib/migration/workflow-gating";
 import { useNavigationLoading } from "@/components/common/NavigationLoadingOverlay";
 
 export const Route = createFileRoute("/app/power-query")({
@@ -24,7 +24,7 @@ export function PowerQueryPage() {
     toast.success("Step 6 (Power Query) Completed! Step 7 (DAX Measures) is now unlocked.");
     withLoading(
       async () => {
-        navigate({ to: "/app/dax-measures" });
+        navigateWorkflow("/app/dax-measures", navigate);
       },
       { message: "Loading Step 7: DAX Measures...", subMessage: "Translating expressions to DAX syntax..." },
     );
@@ -39,13 +39,13 @@ export function PowerQueryPage() {
           <p className="text-sm text-muted-foreground mt-1">Please run the Enterprise Analysis first.</p>
         </div>
         <div className="flex flex-wrap justify-center items-center gap-3">
-          <button onClick={() => navigate({ to: "/app/analysis" })} className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-border text-sm font-medium">
+          <button onClick={() => navigateWorkflow("/app/analysis", navigate)} className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-border text-sm font-medium">
             <ArrowLeft className="h-4 w-4" /> Go to Analysis
           </button>
           <button
             type="button"
             data-tour="generate-m-query"
-            onClick={() => navigate({ to: "/app/analysis" })}
+            onClick={() => navigateWorkflow("/app/analysis", navigate)}
             className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-border text-sm font-medium"
           >
             Generate M Query
@@ -53,7 +53,7 @@ export function PowerQueryPage() {
           <button
             type="button"
             data-tour="apply-regenerate-pq"
-            onClick={() => navigate({ to: "/app/analysis" })}
+            onClick={() => navigateWorkflow("/app/analysis", navigate)}
             className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-border text-sm font-medium"
           >
             Apply and Regenerate Power Query
@@ -91,7 +91,7 @@ export function PowerQueryPage() {
         onAnalysisUpdate={(a) => setEnterpriseAnalysis(a)}
       />
       <div className="flex justify-between items-center pt-2">
-        <button onClick={() => navigate({ to: "/app/analysis" })} className="flex items-center gap-2 px-4 py-2 rounded-lg border border-border text-sm font-medium hover:bg-surface-elevated">
+        <button onClick={() => navigateWorkflow("/app/analysis", navigate)} className="flex items-center gap-2 px-4 py-2 rounded-lg border border-border text-sm font-medium hover:bg-surface-elevated">
           <ArrowLeft className="h-4 w-4" /> Back to Analysis
         </button>
         <button

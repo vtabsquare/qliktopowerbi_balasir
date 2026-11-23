@@ -86,9 +86,6 @@ export function TourGuideOverlay() {
     closeTour,
   } = useTour();
 
-  // Strictly restrict the interactive tour to Demo Version: never display in normal or enterprise versions
-  if (!isDemo || !isOpen || !currentStep) return null;
-
   const [targetRect, setTargetRect] = useState<HighlightRect | null>(null);
   const [tooltipPos, setTooltipPos] = useState<{ top: number; left: number }>({ top: 120, left: 24 });
   const [isElementVisible, setIsElementVisible] = useState(false);
@@ -126,19 +123,44 @@ export function TourGuideOverlay() {
       setIsElementVisible(isInView);
 
       if (isInView) {
-        // Tooltip position calculation
-        let top = highlight.top + highlight.height + 14;
-        if (top + tooltipHeight > viewportHeight - 20) {
-          const spaceAbove = highlight.top - 14 - tooltipHeight;
-          if (spaceAbove > 20) {
-            top = spaceAbove;
-          } else {
-            top = Math.max(20, (viewportHeight - tooltipHeight) / 2);
+        // Preferred directional placement handling
+        const preferredPlacement = currentStep.placement || "auto";
+        let top = 0;
+        let left = 0;
+
+        if (preferredPlacement === "left") {
+          left = highlight.left - tooltipWidth - 14;
+          top = highlight.top + (highlight.height - tooltipHeight) / 2;
+          if (left < 16) {
+            left = highlight.left + highlight.width + 14;
+          }
+        } else if (preferredPlacement === "right") {
+          left = highlight.left + highlight.width + 14;
+          top = highlight.top + (highlight.height - tooltipHeight) / 2;
+          if (left + tooltipWidth > viewportWidth - 16) {
+            left = highlight.left - tooltipWidth - 14;
+          }
+        } else if (preferredPlacement === "top") {
+          top = highlight.top - tooltipHeight - 14;
+          left = highlight.left + (highlight.width - tooltipWidth) / 2;
+          if (top < 16) {
+            top = highlight.top + highlight.height + 14;
+          }
+        } else {
+          // bottom or auto
+          top = highlight.top + highlight.height + 14;
+          left = highlight.left + (highlight.width - tooltipWidth) / 2;
+          if (top + tooltipHeight > viewportHeight - 20) {
+            const spaceAbove = highlight.top - 14 - tooltipHeight;
+            if (spaceAbove > 20) {
+              top = spaceAbove;
+            } else {
+              top = Math.max(20, (viewportHeight - tooltipHeight) / 2);
+            }
           }
         }
 
-        // Horizontal alignment: align with highlight center, clamp within viewport
-        let left = highlight.left + (highlight.width - tooltipWidth) / 2;
+        // Horizontal alignment: clamp within viewport
         left = Math.max(16, Math.min(left, viewportWidth - tooltipWidth - 16));
 
         // Vertical clamping: ALWAYS keep tooltip visible within viewport boundaries
@@ -295,7 +317,7 @@ export function TourGuideOverlay() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isOpen, nextStep, prevStep, closeTour]);
 
-  if (!isOpen || !currentStep) return null;
+  if (!isDemo || !isOpen || !currentStep) return null;
 
   const progressPercent = Math.round(((currentStepIndex + 1) / totalSteps) * 100);
 
