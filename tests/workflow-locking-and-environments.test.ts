@@ -102,6 +102,30 @@ describe("Step-by-Step Workflow Locking System", () => {
     expect(isStepUnlocked(7, false)).toBe(true);
   });
 
+  it("allows completing Step 8 (Power BI Model) and Step 9 (Relationships) to unlock Step 10 (Validation & Export)", () => {
+    const isDemo = false;
+    // Complete steps 0 through 6 (Instructions through DAX Measures)
+    for (let i = 0; i <= 6; i++) {
+      markStepCompleted(i, isDemo);
+    }
+
+    // Step 8 (Power BI Model, id: 7) is unlocked
+    expect(isStepUnlocked(7, isDemo)).toBe(true);
+
+    // Step 10 (Validation & Export, id: 9) is still locked before model completion
+    expect(isStepUnlocked(9, isDemo)).toBe(false);
+
+    // When user finishes reviewing Power BI Model and completes Step 8 and 9
+    markStepCompleted(7, isDemo);
+    markStepCompleted(8, isDemo);
+
+    expect(isStepCompleted(7, isDemo)).toBe(true);
+    expect(isStepCompleted(8, isDemo)).toBe(true);
+
+    // Step 10 (Validation & Export) is now unlocked!
+    expect(isStepUnlocked(9, isDemo)).toBe(true);
+  });
+
   it("persists step completion status across sessions independently for Demo and Production", () => {
     // Complete Step 1 in Demo
     markStepCompleted(1, true);

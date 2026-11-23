@@ -1,4 +1,4 @@
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import {
   AlertCircle,
@@ -29,6 +29,9 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useMigration } from "@/lib/migration/store";
+import { useAuth } from "@/contexts/AuthContext";
+import { markStepCompleted, navigateWorkflow } from "@/lib/migration/workflow-gating";
+import { useNavigationLoading } from "@/components/common/NavigationLoadingOverlay";
 import { repairDomId } from "@/lib/migration/autofix";
 import { RepairFocusNotice } from "./RepairFocusNotice";
 import {
@@ -48,6 +51,12 @@ type ModelTab = "overview" | "tables" | "relationships" | "checks";
 
 export function SimplePowerBiModelPage() {
   const navigate = useNavigate();
+  const router = useRouterState();
+  const currentPath = router.location.pathname;
+  const isRelationshipsPage = currentPath === "/app/relationships";
+  const { isDemo } = useAuth();
+  const { withLoading } = useNavigationLoading();
+
   const {
     powerBiModel,
     initializePowerBiModel,
@@ -64,9 +73,15 @@ export function SimplePowerBiModelPage() {
     validateModel,
     repairFocus,
   } = useMigration();
-  const [tab, setTab] = useState<ModelTab>("overview");
+  const [tab, setTab] = useState<ModelTab>(() => (isRelationshipsPage ? "relationships" : "overview"));
   const [search, setSearch] = useState("");
   const [tableFilter, setTableFilter] = useState<ModelTableKind | "all">("all");
+
+  useEffect(() => {
+    if (isRelationshipsPage) {
+      setTab("relationships");
+    }
+  }, [isRelationshipsPage]);
 
   useEffect(() => {
     if (!powerBiModel) initializePowerBiModel();
@@ -245,14 +260,38 @@ export function SimplePowerBiModelPage() {
         />
       )}
 
-      <div className="flex flex-wrap justify-between gap-3">
-        <button onClick={() => navigate({ to: "/app/expression-conversion" })} className="inline-flex items-center gap-2 rounded-xl border border-border px-4 py-2.5 text-sm font-medium">
-          <ArrowLeft className="h-4 w-4" /> Back to Expressions
-        </button>
+      <div className="flex flex-wrap justify-between gap-3 pt-2">
         <button
-          onClick={() => navigate({ to: "/app/semantic-model" })}
+          onClick={() => {
+            if (isRelationshipsPage) {
+              navigateWorkflow("/app/powerbi-model", navigate);
+            } else {
+              navigateWorkflow("/app/dax-measures", navigate);
+            }
+          }}
+          className="inline-flex items-center gap-2 rounded-xl border border-border px-4 py-2.5 text-sm font-medium hover:bg-surface-elevated transition-colors cursor-pointer"
+        >
+          <ArrowLeft className="h-4 w-4" /> {isRelationshipsPage ? "Back to Power BI Model" : "Back to DAX Measures"}
+        </button>
+
+        <button
+          onClick={() => {
+            // Mark Step 8 (Power BI Model) and Step 9 (Relationships) completed
+            markStepCompleted(7, isDemo);
+            markStepCompleted(8, isDemo);
+            toast.success("Step 8 (Power BI Model) & Step 9 (Relationships) Completed! Step 10 (Validation & Export) is now unlocked.");
+            withLoading(
+              async () => {
+                navigateWorkflow("/app/semantic-model", navigate);
+              },
+              {
+                message: "Loading Step 10: Validation & Export...",
+                subMessage: "Preparing PBIP semantic model and deployment artifacts...",
+              },
+            );
+          }}
           disabled={!modelReady}
-          className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50 shadow-sm hover:opacity-95 transition-all cursor-pointer"
         >
           Continue to Validation & Export <ArrowRight className="h-4 w-4" />
         </button>

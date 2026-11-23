@@ -1,6 +1,9 @@
+import { useEffect } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { AlertCircle, ArrowLeft, CheckCircle2, Download, FileJson, ScrollText, ShieldCheck } from "lucide-react";
 import { dedupePipelineLogs, downloadWorkspaceBackup, useMigration } from "@/lib/migration/store";
+import { useAuth } from "@/contexts/AuthContext";
+import { markStepCompleted, navigateWorkflow } from "@/lib/migration/workflow-gating";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/logs")({
@@ -18,6 +21,7 @@ function Metric({ label, value }: { label: string; value: string | number }) {
 
 function PipelineLogsPage() {
   const navigate = useNavigate();
+  const { isDemo } = useAuth();
   const {
     enterpriseFiles,
     enterpriseAnalysis,
@@ -28,6 +32,10 @@ function PipelineLogsPage() {
     projectWorkspace,
     exportWorkspaceBackup,
   } = useMigration();
+
+  useEffect(() => {
+    markStepCompleted(10, isDemo);
+  }, [isDemo]);
   const combinedLogs = dedupePipelineLogs([
     ...pipelineLogs,
     ...(enterpriseAnalysis?.logs || []),

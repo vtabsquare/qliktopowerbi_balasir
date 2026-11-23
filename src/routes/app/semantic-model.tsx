@@ -5,6 +5,9 @@ import { useAuth } from "@/contexts/AuthContext";
 import { AlertCircle, ArrowLeft, ArrowRight, RotateCcw } from "lucide-react";
 import { EnterpriseExportPage } from "@/components/migration/EnterpriseExportPage";
 import { RepairFocusNotice } from "@/components/migration/RepairFocusNotice";
+import { markStepCompleted, navigateWorkflow } from "@/lib/migration/workflow-gating";
+import { useNavigationLoading } from "@/components/common/NavigationLoadingOverlay";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/semantic-model")({
   component: SemanticModelPage,
@@ -14,6 +17,7 @@ export function SemanticModelPage() {
   const navigate = useNavigate();
   const { enterpriseAnalysis } = useMigration();
   const { isDemo } = useAuth();
+  const { withLoading } = useNavigationLoading();
 
   useEffect(() => {
     if (isDemo) {
@@ -55,19 +59,47 @@ export function SemanticModelPage() {
       <EnterpriseExportPage analysis={enterpriseAnalysis} />
 
       {/* Navigation */}
-      <div className="flex justify-between items-center pt-2">
+      <div className="flex flex-wrap justify-between items-center gap-3 pt-2">
         <button
-          onClick={() => navigate({ to: "/app/dax-measures" })}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg border border-border text-sm font-medium hover:bg-surface-elevated"
+          onClick={() => {
+            withLoading(
+              async () => {
+                navigateWorkflow("/app/powerbi-model", navigate);
+              },
+              { message: "Returning to Step 8: Power BI Model..." },
+            );
+          }}
+          className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-border text-sm font-medium hover:bg-surface-elevated transition-colors cursor-pointer"
         >
-          <ArrowLeft className="h-4 w-4" /> Back to DAX Measures
+          <ArrowLeft className="h-4 w-4" /> Back to Power BI Model
         </button>
-        <button
-          onClick={() => navigate({ to: "/app/instructions" })}
-          className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold shadow hover:opacity-90 transition-opacity"
-        >
-          <RotateCcw className="h-4 w-4" /> Start Over / Instructions
-        </button>
+
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={() => {
+              navigateWorkflow("/app/instructions", navigate);
+            }}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-border text-sm font-medium hover:bg-surface-elevated transition-colors cursor-pointer"
+          >
+            <RotateCcw className="h-4 w-4" /> Restart Pipeline
+          </button>
+
+          <button
+            onClick={() => {
+              markStepCompleted(9, isDemo);
+              toast.success("Step 10 (Validation & Export) Completed! Step 11 (Pipeline Logs) is now unlocked.");
+              withLoading(
+                async () => {
+                  navigateWorkflow("/app/logs", navigate);
+                },
+                { message: "Loading Step 11: Pipeline Logs...", subMessage: "Retrieving audit logs and timing metrics..." },
+              );
+            }}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold shadow hover:opacity-90 transition-opacity cursor-pointer"
+          >
+            View Pipeline Logs <ArrowRight className="h-4 w-4" />
+          </button>
+        </div>
       </div>
     </div>
   );
