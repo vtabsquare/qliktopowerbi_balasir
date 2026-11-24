@@ -28,7 +28,6 @@ export function ExpressionConversionPage() {
   const [artifactType, setArtifactType] = useState("all");
   const [sheet, setSheet] = useState("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [excludeReason, setExcludeReason] = useState("");
 
   const handleProceedToEtl = () => {
     markStepCompleted(3, isDemo);
@@ -139,17 +138,6 @@ export function ExpressionConversionPage() {
               resetExpressionArtifact(selected.id);
               toast.success("Generated conversion restored");
             }}
-            excludeReason={excludeReason}
-            setExcludeReason={setExcludeReason}
-            onExclude={() => {
-              if (!excludeReason.trim()) {
-                toast.error("Provide a reason before excluding this expression");
-                return;
-              }
-              excludeExpressionArtifact(selected.id, excludeReason.trim());
-              setExcludeReason("");
-              toast.success("Expression excluded with traceability retained");
-            }}
           />
         ) : (
           <div className="surface-card p-10 text-center text-sm text-muted-foreground space-y-3">
@@ -184,7 +172,7 @@ export function ExpressionConversionPage() {
   );
 }
 
-function ExpressionEditor({ item, onSave, onApprove, onReset, excludeReason, setExcludeReason, onExclude }: { item: ExpressionArtifact; onSave: (patch: Partial<ExpressionArtifact>) => void; onApprove: (approved: boolean) => void; onReset: () => void; excludeReason: string; setExcludeReason: (value: string) => void; onExclude: () => void }) {
+function ExpressionEditor({ item, onSave, onApprove, onReset }: { item: ExpressionArtifact; onSave: (patch: Partial<ExpressionArtifact>) => void; onApprove: (approved: boolean) => void; onReset: () => void }) {
   const [name, setName] = useState(item.name);
   const [type, setType] = useState<ExpressionArtifactType>(item.artifactType);
   const [homeTable, setHomeTable] = useState(item.homeTable);
@@ -193,6 +181,9 @@ function ExpressionEditor({ item, onSave, onApprove, onReset, excludeReason, set
   const [description, setDescription] = useState(item.description);
   const [dax, setDax] = useState(item.editedDax || item.generatedDax);
   const [astOpen, setAstOpen] = useState(false);
+  const filteredExplanations = (item.explanation || []).filter(
+    (line) => !line.toLowerCase().includes("translated from the normalized qlik expression ast")
+  );
   return <div className="surface-card p-5 sticky top-24 space-y-5 max-h-[820px] overflow-auto">
     <div className="flex items-start gap-3"><div className="grid h-10 w-10 place-items-center rounded-xl bg-accent text-primary"><Code2 className="h-5 w-5"/></div><div className="flex-1 min-w-0"><h3 className="font-semibold truncate">{item.label}</h3><div className="font-mono text-[10px] text-muted-foreground">{item.id} · {item.confidence}% confidence</div></div><StatusPill status={item.status}/></div>
     <div><Label>Original Qlik expression</Label><pre className="rounded-xl bg-slate-950 text-slate-100 p-4 text-xs whitespace-pre-wrap max-h-36 overflow-auto">{item.originalExpression}</pre></div>
@@ -200,8 +191,7 @@ function ExpressionEditor({ item, onSave, onApprove, onReset, excludeReason, set
     <div><Label>Generated / edited DAX</Label><textarea value={dax} onChange={(e) => setDax(e.target.value)} rows={10} className="w-full rounded-xl border border-border bg-slate-950 text-slate-100 p-4 font-mono text-xs"/></div>
     <div className="flex flex-wrap gap-2"><button data-tour="save-expression" onClick={() => onSave({ name, artifactType: type, homeTable, displayFolder: folder, formatString: format || undefined, description, editedDax: dax, status: item.status === "automatic" ? "warning" : item.status })} className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground"><Save className="h-3.5 w-3.5"/> Save</button><button data-tour="approve-expression" onClick={() => onApprove(!item.approved)} className={cn("inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-xs font-semibold", item.approved ? "border-emerald-500/50 text-emerald-600 bg-emerald-500/10" : "border-border")}><Check className="h-3.5 w-3.5"/>{item.approved ? "Approved" : "Approve"}</button><button onClick={onReset} className="inline-flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-xs font-semibold"><RefreshCw className="h-3.5 w-3.5"/> Reset generated</button></div>
     <div className="rounded-xl border border-border p-4 space-y-3"><button onClick={() => setAstOpen((value) => !value)} className="flex w-full items-center justify-between text-sm font-semibold"><span>Parsed AST and dependencies</span><span>{astOpen ? "−" : "+"}</span></button>{astOpen && <div className="space-y-3"><Property label="Fields" value={item.referencedFields.join(", ") || "None"}/><Property label="Variables" value={item.referencedVariables.join(", ") || "None"}/><Property label="Functions" value={item.functions.join(", ") || "None"}/><pre className="max-h-60 overflow-auto rounded-lg bg-accent/30 p-3 text-[10px]">{item.astJson || "AST unavailable"}</pre></div>}</div>
-    {(item.issues.length > 0 || item.explanation.length > 0) && <div className="space-y-2">{item.issues.map((issue, index) => <div key={`${issue.code}-${index}`} className={cn("rounded-lg border p-3 text-xs", issue.severity === "error" || issue.severity === "blocking-error" ? "border-red-500/30 bg-red-500/5" : "border-amber-500/30 bg-amber-500/5")}><div className="font-semibold">{issue.code}</div><div className="text-muted-foreground mt-1">{issue.message}</div>{issue.recommendation && <div className="mt-2">Fix: {issue.recommendation}</div>}</div>)}{item.explanation.map((line, index) => <div key={index} className="text-xs text-muted-foreground">• {line}</div>)}</div>}
-    <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-4"><Label>Exclude with mandatory reason</Label><div className="flex gap-2"><input value={excludeReason} onChange={(e) => setExcludeReason(e.target.value)} placeholder="Reason for exclusion…" className="min-w-0 flex-1 rounded-lg border border-border bg-background px-3 py-2 text-xs"/><button onClick={onExclude} className="rounded-lg border border-red-500/40 px-3 py-2 text-xs text-red-600"><X className="h-4 w-4"/></button></div></div>
+    {(item.issues.length > 0 || filteredExplanations.length > 0) && <div className="space-y-2">{item.issues.map((issue, index) => <div key={`${issue.code}-${index}`} className={cn("rounded-lg border p-3 text-xs", issue.severity === "error" || issue.severity === "blocking-error" ? "border-red-500/30 bg-red-500/5" : "border-amber-500/30 bg-amber-500/5")}><div className="font-semibold">{issue.code}</div><div className="text-muted-foreground mt-1">{issue.message}</div>{issue.recommendation && <div className="mt-2">Fix: {issue.recommendation}</div>}</div>)}{filteredExplanations.map((line, index) => <div key={index} className="text-xs text-muted-foreground">• {line}</div>)}</div>}
   </div>;
 }
 
