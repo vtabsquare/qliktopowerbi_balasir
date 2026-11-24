@@ -332,31 +332,33 @@ function DemoWorkspace({ session, onLoggedOut }: { session: any; onLoggedOut: ()
 
         {/* Main Content Area */}
         <main className="mx-auto w-full max-w-[1440px] px-4 sm:px-6 lg:px-8 pt-4 sm:pt-6 pb-12 sm:pb-16">
-          {/* Demo Hero Banner */}
-          <section className="mb-6 glass-card p-6 sm:p-8 bg-gradient-to-br from-amber-500/10 via-surface/60 to-primary/10 border border-amber-500/30 shadow-lg rounded-2xl">
-            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
-              <div>
-                <span className="chip mb-4 text-amber-600 dark:text-amber-400 bg-amber-500/10 border-amber-500/20">
-                  <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
-                  DEMO VERSION • GUIDED WORKFLOW
-                </span>
-                <h1 className="font-display font-black text-[clamp(2.25rem,5vw,3.75rem)] tracking-tight leading-[1.05] mb-3 break-words">
-                  <span className="text-foreground">Qlik</span>
-                  <span className="mx-2 text-muted-foreground font-light">→</span>
-                  <span className="gradient-text">Power BI</span>
-                </h1>
-                <p className="text-muted-foreground text-sm max-w-xl leading-relaxed">
-                  Interactive Live Demo Environment. Complete each migration stage sequentially to unlock the next phase, from QlikView visualization extraction to Power Query M and DAX synthesis.
-                </p>
-              </div>
+          {/* Demo Hero Banner (Shown on Step 0: Instructions; hidden on Step 1: Upload Qlik Files and subsequent steps) */}
+          {activeStepId === 0 && (
+            <section className="mb-6 glass-card p-6 sm:p-8 bg-gradient-to-br from-amber-500/10 via-surface/60 to-primary/10 border border-amber-500/30 shadow-lg rounded-2xl">
+              <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+                <div>
+                  <span className="chip mb-4 text-amber-600 dark:text-amber-400 bg-amber-500/10 border-amber-500/20">
+                    <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+                    DEMO VERSION • GUIDED WORKFLOW
+                  </span>
+                  <h1 className="font-display font-black text-[clamp(2.25rem,5vw,3.75rem)] tracking-tight leading-[1.05] mb-3 break-words">
+                    <span className="text-foreground">Qlik</span>
+                    <span className="mx-2 text-muted-foreground font-light">→</span>
+                    <span className="gradient-text">Power BI</span>
+                  </h1>
+                  <p className="text-muted-foreground text-sm max-w-xl leading-relaxed">
+                    Interactive Live Demo Environment. Complete each migration stage sequentially to unlock the next phase, from QlikView visualization extraction to Power Query M and DAX synthesis.
+                  </p>
+                </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full lg:w-auto">
-                <Metric icon="◎" value="100%" label="Conversion accuracy" />
-                <Metric icon="⚡" value="10x" label="Faster than manual" />
-                <Metric icon="❒" value={tableCount ? `${tableCount}` : "137"} label={tableCount ? "Final tables" : "Demo files"} />
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full lg:w-auto">
+                  <Metric icon="◎" value="100%" label="Conversion accuracy" />
+                  <Metric icon="⚡" value="10x" label="Faster than manual" />
+                  <Metric icon="❒" value={tableCount ? `${tableCount}` : "137"} label={tableCount ? "Final tables" : "Demo files"} />
+                </div>
               </div>
-            </div>
-          </section>
+            </section>
+          )}
 
           {/* Unified Enterprise 11-Stage Navigation */}
           <StageNav

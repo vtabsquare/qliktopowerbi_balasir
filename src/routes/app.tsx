@@ -6,7 +6,6 @@ import { Outlet } from "@tanstack/react-router";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEffect } from "react";
 import { FloatingWorkflowNav } from "@/components/migration/FloatingWorkflowNav";
-import { MigrationAiAssistant } from "@/components/migration/MigrationAiAssistant";
 import { DemoEndedModal } from "@/components/migration/DemoEndedModal";
 import { TourProvider } from "@/contexts/TourContext";
 import { TourGuideOverlay } from "@/components/tour/TourGuideOverlay";
@@ -114,9 +113,8 @@ function MigrationLayout() {
   const { enterpriseAnalysis } = useMigration();
   const router = useRouterState();
   const currentPath = router.location.pathname;
-  const isLandingPage = currentPath === "/app" || currentPath === "/app/" || currentPath === "/app/instructions";
+  const isInstructions = currentPath === "/app/instructions";
   const isUploadStep = currentPath === "/app" || currentPath === "/app/";
-  const isCompactHero = isUploadStep && !isDemo;
   const tableCount = enterpriseAnalysis?.finalTables.length ?? 0;
 
   return (
@@ -124,9 +122,9 @@ function MigrationLayout() {
       <div className="min-h-screen" id="vtab-demo-app" data-testid="vtab-demo-app">
         <AppHeader />
         <main className="mx-auto w-full max-w-[1440px] px-4 sm:px-6 lg:px-8 pt-4 sm:pt-6 pb-20">
-          {isLandingPage ? (
-            <Hero tableCount={tableCount} compact={isCompactHero} />
-          ) : (
+          {isInstructions ? (
+            <Hero tableCount={tableCount} />
+          ) : !isUploadStep ? (
             <div className="mb-4 flex items-center justify-between rounded-xl bg-surface/60 px-4 py-2 text-xs border border-border/60 shadow-xs">
               <div className="flex items-center gap-2 font-medium text-muted-foreground">
                 <span className="h-2 w-2 rounded-full bg-success animate-pulse" />
@@ -136,13 +134,11 @@ function MigrationLayout() {
               </div>
               <a href="#migration-stage-menu" className="text-primary hover:underline font-semibold">Change Stage ↓</a>
             </div>
-          )}
+          ) : null}
           <StageNav />
           <Outlet />
-          <FooterSteps />
         </main>
         <FloatingWorkflowNav />
-        <MigrationAiAssistant />
         {isDemo && <DemoEndedModal />}
         {isDemo && <TourGuideOverlay />}
       </div>
@@ -248,28 +244,6 @@ function Metric({
         <div className="text-[10px] text-muted-foreground whitespace-nowrap">{label}</div>
       </div>
     </div>
-  );
-}
-
-function FooterSteps() {
-  const steps = [
-    { n: "01", k: "CAPTURE", title: "Requirement → Rule Book", body: "Capture business intent and auto-generate a Markdown Rule Book that drives the migration." },
-    { n: "02", k: "CONVERT", title: "Script to Power Query M", body: "Source &amp; ETL QVS parsed, then Power Query produced only for surviving tables." },
-    { n: "03", k: "DEPLOY", title: "Semantic Model &amp; DAX", body: "Star-schema model auto-built for review, then variables and Set Analysis translated to DAX." },
-  ];
-  return (
-    <section className="grid md:grid-cols-3 gap-3 mt-12">
-      {steps.map((s) => (
-        <div key={s.n} className="glass-panel p-4 bg-surface/50 hover:bg-surface/80 transition-all border border-border/60">
-          <div className="flex items-center justify-between mb-2">
-            <span className="font-mono text-xs font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded">{s.n} · {s.k}</span>
-            <span className="text-muted-foreground">→</span>
-          </div>
-          <div className="font-display font-semibold text-sm mb-1 text-foreground" dangerouslySetInnerHTML={{ __html: s.title }} />
-          <div className="text-xs text-muted-foreground leading-relaxed" dangerouslySetInnerHTML={{ __html: s.body }} />
-        </div>
-      ))}
-    </section>
   );
 }
 
