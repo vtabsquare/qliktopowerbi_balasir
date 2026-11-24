@@ -4,3 +4,8 @@ dist/
 .output/
 qvd-output/
 Test/
+New folder/
+.env
+.env.local
+.env.*.local
+
