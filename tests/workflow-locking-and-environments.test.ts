@@ -174,4 +174,21 @@ describe("Separate Demo and Production Environments", () => {
     expect(demoStorageKey).toBe("sb-demo-auth-token");
     expect(prodStorageKey).not.toBe(demoStorageKey);
   });
+
+  it("identifies Demo environment from pathname or search without requiring authentication", () => {
+    // Demo environment detection is active for /demo
+    expect(isDemoEnvironment()).toBe(false); // default window is /
+
+    // When on /demo path
+    window.history.replaceState({}, "", "/demo");
+    expect(isDemoEnvironment()).toBe(true);
+
+    // When on /demo with step parameters
+    window.history.replaceState({}, "", "/demo?step=power-query");
+    expect(isDemoEnvironment()).toBe(true);
+
+    // Cleanup back to /
+    window.history.replaceState({}, "", "/");
+    expect(isDemoEnvironment()).toBe(false);
+  });
 });

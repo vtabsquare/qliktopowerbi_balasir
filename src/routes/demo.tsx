@@ -1,23 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, useEffect, useCallback, useMemo } from "react";
-import { supabaseDemo } from "@/lib/supabase";
+import { useState, useEffect } from "react";
 import { useMigration } from "@/lib/migration/store";
 import { toast } from "sonner";
 import {
   Sparkles,
   Lock,
-  Mail,
-  KeyRound,
-  ArrowRight,
-  LogOut,
-  Layers,
-  Compass,
-  Check,
-  CheckCircle2,
-  FileCode2,
-  Database,
-  ShieldCheck,
-  RefreshCw,
 } from "lucide-react";
 import {
   WORKFLOW_STEPS,
@@ -57,179 +44,17 @@ export const Route = createFileRoute("/demo")({
 });
 
 function DemoPageRoot() {
-  const [session, setSession] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-
   useEffect(() => {
     if (typeof document !== "undefined") {
       document.title = "Qlik to Power BI – Demo Version";
     }
   }, []);
 
-  // Initialize and listen to dedicated Demo session in supabaseDemo
-  useEffect(() => {
-    if (!supabaseDemo) {
-      setLoading(false);
-      return;
-    }
-
-    supabaseDemo.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setLoading(false);
-    });
-
-    const { data: { subscription } } = supabaseDemo.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      setLoading(false);
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="flex flex-col items-center gap-3">
-          <div className="h-8 w-8 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
-          <span className="text-xs text-muted-foreground font-medium">Loading Demo Environment…</span>
-        </div>
-      </div>
-    );
-  }
-
-  if (!session) {
-    return <DemoLoginPortal onLoggedIn={(sess) => setSession(sess)} />;
-  }
-
-  return <DemoWorkspace session={session} onLoggedOut={() => setSession(null)} />;
+  return <DemoWorkspace />;
 }
 
-// ─── 1. Dedicated Demo Login Portal ──────────────────────────────────────────
-function DemoLoginPortal({ onLoggedIn }: { onLoggedIn: (session: any) => void }) {
-  const [email, setEmail] = useState("vtabpublicuser@gmail.com");
-  const [password, setPassword] = useState("Demo@12345");
-  const [signingIn, setSigningIn] = useState(false);
-  const { withLoading } = useNavigationLoading();
-
-  const handleDemoSignIn = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    setSigningIn(true);
-
-    await withLoading(
-      async () => {
-        try {
-          if (!supabaseDemo) {
-            toast.error("Demo Supabase client is not configured.");
-            return;
-          }
-
-          // 1. Authenticate against isolated demo client
-          const { data, error } = await supabaseDemo.auth.signInWithPassword({
-            email: email.trim(),
-            password: password,
-          });
-
-          if (error) {
-            // Fallback: try generating magic link via demo login endpoint
-            const res = await fetch("/api/auth/demo-login", { method: "POST" });
-            const body = await res.json();
-            if (body.magicLink) {
-              window.location.href = body.magicLink;
-              return;
-            }
-            throw error;
-          }
-
-          if (data.session) {
-            toast.success("Welcome to Qlik to Power BI Demo Version!");
-            onLoggedIn(data.session);
-          }
-        } catch (err: any) {
-          toast.error(err.message || "Failed to enter demo mode. Please verify credentials.");
-        } finally {
-          setSigningIn(false);
-        }
-      },
-      { message: "Entering Demo Environment...", subMessage: "Authenticating vtabpublicuser@gmail.com..." },
-    );
-  };
-
-  return (
-    <div className="min-h-screen flex flex-col justify-center items-center px-4 py-12 bg-gradient-to-br from-background via-surface/40 to-primary/5">
-      <div className="w-full max-w-md surface-card p-8 sm:p-10 border border-primary/30 shadow-2xl rounded-3xl relative overflow-hidden">
-        {/* Glow backdrop */}
-        <div className="absolute -top-24 -right-24 h-48 w-48 rounded-full bg-primary/20 blur-3xl pointer-events-none" />
-        <div className="absolute -bottom-24 -left-24 h-48 w-48 rounded-full bg-indigo-500/15 blur-3xl pointer-events-none" />
-
-        <div className="flex flex-col items-center text-center mb-8">
-          <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-primary to-[oklch(0.62_0.2_260)] text-primary-foreground font-bold grid place-items-center shadow-lg mb-3">
-            <span className="text-base tracking-tight">VT</span>
-          </div>
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 text-xs font-bold uppercase tracking-wider mb-2">
-            <Sparkles className="h-3.5 w-3.5" />
-            <span>Dedicated Demo URL</span>
-          </div>
-          <h1 className="text-2xl font-display font-bold text-foreground">Demo Version Portal</h1>
-          <p className="text-xs text-muted-foreground mt-1 max-w-xs">
-            Experience the step-by-step Qlik to Power BI AI migration pipeline with sample enterprise datasets.
-          </p>
-        </div>
-
-        <form onSubmit={handleDemoSignIn} className="space-y-4">
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-foreground">Demo Account Email</label>
-            <div className="relative">
-              <Mail className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground pointer-events-none" />
-              <input
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full h-10 pl-9 pr-3 text-xs rounded-xl border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary font-mono"
-              />
-            </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-foreground">Demo Password</label>
-            <div className="relative">
-              <KeyRound className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground pointer-events-none" />
-              <input
-                type="text"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full h-10 pl-9 pr-3 text-xs rounded-xl border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary font-mono"
-              />
-            </div>
-          </div>
-
-          <button
-            type="submit"
-            disabled={signingIn}
-            className="w-full mt-2 h-11 inline-flex items-center justify-center gap-2 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-sm shadow-md transition-all cursor-pointer"
-          >
-            <span>{signingIn ? "Entering Demo…" : "Launch Demo Application"}</span>
-            {!signingIn && <ArrowRight className="h-4 w-4" />}
-          </button>
-        </form>
-
-        <div className="mt-6 pt-5 border-t border-border/60 text-center space-y-2">
-          <div className="flex items-center justify-center gap-2 text-[11px] text-muted-foreground">
-            <ShieldCheck className="h-3.5 w-3.5 text-success" />
-            <span>Strictly isolated session • Won't affect Production</span>
-          </div>
-          <p className="text-[11px] text-muted-foreground">
-            Production User? <a href="/auth" className="text-primary font-semibold hover:underline">Access Production URL</a>
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── 2. Dedicated Demo Workspace & Step-by-Step Navigation ───────────────────
-function DemoWorkspace({ session, onLoggedOut }: { session: any; onLoggedOut: () => void }) {
+// ─── Dedicated Demo Workspace & Step-by-Step Navigation ───────────────────
+function DemoWorkspace({ session, onLoggedOut }: { session?: any; onLoggedOut?: () => void } = {}) {
   const { withLoading } = useNavigationLoading();
   const [activeStepId, setActiveStepId] = useState<number>(() => {
     if (typeof window !== "undefined") {

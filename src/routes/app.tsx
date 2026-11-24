@@ -39,7 +39,7 @@ function AuthGuard() {
       const searchParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
       const isEmbedOrDemo = searchParams?.get("embed") === "true" || searchParams?.get("demo") === "true" || searchParams?.get("demo") === "1";
       if (isEmbedOrDemo) {
-        window.location.href = "/api/auth/demo-login";
+        window.location.href = "/demo";
         return;
       }
       navigate({ to: "/auth" });

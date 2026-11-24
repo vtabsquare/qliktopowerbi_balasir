@@ -76,7 +76,7 @@ export function AppHeader() {
 
         <nav className="hidden min-w-0 items-center gap-1 overflow-x-auto whitespace-nowrap rounded-full border border-border/60 bg-surface/60 p-1 text-xs font-medium shadow-sm md:flex">
           <Link
-            to="/app"
+            to={isDemo ? "/demo" : "/app"}
             activeProps={{ className: "bg-primary text-primary-foreground shadow-sm" }}
             className="rounded-full px-3.5 py-1.5 text-muted-foreground hover:text-foreground transition-all"
           >
@@ -167,23 +167,7 @@ export function AppHeader() {
             </div>
           )}
 
-          {isDemo ? (
-            <button
-              type="button"
-              onClick={() => {
-                toast.info("Demo user session active.", {
-                  action: {
-                    label: "Sign Out",
-                    onClick: () => handleLogout(),
-                  },
-                });
-              }}
-              title="Sign Out of Demo"
-              className="grid place-items-center h-10 w-10 rounded-xl border border-border/40 bg-surface/40 text-muted-foreground/40 opacity-40 cursor-not-allowed select-none"
-            >
-              <LogOut className="h-4 w-4" />
-            </button>
-          ) : (
+          {!isDemo && (
             <button
               onClick={handleLogout}
               title="Logout"
