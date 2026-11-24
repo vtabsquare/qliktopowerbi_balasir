@@ -189,6 +189,23 @@ export function markStepCompleted(stepId: number, isDemo: boolean): void {
 }
 
 /**
+ * Remove a step from completed set (e.g. when an earlier step is invalidated/re-run).
+ */
+export function unmarkStepCompleted(stepId: number, isDemo: boolean): void {
+  if (typeof window === "undefined") return;
+  try {
+    const completed = new Set(getCompletedSteps(isDemo));
+    if (completed.has(stepId)) {
+      completed.delete(stepId);
+      localStorage.setItem(getStorageKey(isDemo), JSON.stringify(Array.from(completed)));
+      window.dispatchEvent(new CustomEvent("workflow-step-completed", { detail: { stepId, isDemo } }));
+    }
+  } catch (e) {
+    console.error("Failed to unmark workflow step completion:", e);
+  }
+}
+
+/**
  * Check if a step is unlocked for user access.
  * Rules:
  * 1. Step 0 (Step 1: Instructions) is ALWAYS unlocked.

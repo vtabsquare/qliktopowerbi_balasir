@@ -4,6 +4,10 @@ import { applyDataTypeOverrides, type EnterpriseAnalysis } from "@/lib/migration
 import { DEFAULT_CALENDAR_OVERRIDE, type CalendarOverrideConfig, type CalendarCreationMode } from "@/lib/migration/calendar-override";
 import { toast } from "sonner";
 import { TabMQueryDataTypes, TabFinalTables } from "./EnterpriseAnalysisPanel";
+import { useAuth } from "@/contexts/AuthContext";
+import { usePowerQueryWorkflow, validateCanExecuteStep } from "@/lib/migration/power-query-workflow-state";
+import { PowerQueryWorkflowStepper } from "./PowerQueryWorkflowStepper";
+import { Lock, Check, Loader2, AlertCircle } from "lucide-react";
 
 interface Props {
   analysis: EnterpriseAnalysis;
@@ -14,6 +18,8 @@ interface Props {
 
 
 function CalendarBuilder({ analysis, onAnalysisUpdate }: { analysis: EnterpriseAnalysis; onAnalysisUpdate: (analysis: EnterpriseAnalysis) => void }) {
+  const { isDemo } = useAuth();
+  const { state: pqState, isStep2Unlocked, setStepStatus, invalidateFromStep } = usePowerQueryWorkflow(isDemo);
   const initial = analysis.calendarOverride || DEFAULT_CALENDAR_OVERRIDE;
   const [config, setConfig] = useState<CalendarOverrideConfig>({ ...initial });
 
@@ -26,9 +32,21 @@ function CalendarBuilder({ analysis, onAnalysisUpdate }: { analysis: EnterpriseA
   });
   const sourceColumn = dateFields.includes(config.sourceColumn || "") ? config.sourceColumn : dateFields[0] || sourceFields[0] || "";
 
-  const update = <K extends keyof CalendarOverrideConfig>(key: K, value: CalendarOverrideConfig[K]) => setConfig((current) => ({ ...current, [key]: value }));
+  const update = <K extends keyof CalendarOverrideConfig>(key: K, value: CalendarOverrideConfig[K]) => {
+    setConfig((current) => ({ ...current, [key]: value }));
+    // Invalidate Step 2 and Step 3 when calendar configuration changes
+    invalidateFromStep(2);
+  };
 
   const apply = () => {
+    const check = validateCanExecuteStep(isDemo, 2);
+    if (!check.ok) {
+      toast.error(check.message);
+      return;
+    }
+
+    setStepStatus(2, "in_progress");
+
     const normalized: CalendarOverrideConfig = {
       ...config,
       calendarTableName: config.calendarTableName?.trim() || "MasterCalendar",
@@ -37,23 +55,39 @@ function CalendarBuilder({ analysis, onAnalysisUpdate }: { analysis: EnterpriseA
       fiscalStartMonth: Math.min(12, Math.max(1, Number(config.fiscalStartMonth || 1))),
     };
     if (normalized.mode === "final-table" && (!normalized.sourceTable || !normalized.sourceColumn)) {
+      setStepStatus(2, "failed", "Choose a final table and date column for the calendar.");
       toast.error("Choose a final table and date column for the calendar.");
       return;
     }
     if (normalized.mode === "fixed-range" && (!normalized.startDate || !normalized.endDate)) {
+      setStepStatus(2, "failed", "Enter both calendar start and end dates.");
       toast.error("Enter both calendar start and end dates.");
       return;
     }
-    const currentTypes: Record<string, string> = {};
-    for (const [table, fields] of Object.entries(analysis.columnTypes || {})) {
-      for (const [field, type] of Object.entries(fields || {})) currentTypes[`${table}.${field}`] = type;
+    try {
+      const currentTypes: Record<string, string> = {};
+      for (const [table, fields] of Object.entries(analysis.columnTypes || {})) {
+        for (const [field, type] of Object.entries(fields || {})) currentTypes[`${table}.${field}`] = type;
+      }
+      const updated = applyDataTypeOverrides({ ...analysis, calendarOverride: normalized }, currentTypes);
+      onAnalysisUpdate(updated);
+      setConfig(normalized);
+      setStepStatus(2, "completed");
+      toast.success(
+        normalized.mode === "qlik"
+          ? "Original Qlik calendar restored"
+          : normalized.mode === "disabled"
+          ? "Calendar generation disabled"
+          : "Calendar Power Query generated",
+        {
+          description: "Step 2 completed! Step 3 (DAX Measures) is now unlocked.",
+        }
+      );
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setStepStatus(2, "failed", msg);
+      toast.error("Failed to regenerate Power Query: " + msg);
     }
-    const updated = applyDataTypeOverrides({ ...analysis, calendarOverride: normalized }, currentTypes);
-    onAnalysisUpdate(updated);
-    setConfig(normalized);
-    toast.success(normalized.mode === "qlik" ? "Original Qlik calendar restored" : normalized.mode === "disabled" ? "Calendar generation disabled" : "Calendar Power Query generated", {
-      description: normalized.mode === "final-table" ? `${normalized.sourceTable}.${normalized.sourceColumn} drives ${normalized.calendarTableName}.` : normalized.mode === "fixed-range" ? `${normalized.startDate} to ${normalized.endDate}.` : undefined,
-    });
   };
 
   const modes: Array<{ value: CalendarCreationMode; label: string; description: string }> = [
@@ -120,14 +154,44 @@ function CalendarBuilder({ analysis, onAnalysisUpdate }: { analysis: EnterpriseA
           {config.mode === "qlik" && <>The uploaded Qlik calendar remains authoritative.</>}
           {config.mode === "disabled" && <>The selected calendar query and its relationships will be removed.</>}
         </div>
-        <button
-          type="button"
-          data-tour="apply-regenerate-pq"
-          onClick={apply}
-          className="rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow hover:opacity-90"
-        >
-          Apply and regenerate Power Query
-        </button>
+        {!isStep2Unlocked ? (
+          <button
+            type="button"
+            data-tour="apply-regenerate-pq"
+            onClick={() => {
+              toast.error("Please complete Generate M Query first by clicking the Generate M Query button.");
+            }}
+            title="Locked: Please complete Generate M Query first by clicking the Generate M Query button."
+            className="rounded-xl border border-border/70 bg-muted/60 text-muted-foreground px-5 py-2.5 text-sm font-semibold shadow-xs hover:border-amber-500/50 flex items-center gap-2 cursor-not-allowed transition-all"
+          >
+            <Lock className="h-4 w-4 text-amber-500/80" />
+            <span>Apply and regenerate Power Query</span>
+            <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-muted text-muted-foreground ml-1">Locked</span>
+          </button>
+        ) : (
+          <button
+            type="button"
+            data-tour="apply-regenerate-pq"
+            onClick={apply}
+            disabled={pqState.step2Status === "in_progress"}
+            className="rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow hover:opacity-90 flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50"
+          >
+            {pqState.step2Status === "in_progress" ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : pqState.step2Status === "completed" ? (
+              <Check className="h-4 w-4 text-emerald-400" />
+            ) : pqState.step2Status === "failed" ? (
+              <AlertCircle className="h-4 w-4 text-red-300" />
+            ) : null}
+            <span>{pqState.step2Status === "in_progress" ? "Regenerating..." : "Apply and regenerate Power Query"}</span>
+            {pqState.step2Status === "completed" && (
+              <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 ml-1">Completed</span>
+            )}
+            {pqState.step2Status === "failed" && (
+              <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-red-500/20 text-red-300 ml-1">Retry</span>
+            )}
+          </button>
+        )}
       </div>
     </div>
   );
@@ -232,8 +296,12 @@ function ExecutionPlanReview({ analysis }: { analysis: EnterpriseAnalysis }) {
 }
 
 export function EnterprisePowerQueryPage({ analysis, columnTypeEdits, onTypeChange, onAnalysisUpdate }: Props) {
+  const { isDemo } = useAuth();
   return (
     <div className="space-y-6">
+      {/* Sequential Power Query Workflow Progress Stepper */}
+      <PowerQueryWorkflowStepper isDemo={isDemo} />
+
       {/* 1. Primary Workspace: M Query Generation & Data Types */}
       <div className="surface-card p-5 sm:p-6 border-2 border-primary/30 shadow-lg bg-gradient-to-b from-background via-surface to-surface-elevated/20">
         <div className="flex items-center justify-between gap-3 mb-2">

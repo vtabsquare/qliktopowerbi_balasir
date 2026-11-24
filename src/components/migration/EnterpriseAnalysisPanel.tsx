@@ -23,6 +23,7 @@ import {
 import type { ExtractedFile } from "./MultiFileDropzone";
 import { useMigration } from "@/lib/migration/store";
 import { useAuth } from "@/contexts/AuthContext";
+import { usePowerQueryWorkflow } from "@/lib/migration/power-query-workflow-state";
 import { collectCompilerInvariantIssues, compileAuthoritatively, compilerFingerprint } from "@/lib/migration/QlikCompilerService";
 import { AutoFixCenter } from "./AutoFixCenter";
 import { repairDomId } from "@/lib/migration/autofix";
@@ -1255,6 +1256,7 @@ export function TabMQueryDataTypes({
 }) {
   const { isDemo } = useAuth();
   const { businessMetadata, technicalMetadata, ruleBookMd, sourceQvsText, etlQvsText, repairFocus } = useMigration();
+  const { state: pqState, isStep1Completed, setStepStatus, invalidateFromStep } = usePowerQueryWorkflow(isDemo);
   const [generatingAi, setGeneratingAi] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
   const [aiQueries, setAiQueries] = useState<Record<string, string> | null>(null);
@@ -1266,6 +1268,7 @@ export function TabMQueryDataTypes({
     onTypeChange(key, val);
     setHasUnsavedChanges(true);
     setSaveSuccess(false);
+    invalidateFromStep(1);
   };
 
   const handleSave = () => {
@@ -1281,6 +1284,7 @@ export function TabMQueryDataTypes({
     onAnalysisUpdate(updatedAnalysis);
     setHasUnsavedChanges(false);
     setSaveSuccess(true);
+    invalidateFromStep(1);
     setTimeout(() => setSaveSuccess(false), 2500);
   };
 
@@ -1300,8 +1304,13 @@ export function TabMQueryDataTypes({
   };
 
   const handleAiGenerate = async () => {
+    if (pqState.activeRunningStep !== null) {
+      toast.info("An operation is currently in progress. Please wait for it to complete.");
+      return;
+    }
     setGeneratingAi(true);
     setAiError(null);
+    setStepStatus(1, "in_progress");
     try {
       const reviewedAnalysis = applyDataTypeOverrides(analysis, {
         ...savedTypeEdits,
@@ -1312,11 +1321,17 @@ export function TabMQueryDataTypes({
       setAiQueries(null);
       onAnalysisUpdate(reviewedResult);
       const fingerprint = compilerFingerprint(reviewedResult);
-      toast.success("Authoritative compiler regeneration completed", {
+      setStepStatus(1, "completed");
+      // Since Step 1 was regenerated, invalidate dependent steps 2 and 3
+      invalidateFromStep(2);
+      toast.success("M Query generated successfully! Step 2 (Apply and Regenerate Power Query) is now unlocked.", {
         description: `Compiler ${fingerprint.compilerVersion}; M hash ${fingerprint.generatedMHash}`,
       });
     } catch (e) {
-      setAiError("Failed to compile Power Query: " + (e instanceof Error ? e.message : String(e)));
+      const errMessage = e instanceof Error ? e.message : String(e);
+      setAiError("Failed to compile Power Query: " + errMessage);
+      setStepStatus(1, "failed", errMessage);
+      toast.error("Failed to generate M Query: " + errMessage);
     } finally {
       setGeneratingAi(false);
     }
@@ -1686,10 +1701,32 @@ export function TabMQueryDataTypes({
             onClick={() => handleAiGenerate()}
             disabled={generatingAi || hasUnsavedChanges}
             title={hasUnsavedChanges ? "Save your data type changes first" : undefined}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-medium shadow-sm hover:opacity-90 disabled:opacity-50 transition-all shrink-0"
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-medium shadow-sm hover:opacity-90 disabled:opacity-50 transition-all shrink-0 cursor-pointer"
           >
-            {generatingAi ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-            {generatingAi ? "Generating..." : (aiQueries ? "Regenerate M Query" : "Generate M Query")}
+            {generatingAi ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : pqState.step1Status === "completed" ? (
+              <Check className="h-4 w-4 text-emerald-400" />
+            ) : pqState.step1Status === "failed" ? (
+              <AlertCircle className="h-4 w-4 text-red-300" />
+            ) : (
+              <Sparkles className="h-4 w-4" />
+            )}
+            <span>
+              {generatingAi
+                ? "Generating..."
+                : pqState.step1Status === "completed"
+                ? "Regenerate M Query"
+                : pqState.step1Status === "failed"
+                ? "Retry Generate M Query"
+                : "Generate M Query"}
+            </span>
+            {pqState.step1Status === "completed" && (
+              <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 ml-1">Completed</span>
+            )}
+            {pqState.step1Status === "failed" && (
+              <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-red-500/20 text-red-300 ml-1">Failed</span>
+            )}
           </button>
 
           {/* Info tip */}
