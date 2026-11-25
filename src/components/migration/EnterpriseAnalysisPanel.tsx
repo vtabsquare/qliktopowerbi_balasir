@@ -590,63 +590,18 @@ function matchSourceFileForRow(row: Pick<MappingRow, "table" | "originalRef">, c
   return candidates.find((f) => [".csv", ".tsv", ".txt", ".xlsx", ".xls", ".json", ".xml", ".parquet", ".qvd"].includes(f.extension.toLowerCase()));
 }
 
-function DynamicMappingInput({ connectorType, value, tableName, originalRef, onChange }: { connectorType: string; value: string; tableName?: string; originalRef?: string; onChange: (val: string) => void }) {
+function DynamicMappingInput({ connectorType, value, onChange }: { connectorType: string; value: string; tableName?: string; originalRef?: string; onChange: (val: string) => void }) {
   const parts = parseMappedRef(value);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (["CSV/Text", "Excel", "Parquet", "JSON", "XML", "Folder"].includes(connectorType)) {
-    const isFolder = connectorType === "Folder";
-    const rawPath = (!value.includes("=") ? value : parts["FilePath"]) || "";
-    const displayName = rawPath.split(/[/\\]/).filter(Boolean).pop() || rawPath;
-
-    const handleBrowseChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const selected = Array.from(e.target.files || []);
-      e.target.value = "";
-      if (!selected.length) return;
-      const registered = await registerAlternateSourceFiles(selected);
-      if (isFolder) {
-        const folderName = (selected[0] as File & { webkitRelativePath?: string }).webkitRelativePath?.split("/")[0] || selected[0].name;
-        onChange(folderName);
-        toast.success(`Selected folder "${folderName}" (${registered.length} file(s) loaded)`);
-      } else {
-        const matched = matchSourceFileForRow({ table: tableName || "", originalRef: originalRef || "" }, registered) || registered[0];
-        if (matched) {
-          onChange(matched.path);
-          toast.success(`Updated mapping to ${matched.path}`);
-        }
-      }
-    };
-
+    const path = (!value.includes("=") ? value : parts["FilePath"]) || "";
     return (
-      <div className="flex min-w-[230px] items-center gap-2">
-        <input
-          ref={fileInputRef}
-          type="file"
-          className="hidden"
-          accept={isFolder ? undefined : SUPPORTED_SOURCE_ACCEPT}
-          {...(isFolder ? ({ webkitdirectory: "", directory: "" } as Record<string, string>) : {})}
-          onChange={(e) => void handleBrowseChange(e)}
-        />
-        <span
-          className={cn(
-            "flex-1 truncate rounded border px-2 py-1 text-xs font-mono",
-            displayName
-              ? "border-border bg-surface text-foreground"
-              : "border-dashed border-amber-500/40 bg-amber-500/5 text-muted-foreground",
-          )}
-          title={rawPath || "No file selected"}
-        >
-          {rawPath || (isFolder ? "No folder selected" : "No file selected")}
-        </span>
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          className="inline-flex shrink-0 items-center gap-1 rounded border border-primary/30 bg-primary/10 px-2.5 py-1 text-[11px] font-semibold text-primary hover:bg-primary/15"
-        >
-          {isFolder ? <FolderOpen className="h-3 w-3" /> : <Upload className="h-3 w-3" />}
-          {displayName ? "Replace" : "Browse"}
-        </button>
-      </div>
+      <input
+        value={path}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="File Path"
+        className="w-full min-w-[200px] rounded border border-border bg-surface px-2 py-1 font-mono text-xs text-foreground"
+      />
     );
   }
 

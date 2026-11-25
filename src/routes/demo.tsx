@@ -17,7 +17,6 @@ import { DemoEndedModal } from "@/components/migration/DemoEndedModal";
 import { FloatingWorkflowNav } from "@/components/migration/FloatingWorkflowNav";
 import { AppHeader } from "@/components/migration/AppHeader";
 import { StageNav } from "@/components/migration/StageNav";
-import { StageBottomDock } from "@/components/migration/StageBottomDock";
 import { StageModalOverlay } from "@/components/migration/StageModalOverlay";
 import { StageValidationBanner } from "@/components/migration/StageValidationBanner";
 import { useStageReadiness } from "@/components/migration/use-stage-readiness";
@@ -226,8 +225,6 @@ function DemoWorkspace({ session, onLoggedOut }: { session?: unknown; onLoggedOu
             </div>
           </main>
         </div>
-
-        <StageBottomDock currentStepId={activeStepId} isDemo onProceedNext={openNextStage} onGoPrevious={() => { if (activeStepId > 0) handleSelectStep(WORKFLOW_STEPS[activeStepId - 1]); }} canProceed={readiness.canProceed} hasErrors={readiness.hasErrors} statusLabel={readiness.statusLabel} blockedReason={readiness.reason} />
 
         <StageModalOverlay isOpen={modalStepId !== null} stepId={modalStepId ?? 0} isDemo onClose={() => setModalStepId(null)} onNavigateToStep={setModalStepId} onViewInCanvas={(targetId) => { setModalStepId(null); handleSelectStep(WORKFLOW_STEPS[targetId]); }} />
 

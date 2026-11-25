@@ -19,7 +19,6 @@ import {
   markStepCompleted,
   WORKFLOW_STEPS,
 } from "@/lib/migration/workflow-gating";
-import { StageBottomDock } from "@/components/migration/StageBottomDock";
 import { StageModalOverlay } from "@/components/migration/StageModalOverlay";
 import { StageValidationBanner } from "@/components/migration/StageValidationBanner";
 import { useStageReadiness } from "@/components/migration/use-stage-readiness";
@@ -182,8 +181,6 @@ function MigrationLayout() {
             </div>
           </main>
         </div>
-
-        {matchedStep && <StageBottomDock currentStepId={currentStep.id} isDemo={isDemo} onProceedNext={openNextStage} onGoPrevious={() => { const previous = WORKFLOW_STEPS[currentStep.id - 1]; if (previous) navigate({ to: previous.path }); }} canProceed={readiness.canProceed} hasErrors={readiness.hasErrors} statusLabel={readiness.statusLabel} blockedReason={readiness.reason} />}
 
         <StageModalOverlay isOpen={modalStepId !== null} stepId={modalStepId ?? 0} isDemo={isDemo} onClose={() => setModalStepId(null)} onNavigateToStep={setModalStepId} onViewInCanvas={navigateToCanvas} />
         <FloatingWorkflowNav />

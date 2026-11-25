@@ -29,7 +29,7 @@ describe("viewport stage shell", () => {
       expect(source).toContain("h-screen w-screen");
       expect(source).toContain("overflow-hidden");
       expect(source).toContain("min-h-0 flex-1 overflow-y-auto");
-      expect(source).toContain("<StageBottomDock");
+      expect(source).not.toContain("<StageBottomDock");
       expect(source).toContain("<StageModalOverlay");
     }
   });
