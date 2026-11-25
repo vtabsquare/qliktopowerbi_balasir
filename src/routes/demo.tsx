@@ -3,12 +3,7 @@ import { useState, useEffect } from "react";
 import { useMigration } from "@/lib/migration/store";
 import { toast } from "sonner";
 import {
-  Sparkles,
-  Lock,
-} from "lucide-react";
-import {
   WORKFLOW_STEPS,
-  isStepCompleted,
   isStepUnlocked,
   getFirstIncompleteStep,
   getCompletedSteps,
@@ -22,6 +17,9 @@ import { DemoEndedModal } from "@/components/migration/DemoEndedModal";
 import { FloatingWorkflowNav } from "@/components/migration/FloatingWorkflowNav";
 import { AppHeader } from "@/components/migration/AppHeader";
 import { StageNav } from "@/components/migration/StageNav";
+import { StageBottomDock } from "@/components/migration/StageBottomDock";
+import { StageModalOverlay } from "@/components/migration/StageModalOverlay";
+import { useStageReadiness } from "@/components/migration/use-stage-readiness";
 
 // Step Component Views
 import { InstructionsPage } from "@/routes/app/instructions";
@@ -54,7 +52,7 @@ function DemoPageRoot() {
 }
 
 // ─── Dedicated Demo Workspace & Step-by-Step Navigation ───────────────────
-function DemoWorkspace({ session, onLoggedOut }: { session?: any; onLoggedOut?: () => void } = {}) {
+function DemoWorkspace({ session, onLoggedOut }: { session?: unknown; onLoggedOut?: () => void } = {}) {
   const { withLoading } = useNavigationLoading();
   const [activeStepId, setActiveStepId] = useState<number>(() => {
     if (typeof window !== "undefined") {
@@ -66,7 +64,8 @@ function DemoWorkspace({ session, onLoggedOut }: { session?: any; onLoggedOut?: 
     }
     return 0;
   });
-  const [completedSteps, setCompletedSteps] = useState<number[]>(() => getCompletedSteps(true));
+  const [, setCompletedSteps] = useState<number[]>(() => getCompletedSteps(true));
+  const [modalStepId, setModalStepId] = useState<number | null>(null);
   const { enterpriseAnalysis } = useMigration();
 
   // Sync completed steps and listen to active step changes
@@ -148,15 +147,37 @@ function DemoWorkspace({ session, onLoggedOut }: { session?: any; onLoggedOut?: 
 
   const currentStep = WORKFLOW_STEPS[activeStepId] || WORKFLOW_STEPS[0];
   const tableCount = enterpriseAnalysis?.finalTables.length ?? 0;
+  const readiness = useStageReadiness(activeStepId);
+
+  const openNextStage = () => {
+    if (!readiness.canProceed) {
+      toast.error(`Step ${currentStep.stepNumber} is not ready`, { description: readiness.reason });
+      return;
+    }
+    markStepCompleted(activeStepId, true);
+    const next = WORKFLOW_STEPS[activeStepId + 1];
+    if (!next) return;
+    if (!isStepUnlocked(next.id, true)) {
+      if (next.phase === 3) window.dispatchEvent(new CustomEvent("open-demo-ended-modal"));
+      toast.info(`🔒 ${next.label} is locked in Demo Version. Phase 3 access requires Production.`);
+      return;
+    }
+    setModalStepId(next.id);
+  };
 
   return (
     <TourProvider>
-      <div className="min-h-screen bg-background" id="vtab-demo-app" data-testid="vtab-demo-app">
+      <div className="flex h-screen w-screen flex-col overflow-hidden bg-background" id="vtab-demo-app" data-testid="vtab-demo-app">
         {/* Full Standard Header with DEMO VERSION badge, Start Tour button, user badge, and logout */}
-        <AppHeader />
+        <div className="z-30 shrink-0"><AppHeader /></div>
+
+        <nav className="z-20 shrink-0 border-b border-border/50 bg-surface/70 px-3 backdrop-blur-md">
+          <StageNav viewportDocked activeStepId={activeStepId} onStepSelect={(targetStage) => handleSelectStep(WORKFLOW_STEPS[targetStage.id])} />
+        </nav>
 
         {/* Main Content Area */}
-        <main className="mx-auto w-full max-w-[1440px] px-4 sm:px-6 lg:px-8 pt-4 sm:pt-6 pb-12 sm:pb-16">
+        <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6 sm:py-5 lg:px-8">
+          <div className="mx-auto w-full max-w-[1440px]">
           {/* Demo Hero Banner (Shown on Step 0: Instructions; hidden on Step 1: Upload Qlik Files and subsequent steps) */}
           {activeStepId === 0 && (
             <section className="mb-6 glass-card p-6 sm:p-8 bg-gradient-to-br from-amber-500/10 via-surface/60 to-primary/10 border border-amber-500/30 shadow-lg rounded-2xl">
@@ -185,12 +206,6 @@ function DemoWorkspace({ session, onLoggedOut }: { session?: any; onLoggedOut?: 
             </section>
           )}
 
-          {/* Unified Enterprise 11-Stage Navigation */}
-          <StageNav
-            activeStepId={activeStepId}
-            onStepSelect={(targetStage) => handleSelectStep(WORKFLOW_STEPS[targetStage.id])}
-          />
-
           {/* Active Step Content Container (Without redundant nested surface card) */}
           <div className="w-full">
             {activeStepId === 0 && <InstructionsPage />}
@@ -203,7 +218,12 @@ function DemoWorkspace({ session, onLoggedOut }: { session?: any; onLoggedOut?: 
             {activeStepId === 7 && <SemanticModelPage />}
             {activeStepId >= 8 && <SemanticModelPage />}
           </div>
+          </div>
         </main>
+
+        <StageBottomDock currentStepId={activeStepId} isDemo onProceedNext={openNextStage} onGoPrevious={() => { if (activeStepId > 0) handleSelectStep(WORKFLOW_STEPS[activeStepId - 1]); }} canProceed={readiness.canProceed} hasErrors={readiness.hasErrors} statusLabel={readiness.statusLabel} blockedReason={readiness.reason} />
+
+        <StageModalOverlay isOpen={modalStepId !== null} stepId={modalStepId ?? 0} isDemo onClose={() => setModalStepId(null)} onNavigateToStep={setModalStepId} onViewInCanvas={(targetId) => { setModalStepId(null); handleSelectStep(WORKFLOW_STEPS[targetId]); }} />
 
         <FloatingWorkflowNav />
         <DemoEndedModal />

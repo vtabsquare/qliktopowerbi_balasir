@@ -245,7 +245,12 @@ export interface WorkflowValidationContext {
   hasQvwAnalysis?: boolean;
   hasExpressionInventory?: boolean;
   hasPowerBiModel?: boolean;
+  hasReadyPowerBiModel?: boolean;
+  hasPowerQueryOutput?: boolean;
   hasSemanticValidation?: boolean;
+  hasCurrentDaxValidation?: boolean;
+  hasBlockingDaxErrors?: boolean;
+  isQvsOnlyMode?: boolean;
 }
 
 /**
@@ -269,7 +274,9 @@ export function validateStepCompletion(
       return { ok: true };
 
     case 2: // QVW Analysis
-      // Validated if QVW analysis exists or if QVS-only mode was used
+      if (!ctx.hasQvwAnalysis && !ctx.isQvsOnlyMode) {
+        return { ok: false, reason: "Complete QVW extraction, or confirm that the uploaded project is QVS-only, before proceeding." };
+      }
       return { ok: true };
 
     case 3: // Expression Conversion
@@ -291,9 +298,21 @@ export function validateStepCompletion(
       return { ok: true };
 
     case 5: // Power Query
+      if (!ctx.hasEnterpriseAnalysis) {
+        return { ok: false, reason: "Complete ETL analysis before approving generated Power Query output." };
+      }
+      if (!ctx.hasPowerQueryOutput) {
+        return { ok: false, reason: "Generate Power Query output for the materialized model tables before proceeding." };
+      }
       return { ok: true };
 
     case 6: // DAX Measures
+      if (!ctx.hasCurrentDaxValidation) {
+        return { ok: false, reason: "Run DAX validation against the latest saved measure expressions before proceeding." };
+      }
+      if (ctx.hasBlockingDaxErrors) {
+        return { ok: false, reason: "Resolve all blocking DAX syntax, reference, function, and dependency errors before proceeding." };
+      }
       return { ok: true };
 
     case 7: // Power BI Model
@@ -303,12 +322,24 @@ export function validateStepCompletion(
           reason: "Please build and review the Power BI semantic model schema before proceeding.",
         };
       }
+      if (!ctx.hasReadyPowerBiModel) {
+        return { ok: false, reason: "Resolve blocking Power BI model diagnostics before approving the model." };
+      }
       return { ok: true };
 
     case 8: // Relationships
+      if (!ctx.hasPowerBiModel) {
+        return { ok: false, reason: "Build the Power BI model before approving relationship recommendations." };
+      }
+      if (!ctx.hasReadyPowerBiModel) {
+        return { ok: false, reason: "Resolve blocking relationship and model diagnostics before proceeding." };
+      }
       return { ok: true };
 
     case 9: // Validation & Export
+      if (!ctx.hasSemanticValidation) {
+        return { ok: false, reason: "Resolve blocking semantic-model and export validation errors before proceeding." };
+      }
       return { ok: true };
 
     default:

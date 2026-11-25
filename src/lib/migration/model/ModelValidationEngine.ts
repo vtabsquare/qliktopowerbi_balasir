@@ -1,4 +1,5 @@
 import type { ModelDiagnostic, PowerBiModelState, PowerBiRelationship, PowerBiTable } from "./PowerBiModelTypes";
+import { modelDaxInputs, validateDaxMeasures } from "../dax/DaxValidation";
 
 function compatibleType(left: string, right: string): boolean {
   const normalize = (value: string) => {
@@ -19,15 +20,6 @@ function relationshipSides(relationship: PowerBiRelationship) {
   if (relationship.cardinality === "one-to-many") return { oneTableId: relationship.fromTableId, oneColumnId: relationship.fromColumnId };
   if (relationship.cardinality === "many-to-one") return { oneTableId: relationship.toTableId, oneColumnId: relationship.toColumnId };
   return null;
-}
-
-function qualifiedDaxReferences(expression: string): Array<{ table: string; object: string }> {
-  return [...expression.matchAll(/(?:'((?:[^']|'')+)'|([A-Za-z_][A-Za-z0-9_ ]*))\s*\[([^\]]+)\]/g)]
-    .map((match) => ({
-      table: (match[1] || match[2] || "").replace(/''/g, "'").trim(),
-      object: (match[3] || "").trim(),
-    }))
-    .filter((item) => item.table && item.object);
 }
 
 export function validateRelationship(relationship: PowerBiRelationship, tables: PowerBiTable[], all: PowerBiRelationship[] = []): ModelDiagnostic[] {
@@ -59,6 +51,9 @@ export function validateRelationship(relationship: PowerBiRelationship, tables: 
 
 export function validatePowerBiModel(model: PowerBiModelState): PowerBiModelState {
   const diagnostics: ModelDiagnostic[] = [];
+  const daxValidation = new Map(
+    validateDaxMeasures(modelDaxInputs(model.tables), model.tables).map((result) => [result.measureId, result]),
+  );
   const tableNames = new Map<string, string[]>();
   const measureNames = new Map<string, string[]>();
   const measureExpressions = new Map<string, { id: string; name: string; table: string }>();
@@ -73,33 +68,27 @@ export function validatePowerBiModel(model: PowerBiModelState): PowerBiModelStat
     for (const measure of table.measures) {
       const nameKey = measure.name.trim().toLowerCase();
       measureNames.set(nameKey, [...(measureNames.get(nameKey) ?? []), measure.id]);
-      if (!measure.expression.trim()) diagnostics.push({ id: `${measure.id}-EMPTY_DAX`, severity: "blocking-error", area: "measure", objectId: measure.id, objectName: measure.name, code: "EMPTY_DAX", message: "The measure has an empty DAX expression.", recommendation: "Enter valid DAX or exclude the source expression with a reason." });
+      for (const issue of daxValidation.get(measure.id)?.issues ?? []) {
+        diagnostics.push({
+          id: `${measure.id}-${issue.code}-${issue.offset ?? "expression"}`,
+          severity: issue.severity === "error" ? "blocking-error" : "warning",
+          area: "measure",
+          objectId: measure.id,
+          objectName: measure.name,
+          code: issue.code,
+          message: `${issue.message}${issue.line ? ` (line ${issue.line}, column ${issue.column})` : ""}`,
+          recommendation: issue.reason,
+        });
+      }
       if (columnNameKeys.has(nameKey)) diagnostics.push({ id: `${measure.id}-COLUMN_COLLISION`, severity: "blocking-error", area: "measure", objectId: measure.id, objectName: measure.name, code: "MEASURE_COLUMN_NAME_COLLISION", message: `The measure '${measure.name}' has the same name as a column in '${table.name}'.`, recommendation: "Use the automatically generated collision-safe measure name before exporting." });
       if (!measure.displayFolder?.trim()) diagnostics.push({ id: `${measure.id}-NO_FOLDER`, severity: "blocking-error", area: "measure", objectId: measure.id, objectName: measure.name, code: "MEASURE_DISPLAY_FOLDER_MISSING", message: `The measure '${measure.name}' is not assigned to a display folder.`, recommendation: "Assign every measure to a Power BI display folder." });
-      if (/\b(?:RGB|ARGB|ColorMix1|ColorMix2|ColorMapJet|ColorMapHue)\s*\(/i.test(measure.expression)) {
-        diagnostics.push({ id: `${measure.id}-QLIK-COLOR`, severity: "blocking-error", area: "measure", objectId: measure.id, objectName: measure.name, code: "QLIK_COLOR_FUNCTION_NOT_CONVERTED", message: `The measure '${measure.name}' still contains a Qlik-only colour function.`, recommendation: "Regenerate it as a hexadecimal colour text measure before export." });
-      }
-      if (/Manual conversion required|FUNCTION_NOT_MAPPED|\bPLACEHOLDER\b|The end of the input/i.test(measure.expression)) {
-        diagnostics.push({ id: `${measure.id}-INVALID-DAX-MARKER`, severity: "blocking-error", area: "measure", objectId: measure.id, objectName: measure.name, code: "INVALID_DAX_MARKER", message: `The measure '${measure.name}' contains an unresolved migration marker or incomplete DAX.`, recommendation: "Complete the DAX in the exact measure editor or exclude the measure before export." });
-      }
       if (/^(?:'((?:[^']|'')+)'|[A-Za-z_][A-Za-z0-9_ ]*)\s*\[[^\]]+\]$/.test(measure.expression.trim())) {
         diagnostics.push({ id: `${measure.id}-NAKED-COLUMN`, severity: "blocking-error", area: "measure", objectId: measure.id, objectName: measure.name, code: "MEASURE_NAKED_COLUMN_REFERENCE", message: `The measure '${measure.name}' directly returns a column without scalar aggregation.`, recommendation: "Use SELECTEDVALUE, MIN, MAX, SUM, COUNT or another context-appropriate scalar expression." });
-      }
-      for (const reference of qualifiedDaxReferences(measure.expression)) {
-        const referencedTable = model.tables.find((candidate) => candidate.name.trim().toLowerCase() === reference.table.trim().toLowerCase());
-        const objectExists = referencedTable && (
-          referencedTable.columns.some((column) => column.name.trim().toLowerCase() === reference.object.trim().toLowerCase())
-          || referencedTable.measures.some((candidate) => candidate.name.trim().toLowerCase() === reference.object.trim().toLowerCase())
-        );
-        if (!objectExists) {
-          diagnostics.push({ id: `${measure.id}-MISSING-${reference.table}-${reference.object}`, severity: "blocking-error", area: "measure", objectId: measure.id, objectName: measure.name, code: "DAX_DEPENDENCY_MISSING", message: `The measure '${measure.name}' references missing object '${reference.table}[${reference.object}]'.`, recommendation: "Map the Qlik field to an exported Power BI column or exclude the measure until the dependency is resolved." });
-        }
       }
       const expressionKey = measure.expression.replace(/\s+/g, "").toLowerCase();
       const duplicateExpression = measureExpressions.get(expressionKey);
       if (expressionKey && duplicateExpression) diagnostics.push({ id: `${measure.id}-DUPLICATE_DAX`, severity: "warning", area: "measure", objectId: measure.id, objectName: measure.name, code: "DUPLICATE_MEASURE_EXPRESSION", message: `The measure '${measure.name}' shares its DAX expression with '${duplicateExpression.name}' from '${duplicateExpression.table}'.`, recommendation: "This is valid. Consolidate only when the measures are semantically identical and no independent lineage is required." });
       else if (expressionKey) measureExpressions.set(expressionKey, { id: measure.id, name: measure.name, table: table.name });
-      if (/Manual conversion required|FUNCTION_NOT_MAPPED/i.test(measure.expression)) diagnostics.push({ id: `${measure.id}-MANUAL_DAX`, severity: "blocking-error", area: "measure", objectId: measure.id, objectName: measure.name, code: "MANUAL_DAX_REVIEW", message: "The measure contains a manual-conversion marker.", recommendation: "Complete and validate the DAX before approval." });
     }
   }
   for (const [name, ids] of tableNames) if (ids.length > 1) diagnostics.push({ id: `DUP-TABLE-${name}`, severity: "blocking-error", area: "model", objectName: name, code: "DUPLICATE_TABLE_NAME", message: `Multiple tables use the name '${name}'.`, recommendation: "Rename tables so semantic-model object names are unique." });

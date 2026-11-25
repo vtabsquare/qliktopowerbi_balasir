@@ -27,9 +27,10 @@ export type NavViewMode = "default" | "compact" | "all-stages";
 export interface StageNavProps {
   activeStepId?: number;
   onStepSelect?: (stage: (typeof STAGES)[number]) => void;
+  viewportDocked?: boolean;
 }
 
-export function StageNav({ activeStepId, onStepSelect }: StageNavProps = {}) {
+export function StageNav({ activeStepId, onStepSelect, viewportDocked = false }: StageNavProps = {}) {
   const router = useRouterState();
   const navigate = useNavigate();
   const currentPath = router.location.pathname;
@@ -85,7 +86,7 @@ export function StageNav({ activeStepId, onStepSelect }: StageNavProps = {}) {
   }, [activeIndex]);
 
   const [selectedPhase, setSelectedPhase] = useState<number>(activePhaseId);
-  const [viewMode, setViewMode] = useState<NavViewMode>("default");
+  const [viewMode, setViewMode] = useState<NavViewMode>(viewportDocked ? "compact" : "default");
 
   useEffect(() => {
     setSelectedPhase(activePhaseId);
@@ -164,6 +165,26 @@ export function StageNav({ activeStepId, onStepSelect }: StageNavProps = {}) {
     },
     [activeIndex, isDemo, isDemoRoute, navigate, normalizedPath, onStepSelect, withLoading],
   );
+
+  if (viewportDocked) {
+    return (
+      <div id="migration-stage-menu" className="mx-auto flex w-full max-w-[1440px] items-center gap-2 overflow-x-auto px-1 py-1.5 no-scrollbar" aria-label="Migration stages">
+        {STAGES.map((stage, index) => (
+          <div key={stage.id} className="shrink-0">
+            <StagePill
+              stage={stage}
+              index={index}
+              isActive={index === activeIndex}
+              isCompleted={isStepCompleted(index, isDemo)}
+              isLocked={!isStepUnlocked(index, isDemo)}
+              onNavigate={() => handleStageNavigation(stage)}
+              size="compact"
+            />
+          </div>
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMigration } from "@/lib/migration/store";
 import { useAuth } from "@/contexts/AuthContext";
@@ -7,8 +7,9 @@ import { EnterpriseDaxPage } from "@/components/migration/EnterpriseDaxPage";
 import { RepairFocusNotice } from "@/components/migration/RepairFocusNotice";
 import { DemoEndedModal } from "@/components/migration/DemoEndedModal";
 import { toast } from "sonner";
-import { markStepCompleted, navigateWorkflow } from "@/lib/migration/workflow-gating";
+import { markStepCompleted, navigateWorkflow, unmarkStepCompleted } from "@/lib/migration/workflow-gating";
 import { useNavigationLoading } from "@/components/common/NavigationLoadingOverlay";
+import type { DaxValidationResult } from "@/lib/migration/dax";
 
 export const Route = createFileRoute("/app/dax-measures")({
   component: DaxMeasuresPage,
@@ -20,8 +21,25 @@ export function DaxMeasuresPage() {
   const { isDemo } = useAuth();
   const { withLoading } = useNavigationLoading();
   const [showDemoEndedModal, setShowDemoEndedModal] = useState(false);
+  const [daxValidation, setDaxValidation] = useState<DaxValidationResult[] | null>(null);
+  const hasBlockingDax = daxValidation === null || daxValidation.some((result) => result.status !== "valid");
+  const blockingCount = daxValidation?.filter((result) => result.status !== "valid").length ?? 0;
+
+  const handleValidationChange = useCallback((results: DaxValidationResult[]) => {
+    setDaxValidation(results);
+  }, []);
+
+  useEffect(() => {
+    if (daxValidation?.some((result) => result.status !== "valid")) unmarkStepCompleted(6, isDemo);
+  }, [daxValidation, isDemo]);
 
   const handleProceedToSemanticModel = () => {
+    if (hasBlockingDax) {
+      toast.error("DAX validation must pass before continuing", {
+        description: `${blockingCount || "One or more"} measure(s) still contain a blocking error. Open the affected measure, fix it, and save to revalidate.`,
+      });
+      return;
+    }
     markStepCompleted(6, isDemo);
     if (isDemo) {
       window.dispatchEvent(new CustomEvent("open-demo-ended-modal"));
@@ -49,13 +67,6 @@ export function DaxMeasuresPage() {
           <button onClick={() => navigateWorkflow("/app/analysis", navigate)} className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-border text-sm font-medium">
             <ArrowLeft className="h-4 w-4" /> Go to Analysis
           </button>
-          <button
-            data-tour="semantic-model-export"
-            onClick={handleProceedToSemanticModel}
-            className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-primary text-primary-foreground font-semibold text-sm shadow"
-          >
-            Semantic Model &amp; Export <ArrowRight className="h-4 w-4" />
-          </button>
         </div>
       </div>
     );
@@ -64,7 +75,13 @@ export function DaxMeasuresPage() {
   return (
     <div className="space-y-5">
       <RepairFocusNotice areas={["dax"]} />
-      <EnterpriseDaxPage analysis={enterpriseAnalysis} />
+      <EnterpriseDaxPage analysis={enterpriseAnalysis} onValidationChange={handleValidationChange} />
+      {hasBlockingDax && daxValidation !== null && (
+        <div className="flex items-start gap-3 rounded-xl border border-red-500/30 bg-red-500/5 p-4 text-sm" role="alert">
+          <Lock className="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
+          <div><div className="font-semibold">Continue is blocked by DAX validation</div><div className="mt-1 text-xs text-muted-foreground">Resolve and save all {blockingCount} affected measure(s). Warnings remain visible but do not block progress.</div></div>
+        </div>
+      )}
       <div className="flex justify-between items-center pt-2">
         <button onClick={() => navigateWorkflow("/app/power-query", navigate)} className="flex items-center gap-2 px-4 py-2 rounded-lg border border-border text-sm font-medium hover:bg-surface-elevated">
           <ArrowLeft className="h-4 w-4" /> Back to Power Query
@@ -72,7 +89,10 @@ export function DaxMeasuresPage() {
         <button
           data-tour="semantic-model-export"
           onClick={handleProceedToSemanticModel}
-          className="flex items-center gap-2 px-6 py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-sm shadow-lg hover:opacity-90 transition-all"
+          disabled={hasBlockingDax}
+          aria-disabled={hasBlockingDax}
+          title={hasBlockingDax ? "Resolve all blocking DAX validation errors before continuing" : undefined}
+          className="flex items-center gap-2 px-6 py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-sm shadow-lg hover:opacity-90 transition-all disabled:cursor-not-allowed disabled:opacity-50"
         >
           Semantic Model &amp; Export <ArrowRight className="h-4 w-4" />
         </button>

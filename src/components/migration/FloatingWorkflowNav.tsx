@@ -86,7 +86,7 @@ export function FloatingWorkflowNav() {
 
   return (
     <>
-      <div className="floating-quick-jump fixed bottom-4 right-4 z-40 sm:bottom-6 sm:right-6 transition-all duration-200">
+      <div className="floating-quick-jump fixed bottom-20 right-4 z-40 sm:bottom-20 sm:right-6 transition-all duration-200">
         <button
           onClick={() => setOpen((value) => !value)}
           className="h-10 sm:h-11 px-4 sm:px-5 rounded-full bg-gradient-to-r from-primary to-[oklch(0.62_0.2_260)] text-primary-foreground shadow-elevated flex items-center gap-2 text-xs font-bold hover:scale-105 active:scale-95 transition-all cursor-pointer"

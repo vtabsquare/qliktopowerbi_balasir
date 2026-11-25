@@ -1,0 +1,88 @@
+import { describe, expect, it } from "vitest";
+import { validateDaxMeasures } from "../src/lib/migration/dax/DaxValidation";
+import { repairDaxDependencies } from "../src/lib/migration/dax/DaxDependencyRepair";
+import { validateStepCompletion } from "../src/lib/migration/workflow-gating";
+import type { PowerBiTable } from "../src/lib/migration/model";
+
+function table(name: string, columns: string[], measures: PowerBiTable["measures"] = []): PowerBiTable {
+  return {
+    id: `T-${name}`,
+    name,
+    sourceName: name,
+    kind: "fact",
+    hidden: false,
+    columns: columns.map((column) => ({ id: `C-${name}-${column}`, name: column, sourceName: column, dataType: "decimal", hidden: false, isKey: false })),
+    measures,
+    hierarchies: [],
+    sourceLineage: [],
+    warnings: [],
+  };
+}
+
+function measure(id: string, name: string, expression: string, homeTable = "Sales") {
+  return { id, name, expression, originalExpression: `Qlik ${name}`, homeTable, displayFolder: "Qlik measures", hidden: false, approved: false, status: "generated" };
+}
+
+describe("Phase 2 DAX quality gate", () => {
+  it("blocks syntax, unknown function and unresolved model references", () => {
+    const tables = [table("Sales", ["Amount"] )];
+    const results = validateDaxMeasures([
+      { id: "bad-syntax", name: "Bad syntax", expression: "SUM('Sales'[Amount]", table: "Sales" },
+      { id: "bad-function", name: "Bad function", expression: "QLIKSUM('Sales'[Amount])", table: "Sales" },
+      { id: "bad-reference", name: "Bad reference", expression: "SUM('Sales'[Missing])", table: "Sales" },
+    ], tables);
+
+    expect(results.every((result) => result.status !== "valid")).toBe(true);
+    expect(results.flatMap((result) => result.issues.map((issue) => issue.code))).toEqual(expect.arrayContaining([
+      "DAX_DELIMITER_UNCLOSED",
+      "DAX_FUNCTION_UNKNOWN",
+      "DAX_DEPENDENCY_MISSING",
+    ]));
+    expect(results[0].issues[0]).toEqual(expect.objectContaining({ line: 1, column: expect.any(Number) }));
+  });
+
+  it("keeps warnings visible without blocking a valid expression", () => {
+    const tables = [table("Sales", ["Amount"] )];
+    const results = validateDaxMeasures([
+      { id: "one", name: "Revenue", expression: "SUM('Sales'[Amount])", table: "Sales" },
+      { id: "two", name: "Revenue copy", expression: "SUM('Sales'[Amount])", table: "Sales" },
+    ], tables);
+
+    expect(results[1].status).toBe("valid");
+    expect(results[1].issues).toContainEqual(expect.objectContaining({ code: "DAX_DUPLICATE_EXPRESSION", severity: "warning" }));
+  });
+
+  it("repairs only a high-confidence schema match and passes the same validator afterward", () => {
+    const broken = measure("M-Revenue", "Revenue", "SUM('Sales'[ActualAmount])");
+    const tables = [table("Sales", ["Amount"], [broken])];
+    const before = validateDaxMeasures([{ id: broken.id, name: broken.name, expression: broken.expression, table: "Sales" }], tables);
+    expect(before[0].status).toBe("needs-fix");
+
+    const repaired = repairDaxDependencies(tables).tables;
+    const repairedMeasure = repaired[0].measures[0];
+    const after = validateDaxMeasures([{ id: repairedMeasure.id, name: repairedMeasure.name, expression: repairedMeasure.expression, table: "Sales" }], repaired);
+
+    expect(repairedMeasure.expression).toBe("SUM('Sales'[Amount])");
+    expect(after[0].status).toBe("valid");
+  });
+
+  it("requires a current passing result before workflow completion", () => {
+    expect(validateStepCompletion(6, {})).toEqual(expect.objectContaining({ ok: false }));
+    expect(validateStepCompletion(6, { hasCurrentDaxValidation: true, hasBlockingDaxErrors: true })).toEqual(expect.objectContaining({ ok: false }));
+    expect(validateStepCompletion(6, { hasCurrentDaxValidation: true, hasBlockingDaxErrors: false })).toEqual({ ok: true });
+  });
+
+  it("never overwrites a valid user-approved measure during dependency repair", () => {
+    const approvedMeasure = {
+      ...measure("M-Approved", "Approved Revenue", "SUM('Sales'[Amount])"),
+      approved: true,
+      status: "approved",
+    };
+    const tables = [table("Sales", ["Amount"], [approvedMeasure])];
+    const repaired = repairDaxDependencies(tables);
+    expect(repaired.tables[0].measures[0].expression).toBe("SUM('Sales'[Amount])");
+    expect(repaired.tables[0].measures[0].approved).toBe(true);
+    expect(repaired.repairs).toHaveLength(0);
+  });
+});
+

@@ -19,7 +19,7 @@ function Metric({ label, value }: { label: string; value: string | number }) {
   );
 }
 
-function PipelineLogsPage() {
+export function PipelineLogsPage() {
   const navigate = useNavigate();
   const { isDemo } = useAuth();
   const {

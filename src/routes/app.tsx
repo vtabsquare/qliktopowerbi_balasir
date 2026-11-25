@@ -4,7 +4,7 @@ import { StageNav } from "@/components/migration/StageNav";
 import { useMigration } from "@/lib/migration/store";
 import { Outlet } from "@tanstack/react-router";
 import { useAuth } from "@/contexts/AuthContext";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { FloatingWorkflowNav } from "@/components/migration/FloatingWorkflowNav";
 import { DemoEndedModal } from "@/components/migration/DemoEndedModal";
 import { TourProvider } from "@/contexts/TourContext";
@@ -16,7 +16,12 @@ import {
   getStepByPath,
   isStepUnlocked,
   getFirstIncompleteStep,
+  markStepCompleted,
+  WORKFLOW_STEPS,
 } from "@/lib/migration/workflow-gating";
+import { StageBottomDock } from "@/components/migration/StageBottomDock";
+import { StageModalOverlay } from "@/components/migration/StageModalOverlay";
+import { useStageReadiness } from "@/components/migration/use-stage-readiness";
 
 export const Route = createFileRoute("/app")({
   head: () => ({
@@ -62,7 +67,7 @@ function AuthGuard() {
       if (isDemo && currentPath.startsWith("/app")) {
         const step = getStepByPath(currentPath);
         const stepParam = step?.demoStepParam || "instructions";
-        navigate({ to: `/demo?step=${stepParam}` as any });
+        window.location.href = `/demo?step=${encodeURIComponent(stepParam)}`;
         return;
       }
 
@@ -112,32 +117,65 @@ function MigrationLayout() {
   const { isDemo } = useAuth();
   const { enterpriseAnalysis } = useMigration();
   const router = useRouterState();
+  const navigate = useNavigate();
   const currentPath = router.location.pathname;
   const isInstructions = currentPath === "/app/instructions";
   const isUploadStep = currentPath === "/app" || currentPath === "/app/";
   const tableCount = enterpriseAnalysis?.finalTables.length ?? 0;
+  const matchedStep = getStepByPath(currentPath);
+  const currentStep = matchedStep || WORKFLOW_STEPS[0];
+  const readiness = useStageReadiness(currentStep.id);
+  const [modalStepId, setModalStepId] = useState<number | null>(null);
+
+  const openNextStage = () => {
+    if (!readiness.canProceed) {
+      toast.error(`Step ${currentStep.stepNumber} is not ready`, { description: readiness.reason });
+      return;
+    }
+    markStepCompleted(currentStep.id, isDemo);
+    const nextStep = WORKFLOW_STEPS[currentStep.id + 1];
+    if (!nextStep) return;
+    if (!isStepUnlocked(nextStep.id, isDemo)) {
+      if (isDemo && nextStep.phase === 3) window.dispatchEvent(new CustomEvent("open-demo-ended-modal"));
+      toast.info(isDemo ? "Phase 3 is locked in the Demo Version." : "The next stage is still locked.");
+      return;
+    }
+    setModalStepId(nextStep.id);
+  };
+
+  const navigateToCanvas = (stepId: number) => {
+    const target = WORKFLOW_STEPS[stepId];
+    if (!target) return;
+    setModalStepId(null);
+    navigate({ to: target.path });
+  };
 
   return (
     <TourProvider>
-      <div className="min-h-screen" id="vtab-demo-app" data-testid="vtab-demo-app">
-        <AppHeader />
-        <main className="mx-auto w-full max-w-[1440px] px-4 sm:px-6 lg:px-8 pt-4 sm:pt-6 pb-20">
-          {isInstructions ? (
-            <Hero tableCount={tableCount} />
-          ) : !isUploadStep ? (
-            <div className="mb-4 flex items-center justify-between rounded-xl bg-surface/60 px-4 py-2 text-xs border border-border/60 shadow-xs">
-              <div className="flex items-center gap-2 font-medium text-muted-foreground">
-                <span className="h-2 w-2 rounded-full bg-success animate-pulse" />
-                <span>Workspace Active</span>
-                <span>•</span>
-                <span className="text-foreground font-semibold">{tableCount ? `${tableCount} Final Tables` : "Pipeline Ready"}</span>
+      <div className="flex h-screen w-screen flex-col overflow-hidden bg-background" id="vtab-demo-app" data-testid="vtab-demo-app">
+        <div className="z-30 shrink-0"><AppHeader /></div>
+        {matchedStep && <nav className="z-20 shrink-0 border-b border-border/50 bg-surface/70 px-3 backdrop-blur-md"><StageNav viewportDocked /></nav>}
+
+        <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6 sm:py-5 lg:px-8">
+          <div className="mx-auto w-full max-w-[1440px] space-y-5">
+            {isInstructions ? (
+              <Hero tableCount={tableCount} compact />
+            ) : !isUploadStep && matchedStep ? (
+              <div className="flex items-center justify-between rounded-xl border border-border/60 bg-surface/60 px-4 py-2 text-xs shadow-xs">
+                <div className="flex items-center gap-2 font-medium text-muted-foreground">
+                  <span className="h-2 w-2 rounded-full bg-success animate-pulse" />
+                  <span>Workspace Active</span><span>•</span>
+                  <span className="font-semibold text-foreground">{tableCount ? `${tableCount} Final Tables` : "Pipeline Ready"}</span>
+                </div>
               </div>
-              <a href="#migration-stage-menu" className="text-primary hover:underline font-semibold">Change Stage ↓</a>
-            </div>
-          ) : null}
-          <StageNav />
-          <Outlet />
+            ) : null}
+            <Outlet />
+          </div>
         </main>
+
+        {matchedStep && <StageBottomDock currentStepId={currentStep.id} isDemo={isDemo} onProceedNext={openNextStage} onGoPrevious={() => { const previous = WORKFLOW_STEPS[currentStep.id - 1]; if (previous) navigate({ to: previous.path }); }} canProceed={readiness.canProceed} hasErrors={readiness.hasErrors} statusLabel={readiness.statusLabel} blockedReason={readiness.reason} />}
+
+        <StageModalOverlay isOpen={modalStepId !== null} stepId={modalStepId ?? 0} isDemo={isDemo} onClose={() => setModalStepId(null)} onNavigateToStep={setModalStepId} onViewInCanvas={navigateToCanvas} />
         <FloatingWorkflowNav />
         {isDemo && <DemoEndedModal />}
         {isDemo && <TourGuideOverlay />}

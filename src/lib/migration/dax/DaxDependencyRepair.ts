@@ -1,6 +1,7 @@
 import type { EnterpriseAnalysis } from "../enterprise-parser";
 import type { PowerBiTable } from "../model/PowerBiModelTypes";
 import { rewriteQlikColourFunctions } from "./DaxSafety";
+import { validateDaxMeasures } from "./DaxValidation";
 
 export interface DaxDependencyRepair {
   table: string;
@@ -244,6 +245,15 @@ export function repairDaxDependencies(
 
   for (const homeTable of tables) {
     for (const measure of homeTable.measures) {
+      if (
+        measure.approved &&
+        validateDaxMeasures(
+          [{ id: measure.id, name: measure.name, expression: measure.expression, table: homeTable.name }],
+          tables,
+        )[0]?.status === "valid"
+      ) {
+        continue;
+      }
       let expression = rewriteQlikColourFunctions(measure.expression);
       const qualified = [...expression.matchAll(/(?:'((?:[^']|'')+)'|([A-Za-z_][A-Za-z0-9_ ]*))\s*\[([^\]]+)\]/g)];
       for (const match of qualified) {

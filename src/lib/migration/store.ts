@@ -772,6 +772,9 @@ export const useMigration = create<MigrationStore>()(persist((set, get) => ({
   }),
   saveAndValidateMeasure: (tableId, measureId, expression) => {
     const before = get();
+    const measureName = before.powerBiModel?.tables
+      .find((table) => table.id === tableId)?.measures
+      .find((measure) => measure.id === measureId)?.name;
     const beforeIssues = before.validationState.status === "stale"
       ? collectRepairIssues(before.enterpriseAnalysis, before.powerBiModel)
       : before.validationState.issues;
@@ -785,19 +788,40 @@ export const useMigration = create<MigrationStore>()(persist((set, get) => ({
     let enterpriseAnalysis = synchronizeAnalysisDaxFromModel(updated.enterpriseAnalysis, validatedModel);
     if (enterpriseAnalysis) enterpriseAnalysis = revalidateEnterpriseAnalysis(enterpriseAnalysis);
     const issues = collectRepairIssues(enterpriseAnalysis, validatedModel);
-    const beforeIds = issueIds(beforeIssues);
-    const afterIds = issueIds(issues);
+    const belongsToMeasure = (issue: RepairIssue) => issue.target.objectId === measureId
+      || Boolean(measureName && issue.objectName.toLowerCase() === measureName.toLowerCase());
+    const measureIssues = issues.filter(belongsToMeasure);
+    const isValid = !measureIssues.some((issue) => issue.severity === "blocking-error" || issue.severity === "error");
+    const syncedModel = validatedModel
+      ? validatePowerBiModel({
+          ...validatedModel,
+          tables: validatedModel.tables.map((table) =>
+            table.id === tableId
+              ? {
+                  ...table,
+                  measures: table.measures.map((measure) =>
+                    measure.id === measureId
+                      ? { ...measure, approved: isValid, status: isValid ? "approved" : "needs-fix" }
+                      : measure,
+                  ),
+                }
+              : table,
+          ),
+        })
+      : null;
+    const beforeIds = issueIds(beforeIssues.filter(belongsToMeasure));
+    const afterIds = issueIds(measureIssues);
     const resolvedCount = [...beforeIds].filter((id) => !afterIds.has(id)).length;
     const nextValidation = validatedState(
       enterpriseAnalysis,
-      validatedModel,
+      syncedModel,
       updated.validationState.workspaceRevision,
       updated.validationState.validationRevision + 1,
     );
     set((state) => ({
       enterpriseAnalysis,
-      powerBiModel: validatedModel,
-      expressionInventory: synchronizeInventoryDaxFromModel(state.expressionInventory, validatedModel),
+      powerBiModel: syncedModel,
+      expressionInventory: synchronizeInventoryDaxFromModel(state.expressionInventory, syncedModel),
       validationState: nextValidation,
       autoFixReport: null,
       repairFocus: null,
@@ -810,9 +834,9 @@ export const useMigration = create<MigrationStore>()(persist((set, get) => ({
     }));
     return {
       resolvedCount,
-      remainingCount: issues.length,
-      isValid: !issues.some((issue) => issue.severity === "blocking-error" || issue.severity === "error"),
-      issues,
+      remainingCount: measureIssues.length,
+      isValid,
+      issues: measureIssues,
     };
   },
   addRelationship: (relationship) => {

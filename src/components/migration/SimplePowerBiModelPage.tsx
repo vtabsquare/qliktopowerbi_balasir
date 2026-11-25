@@ -49,11 +49,11 @@ import { cn } from "@/lib/utils";
 
 type ModelTab = "overview" | "tables" | "relationships" | "checks";
 
-export function SimplePowerBiModelPage() {
+export function SimplePowerBiModelPage({ forcedRelationshipsPage }: { forcedRelationshipsPage?: boolean } = {}) {
   const navigate = useNavigate();
   const router = useRouterState();
   const currentPath = router.location.pathname;
-  const isRelationshipsPage = currentPath === "/app/relationships";
+  const isRelationshipsPage = forcedRelationshipsPage ?? currentPath === "/app/relationships";
   const { isDemo } = useAuth();
   const { withLoading } = useNavigationLoading();
 
@@ -152,12 +152,12 @@ export function SimplePowerBiModelPage() {
       </section>
 
       <section className="surface-card p-5">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-center">
-          <div className="flex-1">
+        <div className="space-y-4">
+          <div className="max-w-4xl">
             <h3 className="font-semibold">Choose how the Power BI model is completed</h3>
-            <p className="mt-1 text-xs text-muted-foreground">This choice controls which relationships are written to the PBIP. Power Query tables, measures, composite keys and lineage remain available in every mode.</p>
+            <p className="mt-1 text-sm leading-6 text-muted-foreground">This choice controls which relationships are written to the PBIP. Power Query tables, measures, composite keys and lineage remain available in every mode.</p>
           </div>
-          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {([
               ["qlik-equivalent", "Qlik-equivalent", "Reproduce explicit Qlik joins and table grain as closely as Power BI permits."],
               ["powerbi-optimized", "Power BI optimized", "Prefer a governed fact/dimension model and remove redundant semantic tables."],
@@ -168,15 +168,16 @@ export function SimplePowerBiModelPage() {
                 key={mode}
                 type="button"
                 onClick={() => setModelBuildMode(mode)}
+                aria-pressed={powerBiModel.buildMode === mode || (mode === "powerbi-optimized" && powerBiModel.buildMode === "automatic")}
                 className={cn(
-                  "rounded-xl border px-4 py-3 text-left transition",
+                  "min-h-32 rounded-xl border px-4 py-4 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
                   powerBiModel.buildMode === mode || (mode === "powerbi-optimized" && powerBiModel.buildMode === "automatic")
                     ? "border-primary bg-primary/10"
                     : "border-border hover:bg-muted/40",
                 )}
               >
-                <span className="block text-xs font-semibold">{title}</span>
-                <span className="mt-1 block text-[10px] text-muted-foreground">{detail}</span>
+                <span className="block text-sm font-semibold">{title}</span>
+                <span className="mt-2 block text-xs leading-5 text-muted-foreground">{detail}</span>
               </button>
             ))}
           </div>
@@ -192,7 +193,7 @@ export function SimplePowerBiModelPage() {
       </section>
 
       <section className="surface-card p-2">
-        <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+        <div className="grid auto-rows-fr grid-cols-2 gap-2 md:grid-cols-4">
           <TabButton active={tab === "overview"} onClick={() => setTab("overview")} icon={<Network className="h-4 w-4" />} label="Model summary" />
           <TabButton active={tab === "tables"} onClick={() => setTab("tables")} icon={<Table2 className="h-4 w-4" />} label="Tables & keys" />
           <TabButton active={tab === "relationships"} onClick={() => setTab("relationships")} icon={<Link2 className="h-4 w-4" />} label="Relationships" />
@@ -307,8 +308,8 @@ function OverviewPanel({ tables, relationships, onOpenTables, onOpenRelationship
   const active = relationships.filter((relationship) => relationship.active && !relationship.deleted);
 
   return (
-    <div className="grid gap-5 xl:grid-cols-[1.35fr_0.65fr]">
-      <section className="surface-card p-5">
+    <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1.65fr)_minmax(19rem,0.75fr)]">
+      <section className="surface-card min-w-0 p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h3 className="font-semibold">Recommended star-schema view</h3>
@@ -319,12 +320,12 @@ function OverviewPanel({ tables, relationships, onOpenTables, onOpenRelationship
           </button>
         </div>
 
-        <div className="mt-5 grid gap-5 lg:grid-cols-[1fr_auto_1fr] lg:items-center">
+        <div className="mt-5 grid min-w-0 gap-4 md:grid-cols-[minmax(0,1fr)_5rem_minmax(0,1fr)] md:items-center">
           <TableGroup title="Lookup tables" tables={dimensions} tone="dimension" />
-          <div className="hidden h-full min-h-48 items-center justify-center lg:flex">
-            <div className="flex flex-col items-center gap-2 text-muted-foreground">
-              <Link2 className="h-6 w-6" />
-              <span className="text-[10px] font-semibold uppercase">{active.length} validated links</span>
+          <div className="hidden h-full min-h-32 items-center justify-center md:flex" aria-label={`${active.length} validated relationships connect lookup and fact tables`}>
+            <div className="flex w-full flex-col items-center gap-2 text-center text-muted-foreground">
+              <div className="flex w-full items-center"><span className="h-px flex-1 bg-border" /><Link2 className="mx-1 h-5 w-5 shrink-0" /><span className="h-px flex-1 bg-border" /></div>
+              <span className="text-[9px] font-semibold uppercase leading-4">{active.length} validated links</span>
             </div>
           </div>
           <TableGroup title="Fact tables" tables={facts} tone="fact" />
@@ -332,7 +333,7 @@ function OverviewPanel({ tables, relationships, onOpenTables, onOpenRelationship
         {supporting.length > 0 && <div className="mt-5"><TableGroup title="Supporting tables" tables={supporting} tone="support" /></div>}
       </section>
 
-      <section className="surface-card p-5">
+      <section className="surface-card min-w-0 p-5">
         <h3 className="font-semibold">What the application decided</h3>
         <div className="mt-4 space-y-3">
           <Decision icon={<CheckCircle2 className="h-4 w-4" />} title={`${active.length} relationships included`} text="Only approved, validated relationships are written into Power BI." tone="good" />
@@ -340,8 +341,8 @@ function OverviewPanel({ tables, relationships, onOpenTables, onOpenRelationship
           <Decision icon={<ShieldAlert className="h-4 w-4" />} title="Risky paths stay inactive" text="Many-to-many, bidirectional and low-confidence matches require review." tone="warning" />
         </div>
         <div className="mt-5 grid gap-2">
-          <button onClick={onOpenRelationships} className="rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground">Review relationship exceptions</button>
-          <button onClick={onOpenTables} className="rounded-xl border border-border px-4 py-3 text-sm font-semibold">Review table roles and keys</button>
+          <button onClick={onOpenRelationships} className="min-h-11 w-full rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground">Review relationship exceptions</button>
+          <button onClick={onOpenTables} className="min-h-11 w-full rounded-xl border border-border px-4 py-3 text-sm font-semibold">Review table roles and keys</button>
         </div>
       </section>
     </div>
@@ -612,13 +613,13 @@ function ValidationPanel({ diagnostics, readiness, visualValid, visualTotal, onV
 }
 
 function TableGroup({ title, tables, tone }: { title: string; tables: PowerBiTable[]; tone: "fact" | "dimension" | "support" }) {
-  return <div><div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{title}</div><div className="grid gap-2">{tables.length ? tables.map((table) => <div key={table.id} className={cn("rounded-xl border p-3", tone === "fact" ? "border-blue-500/25 bg-blue-500/5" : tone === "dimension" ? "border-violet-500/25 bg-violet-500/5" : "border-border")}><div className="flex items-center gap-2"><Database className="h-3.5 w-3.5" /><span className="truncate text-xs font-semibold">{table.name}</span><span className="ml-auto text-[9px] uppercase text-muted-foreground">{table.kind}</span></div><div className="mt-1 text-[9px] text-muted-foreground">{table.columns.length} fields · key: {table.columns.find((column) => column.isKey)?.name || "None"}</div></div>) : <div className="rounded-xl border border-dashed border-border p-4 text-center text-xs text-muted-foreground">None detected</div>}</div></div>;
+  return <div className="min-w-0"><div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{title}</div><div className="grid gap-2">{tables.length ? tables.map((table) => { const key = table.columns.find((column) => column.isKey)?.name || "None"; return <div key={table.id} className={cn("min-w-0 rounded-xl border p-3", tone === "fact" ? "border-blue-500/25 bg-blue-500/5" : tone === "dimension" ? "border-violet-500/25 bg-violet-500/5" : "border-border")}><div className="flex min-w-0 items-center gap-2"><Database className="h-3.5 w-3.5 shrink-0" /><span title={table.name} className="min-w-0 flex-1 truncate text-xs font-semibold">{table.name}</span><span className="shrink-0 text-[9px] uppercase text-muted-foreground">{table.kind}</span></div><div title={`${table.columns.length} fields · key: ${key}`} className="mt-1 truncate text-[9px] text-muted-foreground">{table.columns.length} fields · key: {key}</div></div>; }) : <div className="rounded-xl border border-dashed border-border p-4 text-center text-xs text-muted-foreground">None detected</div>}</div></div>;
 }
 
 function GuideStep({ number, title, text, active, onClick }: { number: string; title: string; text: string; active: boolean; onClick: () => void }) { return <button onClick={onClick} className={cn("flex items-start gap-3 p-4 text-left transition", active ? "bg-primary/5" : "hover:bg-muted/40")}><span className={cn("grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-bold", active ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground")}>{number}</span><span><span className="block text-xs font-semibold">{title}</span><span className="mt-1 block text-[10px] text-muted-foreground">{text}</span></span></button>; }
-function TabButton({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) { return <button onClick={onClick} className={cn("flex items-center justify-center gap-2 rounded-xl px-3 py-3 text-xs font-semibold transition", active ? "bg-primary text-primary-foreground shadow" : "text-muted-foreground hover:bg-muted")}>{icon}{label}</button>; }
+function TabButton({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) { return <button onClick={onClick} aria-pressed={active} className={cn("flex min-h-12 items-center justify-center gap-2 rounded-xl px-3 py-3 text-center text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary", active ? "bg-primary text-primary-foreground shadow" : "text-muted-foreground hover:bg-muted")}>{icon}{label}</button>; }
 function Metric({ label, value, hint, good, warning }: { label: string; value: number; hint: string; good?: boolean; warning?: boolean }) { return <div className="surface-card p-4"><div className={cn("font-display text-2xl font-bold", good && "text-emerald-600", warning && "text-amber-600")}>{value}</div><div className="text-xs font-semibold">{label}</div><div className="mt-1 text-[10px] text-muted-foreground">{hint}</div></div>; }
-function Decision({ icon, title, text, tone }: { icon: React.ReactNode; title: string; text: string; tone: "good" | "warning" | "info" }) { return <div className={cn("flex gap-3 rounded-xl border p-3", tone === "good" ? "border-emerald-500/20 bg-emerald-500/5 text-emerald-700" : tone === "warning" ? "border-amber-500/20 bg-amber-500/5 text-amber-700" : "border-blue-500/20 bg-blue-500/5 text-blue-700")}><span className="mt-0.5">{icon}</span><div><div className="text-xs font-semibold">{title}</div><div className="mt-1 text-[10px] text-muted-foreground">{text}</div></div></div>; }
+function Decision({ icon, title, text, tone }: { icon: React.ReactNode; title: string; text: string; tone: "good" | "warning" | "info" }) { return <div className={cn("flex min-h-24 w-full gap-3 rounded-xl border p-4", tone === "good" ? "border-emerald-500/20 bg-emerald-500/5 text-emerald-700" : tone === "warning" ? "border-amber-500/20 bg-amber-500/5 text-amber-700" : "border-blue-500/20 bg-blue-500/5 text-blue-700")}><span className="mt-0.5 shrink-0">{icon}</span><div className="min-w-0"><div className="break-words text-xs font-semibold">{title}</div><div className="mt-1 break-words text-[10px] leading-4 text-muted-foreground">{text}</div></div></div>; }
 function Checklist({ label, ok, optional }: { label: string; ok: boolean; optional?: boolean }) { return <div className="flex items-center gap-2 text-xs">{ok ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : optional ? <CircleHelp className="h-4 w-4 text-amber-600" /> : <XCircle className="h-4 w-4 text-red-600" />}<span>{label}</span>{optional && <span className="ml-auto text-[9px] text-muted-foreground">non-blocking</span>}</div>; }
 function StatusPill({ tone, text }: { tone: "good" | "warning"; text: string }) { return <span className={cn("rounded-full px-2 py-1 text-[9px] font-semibold", tone === "good" ? "bg-emerald-500/10 text-emerald-600" : "bg-amber-500/10 text-amber-600")}>{text}</span>; }
 function Select({ label, value, options, onChange }: { label: string; value: string; options: string[][]; onChange: (value: string) => void }) { return <label><span className="mb-1 block text-[10px] font-semibold uppercase text-muted-foreground">{label}</span><select value={value} onChange={(event) => onChange(event.target.value)} className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs">{options.map(([id, text]) => <option key={id} value={id}>{text}</option>)}</select></label>; }
