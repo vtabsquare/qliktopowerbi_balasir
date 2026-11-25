@@ -38,4 +38,21 @@ describe("TMDL validation and serialization", () => {
     expect(validateTomModelSpec(spec).some((item) => item.code === "TMDL_MULTIPLE_TABLE_KEYS")).toBe(true);
   });
 
+  it("serializes expressions.tmdl without invalid enableLoad property", () => {
+    const spec = validSpec();
+    spec.model.expressions.push({
+      id: "expr:Source_Customers",
+      name: "Source_Customers",
+      expression: "let\n    Source = #table({\"CustomerID\"}, {{1}})\nin\n    Source",
+      kind: "m",
+      isLoadDisabled: true,
+      annotations: [{ name: "Qlik.LoadEnabled", value: "false" }],
+    });
+    const result = serializeTmdlFolder(spec);
+    const expressionsFile = result.files["expressions.tmdl"];
+    expect(expressionsFile).toContain("expression Source_Customers =");
+    expect(expressionsFile).not.toContain("enableLoad:");
+    expect(expressionsFile).toContain("annotation 'Qlik.LoadEnabled' = \"false\"");
+  });
+
 });

@@ -148,7 +148,9 @@ export function serializeTmdlFolder(spec: TomDatabaseSpec): TmdlFolderResult {
       ...(index ? [""] : []),
       ...descriptionLines(expression.description, 0),
       ...serializeExpressionObject(`expression ${quoteTmdlName(expression.name)}`, expression.expression, 0),
-      ...(expression.isLoadDisabled ? ["\tenableLoad: false"] : []),
+      // Note: TMDL NamedExpression has no `enableLoad` keyword; expressions in
+      // expressions.tmdl are inherently not loaded as model tables, and emitting
+      // `enableLoad: false` causes Power BI Desktop to parse it as part of the M script.
       ...serializeAnnotations(expression.annotations, 1),
     ]).join(NL)}${NL}`;
   }
