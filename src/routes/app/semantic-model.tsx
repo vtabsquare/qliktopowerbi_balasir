@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMigration } from "@/lib/migration/store";
 import { useAuth } from "@/contexts/AuthContext";
-import { AlertCircle, ArrowLeft, ArrowRight, RotateCcw } from "lucide-react";
+import { AlertCircle, ArrowLeft, ArrowRight, Lock, RotateCcw } from "lucide-react";
 import { EnterpriseExportPage } from "@/components/migration/EnterpriseExportPage";
 import { RepairFocusNotice } from "@/components/migration/RepairFocusNotice";
 import { markStepCompleted, navigateWorkflow } from "@/lib/migration/workflow-gating";
@@ -73,21 +73,32 @@ export function SemanticModelPage() {
             <RotateCcw className="h-4 w-4" /> Restart Pipeline
           </button>
 
-          <button
-            onClick={() => {
-              markStepCompleted(9, isDemo);
-              toast.success("Step 10 (Validation & Export) Completed! Step 11 (Pipeline Logs) is now unlocked.");
-              withLoading(
-                async () => {
-                  navigateWorkflow("/app/logs", navigate);
-                },
-                { message: "Loading Step 11: Pipeline Logs...", subMessage: "Retrieving audit logs and timing metrics..." },
-              );
-            }}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold shadow hover:opacity-90 transition-opacity cursor-pointer"
-          >
-            View Pipeline Logs <ArrowRight className="h-4 w-4" />
-          </button>
+          {isDemo ? (
+            <button
+              type="button"
+              onClick={() => window.dispatchEvent(new CustomEvent("open-demo-ended-modal"))}
+              title="Pipeline Logs is locked in Demo Version — Contact for Full Access"
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-primary/25 bg-primary/5 text-primary/80 text-sm font-semibold opacity-80 hover:opacity-100 hover:border-primary/40 transition-all cursor-pointer"
+            >
+              <Lock className="h-4 w-4" /> Pipeline Logs Locked
+            </button>
+          ) : (
+            <button
+              onClick={() => {
+                markStepCompleted(9, isDemo);
+                toast.success("Step 10 (Validation & Export) Completed! Step 11 (Pipeline Logs) is now unlocked.");
+                withLoading(
+                  async () => {
+                    navigateWorkflow("/app/logs", navigate);
+                  },
+                  { message: "Loading Step 11: Pipeline Logs...", subMessage: "Retrieving audit logs and timing metrics..." },
+                );
+              }}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold shadow hover:opacity-90 transition-opacity cursor-pointer"
+            >
+              View Pipeline Logs <ArrowRight className="h-4 w-4" />
+            </button>
+          )}
         </div>
       </div>
     </div>

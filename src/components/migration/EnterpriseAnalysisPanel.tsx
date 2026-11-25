@@ -2676,10 +2676,41 @@ export function TabPbipExport({ analysis }: { analysis: EnterpriseAnalysis }) {
       </div>
 
       <div className="surface-card p-4">
-        <SectionHeader title="Export Settings" sub="Semantic model is generated as Microsoft TOM-aligned TMDL; model.bim and cache.abf are not emitted" />
+        <div className="flex items-start justify-between gap-3">
+          <SectionHeader title="Export Settings" sub="Semantic model is generated as Microsoft TOM-aligned TMDL; model.bim and cache.abf are not emitted" />
+          {isDemo && (
+            <button
+              type="button"
+              onClick={() => window.dispatchEvent(new CustomEvent("open-demo-ended-modal"))}
+              className="inline-flex items-center gap-1.5 rounded-full border border-primary/25 bg-primary/5 px-2.5 py-1 text-[11px] font-medium text-primary/80 hover:border-primary/40 hover:opacity-100 opacity-85 transition-all shrink-0 cursor-pointer"
+              title="Export Settings are locked in Demo Version — Contact for Full Access"
+            >
+              <Lock className="h-3 w-3" />
+              Locked in Demo
+            </button>
+          )}
+        </div>
         <label className="text-xs text-muted-foreground">Project Name</label>
-        <input type="text" value={name} onChange={e => setName(e.target.value)}
-          className="mt-1 w-full px-3 py-2 rounded-lg border border-border bg-surface text-sm text-foreground" />
+        <div
+          onClick={() => {
+            if (isDemo) window.dispatchEvent(new CustomEvent("open-demo-ended-modal"));
+          }}
+          className={isDemo ? "cursor-pointer" : undefined}
+          title={isDemo ? "Project Name is locked in Demo Version — Contact for Full Access" : undefined}
+        >
+          <input
+            type="text"
+            value={name}
+            onChange={e => {
+              if (!isDemo) setName(e.target.value);
+            }}
+            disabled={isDemo}
+            readOnly={isDemo}
+            className={`mt-1 w-full px-3 py-2 rounded-lg border border-border bg-surface text-sm text-foreground ${
+              isDemo ? "opacity-60 cursor-not-allowed pointer-events-none" : ""
+            }`}
+          />
+        </div>
         <div className="mt-3 flex items-start gap-2 rounded-lg border border-border/70 bg-surface-elevated/40 p-3 text-xs">
           {tomStatus.state === "checking" ? <Loader2 className="h-4 w-4 animate-spin text-primary shrink-0" /> : tomStatus.state === "available" ? <ShieldCheck className="h-4 w-4 text-green-400 shrink-0" /> : <Info className="h-4 w-4 text-sky-400 shrink-0" />}
           <div className="flex-1">
@@ -2687,12 +2718,24 @@ export function TabPbipExport({ analysis }: { analysis: EnterpriseAnalysis }) {
               {tomStatus.state === "checking" ? "Checking Microsoft TOM bridge..." : tomStatus.state === "available" ? "Microsoft TOM serializer available" : "Microsoft TOM bridge not available"}
             </div>
             <div className="text-muted-foreground mt-0.5">{tomStatus.detail || "The export automatically selects the strongest available serializer."}</div>
-            <label className="mt-3 flex items-start gap-2 cursor-pointer">
+            <label
+              onClick={(event) => {
+                if (isDemo) {
+                  event.preventDefault();
+                  window.dispatchEvent(new CustomEvent("open-demo-ended-modal"));
+                }
+              }}
+              title={isDemo ? "Export settings are locked in Demo Version — Contact for Full Access" : undefined}
+              className={`mt-3 flex items-start gap-2 cursor-pointer ${isDemo ? "opacity-60" : ""}`}
+            >
               <input
                 type="checkbox"
                 checked={requireMicrosoftTom}
-                onChange={(event) => setRequireMicrosoftTom(event.target.checked)}
-                className="mt-0.5"
+                disabled={isDemo}
+                onChange={(event) => {
+                  if (!isDemo) setRequireMicrosoftTom(event.target.checked);
+                }}
+                className={`mt-0.5 ${isDemo ? "pointer-events-none" : ""}`}
               />
               <span>
                 <span className="font-medium text-foreground">Require Microsoft TOM roundtrip validation</span>
