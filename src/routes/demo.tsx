@@ -9,6 +9,7 @@ import {
   getFirstIncompleteStep,
   getCompletedSteps,
   markStepCompleted,
+  consumePendingReloadRedirect,
   WorkflowStep,
 } from "@/lib/migration/workflow-gating";
 import { useNavigationLoading } from "@/components/common/NavigationLoadingOverlay";
@@ -63,7 +64,20 @@ function DemoWorkspace({ session, onLoggedOut }: { session?: unknown; onLoggedOu
 
   // Sync URL ?step=, browser Back/Forward (popstate), and completed steps after hydration
   useEffect(() => {
-    setCompletedSteps(getCompletedSteps(true));
+    if (consumePendingReloadRedirect()) {
+      useMigration.getState().reset();
+      setCompletedSteps([]);
+      setActiveStepId(0);
+      try {
+        const targetUrl = new URL(window.location.href);
+        targetUrl.searchParams.set("step", "instructions");
+        window.history.replaceState({}, "", targetUrl.toString());
+      } catch {
+        // ignore
+      }
+    } else {
+      setCompletedSteps(getCompletedSteps(true));
+    }
     const syncStepFromUrl = () => {
       const param = new URLSearchParams(window.location.search).get("step");
       if (!param) {

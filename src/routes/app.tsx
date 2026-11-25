@@ -17,6 +17,7 @@ import {
   isStepUnlocked,
   getFirstIncompleteStep,
   markStepCompleted,
+  consumePendingReloadRedirect,
   LOCKED_STEP_MESSAGE,
   WORKFLOW_STEPS,
 } from "@/lib/migration/workflow-gating";
@@ -53,6 +54,14 @@ function AuthGuard() {
     }
 
     if (!loading && session) {
+      if (consumePendingReloadRedirect()) {
+        useMigration.getState().reset();
+        if (currentPath !== "/app/instructions") {
+          navigate({ to: "/app/instructions" });
+          return;
+        }
+      }
+
       // When application opens fresh, ensure it always starts on Stage 1 (Instructions)
       const hasStartedSession = sessionStorage.getItem("app_pipeline_started");
       if (!hasStartedSession) {

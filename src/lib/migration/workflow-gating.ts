@@ -144,6 +144,79 @@ export function getStepByKey(key: string): WorkflowStep | undefined {
 export const LOCKED_STEP_MESSAGE = "Complete the previous step successfully to unlock this step.";
 
 let activeWorkflowScope: string | null = null;
+let reloadResetProcessed = false;
+let pendingReloadRedirect = false;
+
+/**
+ * Detect whether the current document load was triggered by a browser reload / hard refresh.
+ */
+export function isBrowserReload(): boolean {
+  if (typeof window === "undefined" || typeof performance === "undefined") return false;
+  try {
+    const entries = performance.getEntriesByType?.("navigation") as PerformanceNavigationTiming[] | undefined;
+    if (entries && entries.length > 0) {
+      return entries[0].type === "reload";
+    }
+    const legacyNav = (performance as unknown as { navigation?: { type?: number } }).navigation;
+    return legacyNav?.type === 1;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Clear workflow completion states, temporary uploaded workspace cache, and
+ * session pipeline flags on hard refresh without touching auth tokens or settings.
+ */
+export function resetWorkflowStorageOnReload(force = false): boolean {
+  if (typeof window === "undefined") return false;
+  if (!force && (reloadResetProcessed || !isBrowserReload())) return false;
+  reloadResetProcessed = true;
+  pendingReloadRedirect = true;
+
+  try {
+    const lsKeysToRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (!k) continue;
+      if (
+        k.startsWith("workflow_completed_steps_") ||
+        k === "qlik2pbi-enhanced-workspace-v3"
+      ) {
+        lsKeysToRemove.push(k);
+      }
+    }
+    for (const k of lsKeysToRemove) {
+      localStorage.removeItem(k);
+    }
+
+    const ssKeysToRemove: string[] = [];
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const k = sessionStorage.key(i);
+      if (!k) continue;
+      if (k === "app_pipeline_started" || k.startsWith("bulk_alternate_folder")) {
+        ssKeysToRemove.push(k);
+      }
+    }
+    for (const k of ssKeysToRemove) {
+      sessionStorage.removeItem(k);
+    }
+
+    window.dispatchEvent(new CustomEvent("workflow-step-completed", { detail: { stepId: 0, reset: true } }));
+  } catch (e) {
+    console.error("Failed to reset workflow storage on reload:", e);
+  }
+  return true;
+}
+
+export function consumePendingReloadRedirect(): boolean {
+  if (!pendingReloadRedirect) return false;
+  pendingReloadRedirect = false;
+  return true;
+}
+
+// Run immediately on client module load if the browser performed a reload / hard refresh
+resetWorkflowStorageOnReload();
 
 export function setWorkflowScope(scopeId: string | null | undefined): void {
   const normalized = scopeId ? String(scopeId).trim() : "";

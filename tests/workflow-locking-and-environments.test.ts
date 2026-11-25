@@ -8,6 +8,8 @@ import {
   markStepCompleted,
   invalidateDownstreamSteps,
   setWorkflowScope,
+  resetWorkflowStorageOnReload,
+  consumePendingReloadRedirect,
   getFirstIncompleteStep,
   resetWorkflow,
   validateStepCompletion,
@@ -203,6 +205,40 @@ describe("Step-by-Step Workflow Locking System", () => {
     expect(getCompletedSteps(false)).toEqual([0, 1]);
     expect(isStepUnlocked(2, false)).toBe(true);
     setWorkflowScope(null);
+  });
+
+  it("resets workflow completion and temporary workspace storage on hard refresh while preserving auth tokens", () => {
+    markStepCompleted(0, true);
+    markStepCompleted(1, true);
+    markStepCompleted(0, false);
+    markStepCompleted(1, false);
+    localStorage.setItem("qlik2pbi-enhanced-workspace-v3", JSON.stringify({ state: { powerBiModel: {} } }));
+    localStorage.setItem("sb-prod-auth-token", "keep-prod-auth");
+    localStorage.setItem("sb-demo-auth-token", "keep-demo-auth");
+    sessionStorage.setItem("app_pipeline_started", "true");
+    sessionStorage.setItem("bulk_alternate_folder_default", "C:\\Data");
+
+    const didReset = resetWorkflowStorageOnReload(true);
+    expect(didReset).toBe(true);
+    expect(consumePendingReloadRedirect()).toBe(true);
+    expect(consumePendingReloadRedirect()).toBe(false);
+
+    // Only Step 1 (id: 0) remains unlocked; Steps 2+ are locked
+    expect(getCompletedSteps(true)).toEqual([]);
+    expect(getCompletedSteps(false)).toEqual([]);
+    expect(isStepUnlocked(0, true)).toBe(true);
+    expect(isStepUnlocked(1, true)).toBe(false);
+    expect(isStepUnlocked(0, false)).toBe(true);
+    expect(isStepUnlocked(1, false)).toBe(false);
+
+    // Temporary workspace and session keys are cleared
+    expect(localStorage.getItem("qlik2pbi-enhanced-workspace-v3")).toBeNull();
+    expect(sessionStorage.getItem("app_pipeline_started")).toBeNull();
+    expect(sessionStorage.getItem("bulk_alternate_folder_default")).toBeNull();
+
+    // Auth tokens are untouched
+    expect(localStorage.getItem("sb-prod-auth-token")).toBe("keep-prod-auth");
+    expect(localStorage.getItem("sb-demo-auth-token")).toBe("keep-demo-auth");
   });
 });
 

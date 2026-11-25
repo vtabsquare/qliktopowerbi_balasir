@@ -1,5 +1,9 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { resetWorkflowStorageOnReload } from "./workflow-gating";
+
+// Ensure hard refresh / reload clears persisted workflow state before Zustand hydrates
+resetWorkflowStorageOnReload();
 import type {
   MigrationMetadata,
   SourceTable,
