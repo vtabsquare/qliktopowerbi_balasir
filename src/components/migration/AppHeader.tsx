@@ -1,19 +1,15 @@
-import { Link, useNavigate } from "@tanstack/react-router";
 import { MoreHorizontal, LogOut, Trash2, Lock, Compass } from "lucide-react";
-import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 import { useState, useRef, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 
 export function AppHeader() {
-  const navigate = useNavigate();
-  const { isDemo, isDemoEnv, signOut } = useAuth();
+  const { isDemo, signOut } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  // Close menu when clicking outside
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
@@ -56,95 +52,8 @@ export function AppHeader() {
   };
 
   return (
-    <header className="sticky top-0 z-40 border-b border-border/80 bg-background/80 backdrop-blur-xl supports-[backdrop-filter]:bg-background/60 shadow-sm transition-all">
-      <div className="mx-auto flex w-full max-w-[1440px] items-center justify-between gap-4 px-4 py-2.5 sm:px-6 lg:px-8">
-        <div className="flex items-center gap-4">
-          <Link to="/" className="flex shrink-0 items-center gap-3 group">
-            <div className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-primary to-[oklch(0.62_0.2_260)] text-primary-foreground font-bold shadow-elevated group-hover:scale-105 transition-transform">
-              <span className="text-xs tracking-tight">VT</span>
-            </div>
-            <div className="leading-tight">
-              <div className="font-display font-bold text-sm tracking-wide text-foreground">VTAB</div>
-              <div className="font-display font-bold text-xs tracking-wide text-muted-foreground -mt-0.5">SQUARE</div>
-            </div>
-          </Link>
-          <span className="hidden lg:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-[11px] font-semibold tracking-wide">
-            <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
-            AI MIGRATION ENGINE v2.0
-          </span>
-        </div>
-
-        <nav className="hidden min-w-0 items-center gap-1 overflow-x-auto whitespace-nowrap rounded-full border border-border/60 bg-surface/60 p-1 text-xs font-medium shadow-sm md:flex">
-          <Link
-            to={isDemo ? "/demo" : "/app"}
-            activeProps={{ className: "bg-primary text-primary-foreground shadow-sm" }}
-            className="rounded-full px-3.5 py-1.5 text-muted-foreground hover:text-foreground transition-all"
-          >
-            Pipeline
-          </Link>
-          {isDemo ? (
-            <button
-              type="button"
-              disabled
-              onClick={() => toast.info("🔒 Calendars is locked in the Demo Version.")}
-              title="Calendars is locked in Demo Version"
-              className="inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-muted-foreground/50 opacity-40 cursor-not-allowed select-none transition-all hover:bg-muted/20"
-            >
-              <span>Calendars</span>
-              <Lock className="h-3 w-3 opacity-70" />
-            </button>
-          ) : (
-            <Link
-              to="/app/calendar-analysis"
-              activeProps={{ className: "bg-primary text-primary-foreground shadow-sm" }}
-              className="rounded-full px-3.5 py-1.5 text-muted-foreground hover:text-foreground transition-all"
-            >
-              Calendars
-            </Link>
-          )}
-
-          {isDemo ? (
-            <button
-              type="button"
-              disabled
-              onClick={() => toast.info("🔒 Report Designer is locked in the Demo Version.")}
-              title="Report Designer is locked in Demo Version"
-              className="inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-muted-foreground/50 opacity-40 cursor-not-allowed select-none transition-all hover:bg-muted/20"
-            >
-              <span>Report Designer</span>
-              <Lock className="h-3 w-3 opacity-70" />
-            </button>
-          ) : (
-            <Link
-              to="/app/report-designer"
-              activeProps={{ className: "bg-primary text-primary-foreground shadow-sm" }}
-              className="rounded-full px-3.5 py-1.5 text-muted-foreground hover:text-foreground transition-all"
-            >
-              Report Designer
-            </Link>
-          )}
-
-          {isDemo ? (
-            <button
-              type="button"
-              disabled
-              onClick={() => toast.info("🔒 Logs is locked in the Demo Version.")}
-              title="Logs is locked in Demo Version"
-              className="inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-muted-foreground/50 opacity-40 cursor-not-allowed select-none transition-all hover:bg-muted/20"
-            >
-              <span>Logs</span>
-              <Lock className="h-3 w-3 opacity-70" />
-            </button>
-          ) : (
-            <Link
-              to="/app/logs"
-              activeProps={{ className: "bg-primary text-primary-foreground shadow-sm" }}
-              className="rounded-full px-3.5 py-1.5 text-muted-foreground hover:text-foreground transition-all"
-            >
-              Logs
-            </Link>
-          )}
-        </nav>
+    <header className="sticky top-0 z-40 border-b border-border/80 bg-background/85 backdrop-blur-xl supports-[backdrop-filter]:bg-background/60 shadow-xs transition-all">
+      <div className="flex w-full items-center justify-end gap-2 px-4 py-2 sm:px-6">
         <div className="ml-auto flex shrink-0 items-center gap-2">
           {isDemo && (
             <button
@@ -170,8 +79,9 @@ export function AppHeader() {
           {!isDemo && (
             <button
               onClick={handleLogout}
-              title="Logout"
-              className="grid place-items-center h-10 w-10 rounded-xl border border-border bg-surface hover:bg-red-500/10 hover:border-red-500/40 hover:text-red-500 transition-colors"
+              title="Sign Out"
+              aria-label="Sign Out"
+              className="grid place-items-center h-9 w-9 rounded-xl border border-border bg-surface hover:bg-red-500/10 hover:border-red-500/40 hover:text-red-500 transition-colors"
             >
               <LogOut className="h-4 w-4" />
             </button>
@@ -184,7 +94,8 @@ export function AppHeader() {
                 type="button"
                 disabled
                 title="Options locked in Demo Version"
-                className="grid place-items-center h-10 w-10 rounded-xl border border-border/40 bg-surface/40 text-muted-foreground/40 opacity-40 cursor-not-allowed select-none"
+                aria-label="More options"
+                className="grid place-items-center h-9 w-9 rounded-xl border border-border/40 bg-surface/40 text-muted-foreground/40 opacity-40 cursor-not-allowed select-none"
               >
                 <MoreHorizontal className="h-4 w-4" />
               </button>
@@ -197,14 +108,14 @@ export function AppHeader() {
                   setMenuOpen((v) => !v);
                   setDeleteConfirm(false);
                 }}
-                className="grid place-items-center h-10 w-10 rounded-xl border border-border bg-surface hover:bg-muted transition-colors"
+                className="grid place-items-center h-9 w-9 rounded-xl border border-border bg-surface hover:bg-muted transition-colors"
               >
                 <MoreHorizontal className="h-4 w-4" />
               </button>
             )}
 
             {!isDemo && menuOpen && (
-              <div className="absolute right-0 top-12 z-50 w-56 rounded-xl border border-border bg-background shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150">
+              <div className="absolute right-0 top-11 z-50 w-56 rounded-xl border border-border bg-background shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150">
                 <a
                   href="/privacy"
                   className="flex items-center gap-2 px-4 py-3 text-sm text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"

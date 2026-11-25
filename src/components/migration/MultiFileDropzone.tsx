@@ -1077,27 +1077,54 @@ export function FileAnalysisPanel({
         </div>
       )}
 
-      {/* ── Script assignment — shows ALL text-parseable files ── */}
-      {assignableFiles.length > 0 && (
+      {/* ── Automatic File Classification — shows ALL uploaded files with detected roles ── */}
+      {files.length > 0 && (
         <div className="surface-card overflow-hidden">
-          <div className="px-5 py-4 border-b border-border flex items-center gap-2">
+          <div className="px-5 py-4 border-b border-border flex flex-wrap items-center gap-2">
             <Zap className="h-4 w-4 text-primary" />
-            <span className="font-semibold text-sm">Script Assignment</span>
+            <span className="font-semibold text-sm">Automatic Source &amp; ETL Detection</span>
             <span className="ml-auto text-[11px] text-muted-foreground">
-              Assign Source and ETL from any text file below
+              Automatically classified from uploaded package
             </span>
           </div>
           <div className="divide-y divide-border">
-            {assignableFiles.map((f) => {
-              const isSource = selectedSources.some((s) => s.path === f.path);
-              const isEtl = selectedEtls.some((e) => e.path === f.path);
+            {files.map((f) => {
+              const ext = (f.extension || "").toLowerCase();
+              const lowerPath = `${f.path || ""}/${f.name || ""}`.toLowerCase();
+              const isScriptSource = selectedSources.some((s) => s.path === f.path);
+              const isScriptEtl = selectedEtls.some((e) => e.path === f.path);
+              const isPrjOrQvwMeta =
+                /(?:^|[/\\])[^/\\]+-prj(?:[/\\]|$)/i.test(lowerPath) ||
+                /(?:qlikviewproject|docproperties|docinternals|allproperties|toplayout|module)\.(?:xml|txt)$/i.test(f.name) ||
+                /(?:^|[/\\])(?:SH|CH|LB|TX|BU|IB|SL|CT|MB|CS|EXT)[A-Za-z0-9_-]*\.xml$/i.test(f.path);
+              const isDataSource =
+                [".csv", ".tsv", ".xlsx", ".xls", ".xlsm", ".parquet", ".json"].includes(ext) ||
+                (ext === ".xml" && !isPrjOrQvwMeta);
+              const isEtlScript =
+                isScriptEtl ||
+                [".qvs", ".sql"].includes(ext) ||
+                f.name.toLowerCase() === "loadscript.txt" ||
+                /(?:^|[/\\])(load|etl|extract|transform|model|script)[^/\\]*\.txt$/i.test(f.path);
+              const isSource = isScriptSource || isDataSource;
+              const isEtl = isEtlScript;
+              const isSupportedBinary = [".qvw", ".xlsx", ".xls", ".xlsm", ".parquet", ".zip"].includes(ext);
+              const detectionFailed = !f.parsedAsText && !isSupportedBinary;
               const Icon = getFileIcon(f.extension);
+
               return (
                 <div
                   key={f.path}
                   className={cn(
-                    "flex items-center gap-4 px-5 py-3.5 transition-all",
-                    isSource ? "bg-primary/5" : isEtl ? "bg-violet-500/5" : "hover:bg-accent/20",
+                    "flex items-center gap-4 px-5 py-3 transition-all",
+                    detectionFailed
+                      ? "bg-destructive/5"
+                      : isSource && isEtl
+                      ? "bg-primary/5"
+                      : isSource
+                      ? "bg-emerald-500/5"
+                      : isEtl
+                      ? "bg-violet-500/5"
+                      : "hover:bg-accent/20",
                   )}
                 >
                   <div
@@ -1111,32 +1138,38 @@ export function FileAnalysisPanel({
                   <div className="flex-1 min-w-0">
                     <div className="font-mono text-sm font-semibold truncate">{f.path}</div>
                     <div className="text-[11px] text-muted-foreground">
-                      {f.extension} · {f.sizeKb} KB
+                      {f.extension || "file"} · {f.sizeKb} KB
                     </div>
                   </div>
-                  <div className="flex gap-2 shrink-0">
-                    <button
-                      onClick={() => onToggleSource(f)}
-                      className={cn(
-                        "px-3 py-1.5 rounded-lg text-xs font-semibold transition-all",
-                        isSource
-                          ? "bg-primary text-white shadow-md"
-                          : "bg-accent text-accent-foreground hover:bg-primary/20",
-                      )}
-                    >
-                      {isSource ? "✓ Source" : "+ Source"}
-                    </button>
-                    <button
-                      onClick={() => onToggleEtl(f)}
-                      className={cn(
-                        "px-3 py-1.5 rounded-lg text-xs font-semibold transition-all",
-                        isEtl
-                          ? "bg-violet-500 text-white shadow-md"
-                          : "bg-accent text-accent-foreground hover:bg-violet-500/20",
-                      )}
-                    >
-                      {isEtl ? "✓ ETL" : "+ ETL"}
-                    </button>
+                  <div className="flex flex-wrap items-center justify-end gap-1.5 shrink-0">
+                    {detectionFailed ? (
+                      <span className="inline-flex items-center gap-1 rounded-lg border border-destructive/30 bg-destructive/10 px-2.5 py-1 text-xs font-semibold text-destructive">
+                        Detection Failed
+                      </span>
+                    ) : (
+                      <>
+                        {isSource && (
+                          <span className="inline-flex items-center gap-1 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                            ✓ Source
+                          </span>
+                        )}
+                        {isEtl && (
+                          <span className="inline-flex items-center gap-1 rounded-lg border border-violet-500/30 bg-violet-500/10 px-2.5 py-1 text-xs font-semibold text-violet-600 dark:text-violet-400">
+                            ✓ ETL
+                          </span>
+                        )}
+                        {!isSource && !isEtl && (isPrjOrQvwMeta || ext === ".qvw") && (
+                          <span className="inline-flex items-center gap-1 rounded-lg border border-sky-500/30 bg-sky-500/10 px-2.5 py-1 text-xs font-semibold text-sky-600 dark:text-sky-400">
+                            ✓ {ext === ".qvw" ? "QVW Package" : "Metadata"}
+                          </span>
+                        )}
+                        {!isSource && !isEtl && !isPrjOrQvwMeta && ext !== ".qvw" && (
+                          <span className="inline-flex items-center gap-1 rounded-lg border border-border bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                            Supporting File
+                          </span>
+                        )}
+                      </>
+                    )}
                   </div>
                 </div>
               );

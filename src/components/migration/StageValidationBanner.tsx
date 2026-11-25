@@ -25,6 +25,7 @@ export interface StageValidationBannerProps {
 
 export function StageValidationBanner({ stepId, canProceed, blockedReason }: StageValidationBannerProps) {
   const {
+    enterpriseFiles,
     enterpriseAnalysis,
     powerBiModel,
     runAutoFix,
@@ -36,6 +37,27 @@ export function StageValidationBanner({ stepId, canProceed, blockedReason }: Sta
 
   const issues = useMemo<StepIssueItem[]>(() => {
     const items: StepIssueItem[] = [];
+
+    // Do not display a blocking error banner on Step 2 (Upload) before any file has been uploaded.
+    if (stepId === 1 && enterpriseFiles.length === 0) {
+      return items;
+    }
+
+    if (stepId === 1 && enterpriseFiles.length > 0) {
+      const unreadable = enterpriseFiles.filter(
+        (f) => !f.parsedAsText && ![".qvw", ".xlsx", ".xls", ".parquet"].includes((f.extension || "").toLowerCase()),
+      );
+      for (const file of unreadable) {
+        items.push({
+          id: `upload-${file.path}`,
+          severity: "warning",
+          stepLabel,
+          target: file.name,
+          cause: `File "${file.name}" (${file.extension || "unknown"}) could not be parsed as text.`,
+          resolution: "Verify the file format or upload a supported Qlik script, QVW/PRJ, ZIP, or source data file.",
+        });
+      }
+    }
 
     if (stepId === 4 && enterpriseAnalysis) {
       for (const row of enterpriseAnalysis.sourceMappings || []) {
@@ -126,7 +148,7 @@ export function StageValidationBanner({ stepId, canProceed, blockedReason }: Sta
       }
     }
 
-    if (!canProceed && blockedReason && !items.some((i) => i.severity === "error")) {
+    if (stepId > 1 && !canProceed && blockedReason && !items.some((i) => i.severity === "error")) {
       items.unshift({
         id: `gate-${stepId}`,
         severity: "error",
@@ -138,7 +160,7 @@ export function StageValidationBanner({ stepId, canProceed, blockedReason }: Sta
     }
 
     return items;
-  }, [blockedReason, canProceed, enterpriseAnalysis, powerBiModel, stepId, stepLabel]);
+  }, [blockedReason, canProceed, enterpriseAnalysis, enterpriseFiles, powerBiModel, stepId, stepLabel]);
 
   const visibleIssues = issues.filter((item) => item.severity === "error" || !dismissedIds[item.id]);
   if (!visibleIssues.length) return null;
