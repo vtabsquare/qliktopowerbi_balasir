@@ -98,17 +98,15 @@ export function StageValidationBanner({ stepId, canProceed, blockedReason }: Sta
       for (const res of daxResults) {
         const tableName = res.table || inputById.get(res.measureId)?.table;
         for (const issue of res.issues) {
-          if (issue.severity === "error" || issue.severity === "warning") {
+          if (issue.severity === "error") {
             items.push({
               id: `dax-${res.measureId}-${issue.code}`,
-              severity: issue.severity,
+              severity: "error",
               stepLabel,
               target: tableName ? `Measure: ${res.measureName} (${tableName})` : `Measure: ${res.measureName}`,
               cause: issue.message,
-              resolution: issue.severity === "error"
-                ? "Click 'Fix all fixable issues' or 'AI Fix' on the measure to repair and revalidate."
-                : "Review the DAX warning; it does not block progression.",
-              canAutoFix: issue.severity === "error",
+              resolution: "Click 'Fix all fixable issues' or 'AI Fix' on the measure to repair and revalidate.",
+              canAutoFix: true,
             });
           }
         }
@@ -157,7 +155,14 @@ export function StageValidationBanner({ stepId, canProceed, blockedReason }: Sta
     try {
       const report = await runAutoFix();
       const fixed = report.actions.filter((a) => a.status === "fixed").length;
-      if (report.afterBlocking === 0) {
+      const latest = useMigration.getState();
+      const latestModel = latest.powerBiModel ? validatePowerBiModel(latest.powerBiModel) : null;
+      const latestDaxBlocking = stepId === 6 && latestModel
+        ? validateDaxMeasures(modelDaxInputs(latestModel.tables), latestModel.tables).some((r) => r.status !== "valid")
+        : false;
+      const remainingBlocking = Math.max(report.afterBlocking, latestDaxBlocking ? 1 : 0);
+
+      if (remainingBlocking === 0) {
         toast.success(
           fixed > 0
             ? `Auto-Fix resolved ${fixed} issue(s) — all blocking errors cleared!`
@@ -165,7 +170,7 @@ export function StageValidationBanner({ stepId, canProceed, blockedReason }: Sta
         );
       } else if (fixed > 0) {
         toast.warning(`Auto-Fix resolved ${fixed} issue(s)`, {
-          description: `${report.afterBlocking} blocking item(s) still require review before proceeding.`,
+          description: `${remainingBlocking} blocking item(s) still require review before proceeding.`,
         });
       } else {
         toast.info("Auto-Fix checked all items", {
