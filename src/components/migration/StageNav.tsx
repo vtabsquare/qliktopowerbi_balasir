@@ -175,7 +175,7 @@ export function StageNav({ activeStepId, onStepSelect, viewportDocked = false }:
     const activeStage = STAGES[activeIndex] || STAGES[0];
 
     const renderVerticalList = (collapsed: boolean, onSelectClose?: () => void) => (
-      <div className="flex flex-col gap-1.5 p-2.5">
+      <div className="flex flex-col gap-2.5 p-3">
         {STAGES.map((stage, actualIdx) => {
           const isActive = actualIdx === activeIndex;
           const isCompleted = hydrated ? isStepCompleted(actualIdx, isDemo) : false;
