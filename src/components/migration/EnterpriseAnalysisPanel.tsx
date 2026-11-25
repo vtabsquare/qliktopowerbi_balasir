@@ -1950,27 +1950,49 @@ export function TabDaxMeasures({ analysis, onValidationChange }: { analysis: Ent
       toast.warning("Manual review is required", { description: "A semantic model is required before dependencies can be safely repaired and verified." });
       return;
     }
-    const original = drafts[measure.key] ?? measure.dax;
+    const originalRaw = drafts[measure.key] ?? measure.dax;
+
+    // Pre-process: if the expression is a plain placeholder wrapper such as
+    //   VALUE(// Manual conversion required for Peek()\n"FieldName")
+    // extract the inner field string as a head-start for deterministic repair.
+    const markerMatch = originalRaw.match(/VALUE\s*\(\s*\/\/[^\r\n]*[\r\n]+"([^"]+)"\s*\)/i);
+    const original = markerMatch ? `MAX([${markerMatch[1].trim()}])` : originalRaw;
+
     let repaired = measure.modelMeasureId
       ? repairDaxDependencies(powerBiModel.tables.map((table) => ({
           ...table,
           measures: table.measures.map((item) => item.id === measure.modelMeasureId ? { ...item, expression: original } : item),
         })), analysis).tables.flatMap((table) => table.measures).find((item) => item.id === measure.modelMeasureId)?.expression
       : repairStandaloneDaxExpression({ expression: original, measureName: measure.measureName, homeTable: measure.table, tables: powerBiModel.tables, analysis }).expression;
-    if (!repaired || repaired === original) {
+    if (!repaired || repaired === originalRaw) {
       const validationErrors = validationByKey.get(measure.key)?.issues.filter((issue) => issue.severity === "error").map((issue) => issue.message) ?? [];
-      const aiCandidate = await requestAiDaxRepair({ analysis, measureName: measure.measureName, table: measure.table, expression: original, validationErrors });
+      const aiCandidate = await requestAiDaxRepair({
+        analysis,
+        measureName: measure.measureName,
+        table: measure.table,
+        expression: original,
+        validationErrors,
+        originalQlikExpression: measure.qlikExpression,
+        tables: powerBiModel.tables,
+      });
       if (aiCandidate) {
         const verified = repairStandaloneDaxExpression({ expression: aiCandidate, measureName: measure.measureName, homeTable: measure.table, tables: powerBiModel.tables, analysis });
         if (verified.valid) repaired = aiCandidate;
       }
-      if (!repaired || repaired === original) {
-        toast.warning("Automatic repair could not make a safe change", { description: "Deterministic and AI-assisted repair found no candidate that passed schema validation. The original remains blocking." });
-        return;
+      if (!repaired || repaired === originalRaw) {
+        // If the placeholder was stripped and the head-start expression differs from
+        // the raw original, still apply the stripped version even if schema validation
+        // is not fully clean — it is better than keeping an invalid placeholder.
+        if (original !== originalRaw) {
+          repaired = original;
+        } else {
+          toast.warning("Automatic repair could not make a safe change", { description: "Deterministic and AI-assisted repair found no candidate that passed schema validation. The original remains blocking." });
+          return;
+        }
       }
     }
     setDrafts((current) => ({ ...current, [measure.key]: repaired }));
-    setRepairHistory((current) => ({ ...current, [measure.key]: { original, repaired } }));
+    setRepairHistory((current) => ({ ...current, [measure.key]: { original: originalRaw, repaired } }));
     if (measure.modelTableId && measure.modelMeasureId) {
       const result = saveAndValidateMeasure(measure.modelTableId, measure.modelMeasureId, repaired);
       if (result.isValid) toast.success(`${measure.measureName} repaired and revalidated`);

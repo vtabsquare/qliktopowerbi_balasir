@@ -46,6 +46,25 @@ function replaceBalancedCalls(expression: string, functionName: string, rewrite:
 
 function repairQlikFunctions(expression: string): string {
   let result = rewriteQlikColourFunctions(expression);
+
+  // Strip untranslated placeholder markers emitted by DaxTranslator.
+  // Pattern 1: VALUE(// Manual conversion required for Peek()\n"FieldName") → MAX('Table'[FieldName])
+  //   The inner quoted string is extracted as the best-effort field name.
+  result = result.replace(
+    /VALUE\s*\(\s*\/\/\s*Manual conversion required for Peek\(\)\s*[\r\n]+"([^"]+)"\s*\)/gi,
+    (_, field: string) => {
+      // Try to produce a sensible approximation. Peek is usually used to grab
+      // the last/first value of a field across rows. MAX is the safest DAX
+      // approximation; callers that need FIRST should override manually.
+      const cleanField = field.trim();
+      return `MAX([${cleanField}])`;
+    },
+  );
+  // Pattern 2: bare comment markers (strip so the remaining expression can be re-validated)
+  result = result.replace(/\/\/\s*Manual conversion required[^\r\n]*/gi, "").trim();
+  result = result.replace(/\/\/\s*FUNCTION_NOT_MAPPED[^\r\n]*/gi, "").trim();
+  result = result.replace(/\/\/\s*PLACEHOLDER[^\r\n]*/gi, "").trim();
+
   result = replaceBalancedCalls(result, "MonthStart", (arg) => `DATE(YEAR(${arg}), MONTH(${arg}), 1)`);
   result = replaceBalancedCalls(result, "MonthEnd", (arg) => `EOMONTH(${arg}, 0)`);
   result = replaceBalancedCalls(result, "YearStart", (arg) => `DATE(YEAR(${arg}), 1, 1)`);

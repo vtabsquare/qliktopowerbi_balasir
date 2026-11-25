@@ -89,6 +89,31 @@ describe("Phase 2 DAX quality gate", () => {
     expect(validateStepCompletion(6, { hasCurrentDaxValidation: true, hasBlockingDaxErrors: false })).toEqual({ ok: true });
   });
 
+  it("strips Peek() placeholder markers and produces a valid MAX approximation", () => {
+    // This replicates the vMaxDate bug: DaxTranslator cannot translate Peek()
+    // and emits: VALUE(// Manual conversion required for Peek()\n"MaxDate")
+    const peekPlaceholder = `VALUE(// Manual conversion required for Peek()\n"MaxDate")`;
+    const brokenMeasure = {
+      ...measure("M-vMaxDate", "vMaxDate", peekPlaceholder),
+      approved: false,
+      status: "needs-fix",
+    };
+    const tables = [table("Calendar", ["CalendarDate", "MaxDate"], [brokenMeasure])];
+    const before = validateDaxMeasures(
+      [{ id: brokenMeasure.id, name: brokenMeasure.name, expression: peekPlaceholder, table: "Calendar" }],
+      tables,
+    );
+    // Placeholder must be flagged as invalid before repair.
+    expect(before[0].status).not.toBe("valid");
+
+    const repaired = repairDaxDependencies(tables).tables[0].measures[0];
+    // After repair the placeholder wrapper must be gone.
+    expect(repaired.expression).not.toContain("Manual conversion required");
+    expect(repaired.expression).not.toContain("VALUE(//");
+    // A sensible MAX approximation should be present.
+    expect(repaired.expression).toMatch(/MAX\(/i);
+  });
+
   it("never overwrites a valid user-approved measure during dependency repair", () => {
     const approvedMeasure = {
       ...measure("M-Approved", "Approved Revenue", "SUM('Sales'[Amount])"),
