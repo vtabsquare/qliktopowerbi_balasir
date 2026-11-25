@@ -758,7 +758,10 @@ export function TabSourceMapping({
       if (nonFileConnectors.has(r.connectorType)) return r;
 
       const sourceCandidate = (r.mappedRef || r.originalRef || "").trim();
-      const withoutQlikVar = sourceCandidate.replace(/^\$\([^)]+\)[/\\]?/, "").replace(/^["']|["']$/g, "");
+      const withoutQlikVar = sourceCandidate
+        .replace(/^\$\([^)]+\)[/\\]?/, "")
+        .replace(/^lib:\/\/[^/\\]+[/\\]?/i, "")
+        .replace(/^["']|["']$/g, "");
       let relative = withoutQlikVar
         .replace(/^[A-Za-z]:[/\\]+/, "")
         .replace(/^(\.\.?[/\\])+/, "")
