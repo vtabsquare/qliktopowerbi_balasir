@@ -28,9 +28,6 @@ export function isDemoUser(user: User | null | undefined): boolean {
  * Phase 3 (Power BI Model, Relationships, Validation & Export, Logs) is restricted to Full Enterprise Edition.
  */
 export const DEMO_LOCKED_ROUTES = [
-  "/app/powerbi-model",
-  "/app/relationships",
-  "/app/semantic-model",
   "/app/logs",
   "/app/calendar-analysis",
   "/app/report-designer",

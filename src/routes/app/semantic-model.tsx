@@ -19,17 +19,6 @@ export function SemanticModelPage() {
   const { isDemo } = useAuth();
   const { withLoading } = useNavigationLoading();
 
-  useEffect(() => {
-    if (isDemo) {
-      window.dispatchEvent(new CustomEvent("open-demo-ended-modal"));
-      navigate({ to: "/app/dax-measures" });
-    }
-  }, [isDemo, navigate]);
-
-  if (isDemo) {
-    return null;
-  }
-
   if (!enterpriseAnalysis) {
     return (
       <div className="surface-card p-8 flex flex-col items-center text-center gap-4">

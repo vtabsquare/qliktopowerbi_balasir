@@ -30,6 +30,7 @@ import { AnalysisPage } from "@/routes/app/analysis";
 import { PowerQueryPage } from "@/routes/app/power-query";
 import { DaxMeasuresPage } from "@/routes/app/dax-measures";
 import { SemanticModelPage } from "@/routes/app/semantic-model";
+import { SimplePowerBiModelPage } from "@/components/migration/SimplePowerBiModelPage";
 
 export const Route = createFileRoute("/demo")({
   head: () => ({
@@ -98,7 +99,7 @@ function DemoWorkspace({ session, onLoggedOut }: { session?: unknown; onLoggedOu
     const unlocked = isStepUnlocked(targetStep.id, true);
 
     if (!unlocked) {
-      if (targetStep.phase === 3) {
+      if (targetStep.id >= 10) {
         window.dispatchEvent(new CustomEvent("open-demo-ended-modal"));
         toast.info(`🔒 ${targetStep.label} is locked in Demo Version. Phase 3 access requires Production.`);
         return;
@@ -157,7 +158,7 @@ function DemoWorkspace({ session, onLoggedOut }: { session?: unknown; onLoggedOu
     const next = WORKFLOW_STEPS[activeStepId + 1];
     if (!next) return;
     if (!isStepUnlocked(next.id, true)) {
-      if (next.phase === 3) window.dispatchEvent(new CustomEvent("open-demo-ended-modal"));
+      if (next.id >= 10) window.dispatchEvent(new CustomEvent("open-demo-ended-modal"));
       toast.info(`🔒 ${next.label} is locked in Demo Version. Phase 3 access requires Production.`);
       return;
     }
@@ -219,8 +220,9 @@ function DemoWorkspace({ session, onLoggedOut }: { session?: unknown; onLoggedOu
                 {activeStepId === 4 && <AnalysisPage />}
                 {activeStepId === 5 && <PowerQueryPage />}
                 {activeStepId === 6 && <DaxMeasuresPage />}
-                {activeStepId === 7 && <SemanticModelPage />}
-                {activeStepId >= 8 && <SemanticModelPage />}
+                {activeStepId === 7 && <SimplePowerBiModelPage />}
+                {activeStepId === 8 && <SimplePowerBiModelPage forcedRelationshipsPage />}
+                {activeStepId >= 9 && <SemanticModelPage />}
               </div>
             </div>
           </main>

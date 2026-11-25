@@ -66,7 +66,7 @@ export function StageModalOverlay({
       return;
     }
     if (!isStepUnlocked(nextStep.id, isDemo)) {
-      if (isDemo && nextStep.phase === 3) window.dispatchEvent(new CustomEvent("open-demo-ended-modal"));
+      if (isDemo && nextStep.id >= 10) window.dispatchEvent(new CustomEvent("open-demo-ended-modal"));
       toast.info(isDemo ? "Phase 3 is locked in the Demo Version." : "The next stage is still locked.");
       return;
     }

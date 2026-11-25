@@ -41,11 +41,6 @@ export function DaxMeasuresPage() {
       return;
     }
     markStepCompleted(6, isDemo);
-    if (isDemo) {
-      window.dispatchEvent(new CustomEvent("open-demo-ended-modal"));
-      setShowDemoEndedModal(true);
-      return;
-    }
     toast.success("Step 7 (DAX Measures) Completed! Step 8 (Power BI Model) is now unlocked.");
     withLoading(
       async () => {

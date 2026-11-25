@@ -2709,15 +2709,14 @@ export function TabPbipExport({ analysis }: { analysis: EnterpriseAnalysis }) {
           {isDemo ? (
             <button
               type="button"
-              disabled
-              onClick={() => toast.info("🔒 Download PBIP is locked in Demo Version.")}
-              title="Download PBIP is locked in Demo Version"
-              className="flex items-center gap-2 px-4 py-3 rounded-xl border border-primary/20 bg-primary/5 text-sm font-medium opacity-40 cursor-not-allowed select-none"
+              onClick={() => window.dispatchEvent(new CustomEvent("open-demo-ended-modal"))}
+              title="Download PBIP is locked in Demo Version — Contact for Full Access"
+              className="flex items-center gap-2 px-4 py-3 rounded-xl border border-primary/25 bg-primary/5 text-sm font-medium opacity-75 hover:opacity-100 hover:border-primary/40 transition-all cursor-pointer"
             >
-              <Lock className="h-5 w-5 text-primary/50" />
+              <Lock className="h-5 w-5 text-primary/70 shrink-0" />
               <div className="text-left">
-                <div className="font-semibold text-primary/50">Download PBIP (.zip)</div>
-                <div className="text-xs text-primary/40">Locked in Demo Version</div>
+                <div className="font-semibold text-primary/80">Download PBIP (.zip)</div>
+                <div className="text-xs text-primary/60">Locked in Demo Version</div>
               </div>
             </button>
           ) : (
@@ -2734,13 +2733,12 @@ export function TabPbipExport({ analysis }: { analysis: EnterpriseAnalysis }) {
           {isDemo ? (
             <button
               type="button"
-              disabled
-              onClick={() => toast.info("🔒 Download M scripts (.txt) is locked in Demo Version.")}
-              title="Download is locked in Demo Version"
-              className="flex items-center gap-2 px-4 py-3 rounded-xl border border-border/50 text-sm font-medium opacity-40 cursor-not-allowed select-none bg-surface/40"
+              onClick={() => window.dispatchEvent(new CustomEvent("open-demo-ended-modal"))}
+              title="Download Power Query M Scripts is locked in Demo Version — Contact for Full Access"
+              className="flex items-center gap-2 px-4 py-3 rounded-xl border border-border/60 text-sm font-medium opacity-75 hover:opacity-100 hover:border-primary/40 transition-all cursor-pointer bg-surface/40"
             >
-              <Lock className="h-4 w-4 text-muted-foreground/50" />
-              <div className="text-left"><div className="text-muted-foreground/50">Power Query M Scripts</div><div className="text-xs text-muted-foreground/40">Locked in Demo Version</div></div>
+              <Lock className="h-4 w-4 text-muted-foreground/70 shrink-0" />
+              <div className="text-left"><div className="text-muted-foreground">Power Query M Scripts</div><div className="text-xs text-muted-foreground/70">Locked in Demo Version</div></div>
             </button>
           ) : (
             <button onClick={handleDownloadMQueries}
@@ -2753,13 +2751,12 @@ export function TabPbipExport({ analysis }: { analysis: EnterpriseAnalysis }) {
           {isDemo ? (
             <button
               type="button"
-              disabled
-              onClick={() => toast.info("🔒 Download Full Analysis JSON is locked in Demo Version.")}
-              title="Download is locked in Demo Version"
-              className="flex items-center gap-2 px-4 py-3 rounded-xl border border-border/50 text-sm font-medium opacity-40 cursor-not-allowed select-none bg-surface/40"
+              onClick={() => window.dispatchEvent(new CustomEvent("open-demo-ended-modal"))}
+              title="Download Full Analysis JSON is locked in Demo Version — Contact for Full Access"
+              className="flex items-center gap-2 px-4 py-3 rounded-xl border border-border/60 text-sm font-medium opacity-75 hover:opacity-100 hover:border-primary/40 transition-all cursor-pointer bg-surface/40"
             >
-              <Lock className="h-4 w-4 text-muted-foreground/50" />
-              <div className="text-left"><div className="text-muted-foreground/50">Full Analysis JSON</div><div className="text-xs text-muted-foreground/40">Locked in Demo Version</div></div>
+              <Lock className="h-4 w-4 text-muted-foreground/70 shrink-0" />
+              <div className="text-left"><div className="text-muted-foreground">Full Analysis JSON</div><div className="text-xs text-muted-foreground/70">Locked in Demo Version</div></div>
             </button>
           ) : (
             <button onClick={handleDownloadJson}

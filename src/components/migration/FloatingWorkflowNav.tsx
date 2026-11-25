@@ -23,7 +23,7 @@ export function FloatingWorkflowNav() {
     const unlocked = isStepUnlocked(stage.id, isDemo);
 
     if (!unlocked) {
-      if (isDemo && stage.phase === 3) {
+      if (isDemo && stage.id >= 10) {
         setOpen(false);
         window.dispatchEvent(new CustomEvent("open-demo-ended-modal"));
         toast.info(`🔒 ${stage.label} is locked in Demo Version. Contact for Phase 3 access.`);

@@ -103,7 +103,7 @@ export function StageNav({ activeStepId, onStepSelect, viewportDocked = false }:
       const unlocked = isStepUnlocked(targetIdx, isDemo);
 
       if (!unlocked) {
-        if (isDemo && targetStage.phase === 3) {
+        if (isDemo && targetStage.id >= 10) {
           window.dispatchEvent(new CustomEvent("open-demo-ended-modal"));
           toast.info(`🔒 ${targetStage.label} is locked in Demo Version. Contact for Phase 3 access.`);
           return;

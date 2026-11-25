@@ -215,8 +215,8 @@ export function unmarkStepCompleted(stepId: number, isDemo: boolean): void {
 export function isStepUnlocked(stepId: number, isDemo: boolean): boolean {
   if (stepId === 0) return true;
 
-  // Demo Version license barrier on Phase 3
-  if (isDemo && stepId >= 7) {
+  // Demo Version license barrier: allow through Validation & Export (id 9); lock Pipeline Logs (id 10)
+  if (isDemo && stepId >= 10) {
     return false;
   }
 

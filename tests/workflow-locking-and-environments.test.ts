@@ -79,27 +79,27 @@ describe("Step-by-Step Workflow Locking System", () => {
     expect(incomplete.label).toBe("Upload Qlik Files");
   });
 
-  it("strictly locks Phase 3 (Steps 8-11) in Demo mode even if preceding steps are complete", () => {
+  it("unlocks through Validation & Export (Step 10) in Demo while locking Pipeline Logs (Step 11)", () => {
     const isDemo = true;
-    // Complete all Phase 1 and Phase 2 steps in Demo
-    for (let i = 0; i <= 6; i++) {
+    // Complete Steps 1 through 9 in Demo
+    for (let i = 0; i <= 8; i++) {
       markStepCompleted(i, isDemo);
     }
 
-    // Step 7 (DAX Measures) is completed
-    expect(isStepCompleted(6, isDemo)).toBe(true);
+    // Steps 8, 9, 10 (Power BI Model, Relationships, Validation & Export) unlock sequentially in Demo
+    expect(isStepUnlocked(7, isDemo)).toBe(true);
+    expect(isStepUnlocked(8, isDemo)).toBe(true);
+    expect(isStepUnlocked(9, isDemo)).toBe(true);
 
-    // Step 8 (Power BI Model) must be locked in Demo
-    expect(isStepUnlocked(7, isDemo)).toBe(false);
-
-    // Step 9, 10, 11 must also be locked in Demo
-    expect(isStepUnlocked(8, isDemo)).toBe(false);
-    expect(isStepUnlocked(9, isDemo)).toBe(false);
+    // Step 11 (Pipeline Logs, id: 10) remains locked in Demo even after Step 10 completes
+    markStepCompleted(9, isDemo);
     expect(isStepUnlocked(10, isDemo)).toBe(false);
 
-    // But in Production (isDemo = false), Step 8 is unlocked!
-    markStepCompleted(6, false);
-    expect(isStepUnlocked(7, false)).toBe(true);
+    // In Production (isDemo = false), Step 11 unlocks once Step 10 is completed
+    for (let i = 0; i <= 9; i++) {
+      markStepCompleted(i, false);
+    }
+    expect(isStepUnlocked(10, false)).toBe(true);
   });
 
   it("allows completing Step 8 (Power BI Model) and Step 9 (Relationships) to unlock Step 10 (Validation & Export)", () => {
