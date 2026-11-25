@@ -33,10 +33,10 @@ describe("Demo Version Mode", () => {
   });
 
   describe("isPathLockedInDemo route restrictions", () => {
-    it("locks Phase 3 routes in Demo Version (Power BI Model, Relationships, Validation & Export / Semantic Model, Logs, etc.)", () => {
-      expect(isPathLockedInDemo("/app/powerbi-model")).toBe(true);
-      expect(isPathLockedInDemo("/app/relationships")).toBe(true);
-      expect(isPathLockedInDemo("/app/semantic-model")).toBe(true);
+    it("locks Logs, Calendars, and Report Designer in Demo Version while allowing Power BI Model, Relationships, and Validation & Export", () => {
+      expect(isPathLockedInDemo("/app/powerbi-model")).toBe(false);
+      expect(isPathLockedInDemo("/app/relationships")).toBe(false);
+      expect(isPathLockedInDemo("/app/semantic-model")).toBe(false);
       expect(isPathLockedInDemo("/app/logs")).toBe(true);
       expect(isPathLockedInDemo("/app/calendar-analysis")).toBe(true);
       expect(isPathLockedInDemo("/app/report-designer")).toBe(true);
