@@ -26,101 +26,74 @@ function getSemanticKey(tableName: string) {
 
 export function Stage6Model({ onNext, analysis }: { onNext?: () => void, analysis?: EnterpriseAnalysis }) {
   const store = useMigration();
-  
+  const powerBiModel = store.powerBiModel;
+
   const relationships = analysis?.relationships || store.relationships || [];
   const setStageStatus = store.setStageStatus;
 
   const finalTables = useMemo(() => {
     let base: FinalTable[] = [];
     const raw = analysis?.finalTables || store.finalTables || [];
-    
+
     if (raw.length > 0) {
-      if ('table' in raw[0]) {
-        // It's a TableProfile[] from enterprise analysis
-        base = (raw as any[]).map(p => ({
+      if ("table" in raw[0]) {
+        base = (raw as any[]).map((p) => ({
           id: p.table,
           name: p.table,
-          type: (p.classification === 'fact' || p.classification === 'bridge' ? 'Fact' : p.classification === 'calendar' ? 'Calendar' : 'Dimension') as any,
-          columns: p.fields?.map((f: string) => ({
-            name: f,
-            dataType: analysis?.columnTypes?.[p.table]?.[f] || "String"
-          })) || [],
-          keys: p.fields?.filter((f: string) => f.toLowerCase().endsWith("id")) || [],
-          sourceTables: [], isFinal: true, steps: [], lineage: []
+          type: (p.classification === "fact" || p.classification === "bridge" ? "Fact" : p.classification === "calendar" ? "Calendar" : "Dimension") as any,
+          columns:
+            p.fields?.map((f: string) => ({
+              name: f,
+              dataType: analysis?.columnTypes?.[p.table]?.[f] || "String",
+            })) || [],
+          keys: p.fields?.filter((f: string) => f.toLowerCase().endsWith("id") || f.toLowerCase().endsWith("key")) || [],
+          sourceTables: [],
+          isFinal: true,
+          steps: [],
+          lineage: [],
         }));
       } else {
-        base = JSON.parse(JSON.stringify(raw)); // deep copy to allow mutations below
+        base = JSON.parse(JSON.stringify(raw));
       }
     }
 
-    base = base.map(t => {
+    return base.map((t) => {
       const rawType = (t.type || "Fact").toString().toLowerCase();
       const normType = rawType === "fact" || rawType === "bridge" ? "Fact" : rawType.includes("calendar") || rawType.includes("date") ? "Calendar" : "Dimension";
       return { ...t, type: normType };
     });
+  }, [analysis, store.finalTables]);
 
-    // Infer missing tables from relationships so the diagram can draw connections
-    const existingTableNames = new Set(base.map(t => t.name.toLowerCase()));
-    
-    relationships.forEach((r: any) => {
-      if (!existingTableNames.has(r.fromTable.toLowerCase())) {
-        base.push({
-          id: r.fromTable,
-          name: r.fromTable,
-          type: "Dimension", // assume dimension for missing linked tables
-          columns: [{ name: r.fromColumn, dataType: "String", derived: false }],
-          keys: [r.fromColumn],
-          sourceTables: [], isFinal: true, steps: [], lineage: []
-        } as any);
-        existingTableNames.add(r.fromTable.toLowerCase());
-      } else {
-        const tbl = base.find(t => t.name.toLowerCase() === r.fromTable.toLowerCase());
-        if (tbl && !tbl.columns.find(c => c.name.toLowerCase() === r.fromColumn.toLowerCase())) {
-          tbl.columns.push({ name: r.fromColumn, dataType: "String", derived: false });
-        }
-      }
-      
-      if (!existingTableNames.has(r.toTable.toLowerCase())) {
-        base.push({
-          id: r.toTable,
-          name: r.toTable,
-          type: "Dimension",
-          columns: [{ name: r.toColumn, dataType: "String", derived: false }],
-          keys: [r.toColumn],
-          sourceTables: [], isFinal: true, steps: [], lineage: []
-        } as any);
-        existingTableNames.add(r.toTable.toLowerCase());
-      } else {
-        const tbl = base.find(t => t.name.toLowerCase() === r.toTable.toLowerCase());
-        if (tbl && !tbl.columns.find(c => c.name.toLowerCase() === r.toColumn.toLowerCase())) {
-          tbl.columns.push({ name: r.toColumn, dataType: "String", derived: false });
-        }
-      }
-    });
-
-    return base;
-  }, [analysis, store.finalTables, relationships]);
-
+  // Use the authoritative store.powerBiModel when present so the Power BI Model View
+  // matches the exported PBIP SemanticModel (tables, columns, and relationships) 1:1.
   const allTables: FinalTable[] = useMemo(() => {
-    const hasCalendar = finalTables.some((t) => t.type === "Calendar");
-    const needsCalendar = !hasCalendar && finalTables.some((t) => t.columns.some((c) => c.dataType === "Date"));
-    if (!needsCalendar) return finalTables;
-    return [
-      ...finalTables,
-      {
-        id: "calendar_auto",
-        name: "Calendar",
-        type: "Calendar",
-        columns: [
-          { name: "Date", dataType: "Date", derived: true }, { name: "Year", dataType: "Integer", derived: true },
-          { name: "Quarter", dataType: "Integer", derived: true }, { name: "Month", dataType: "Integer", derived: true },
-          { name: "MonthName", dataType: "String", derived: true }, { name: "Day", dataType: "Integer", derived: true },
-        ],
-        sourceTables: [], isFinal: true,
-        steps: [], keys: [], lineage: []
-      } as FinalTable,
-    ];
-  }, [finalTables]);
+    if (powerBiModel && powerBiModel.tables.length > 0) {
+      return powerBiModel.tables.map((t) => {
+        const mappedType: FinalTable["type"] =
+          t.kind === "fact" || t.kind === "bridge"
+            ? "Fact"
+            : t.kind === "date"
+            ? "Calendar"
+            : "Dimension";
+        return {
+          id: t.id,
+          name: t.name,
+          type: mappedType,
+          columns: t.columns.map((c) => ({
+            name: c.name,
+            dataType: c.dataType,
+            derived: c.kind === "calculated",
+          })),
+          keys: t.columns.filter((c) => c.isKey).map((c) => c.name),
+          sourceTables: [],
+          isFinal: true,
+          steps: [],
+          lineage: [],
+        };
+      });
+    }
+    return finalTables;
+  }, [powerBiModel, finalTables]);
 
   useEffect(() => {
     if (!allTables.length) return;
@@ -175,8 +148,29 @@ export function Stage6Model({ onNext, analysis }: { onNext?: () => void, analysi
     return assocs;
   }, [finalTables]);
 
-  // Power BI explicit star-schema relationships (Fact FK -> Dim PK, case-insensitive & loose matching)
+  // Power BI explicit star-schema relationships (exact match to exported powerBiModel when present)
   const pbiRelationships = useMemo(() => {
+    if (powerBiModel && powerBiModel.tables.length > 0) {
+      return powerBiModel.relationships
+        .filter((r) => !r.deleted && (r.active || r.userApproved))
+        .map((r) => {
+          const fromTable = powerBiModel.tables.find((t) => t.id === r.fromTableId);
+          const fromColumn = fromTable?.columns.find((c) => c.id === r.fromColumnId);
+          const toTable = powerBiModel.tables.find((t) => t.id === r.toTableId);
+          const toColumn = toTable?.columns.find((c) => c.id === r.toColumnId);
+          if (!fromTable || !fromColumn || !toTable || !toColumn) return null;
+          return {
+            id: r.id,
+            fromTable: fromTable.name,
+            fromColumn: fromColumn.name,
+            toTable: toTable.name,
+            toColumn: toColumn.name,
+            cardinality: r.cardinality === "one-to-one" ? "1:1" : r.cardinality === "many-to-many" ? "N:N" : "N:1",
+            active: r.active,
+          };
+        })
+        .filter((r): r is NonNullable<typeof r> => Boolean(r));
+    }
     if (relationships.length > 0) return relationships;
     const rels: any[] = [];
     const facts = allTables.filter(t => t.type === "Fact" || t.type?.toString().toLowerCase() === "fact" || t.type?.toString().toLowerCase() === "bridge");
