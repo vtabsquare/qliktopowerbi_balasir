@@ -195,28 +195,28 @@ function DemoWorkspace({ session, onLoggedOut }: { session?: unknown; onLoggedOu
           <StageNav viewportDocked activeStepId={activeStepId} onStepSelect={(targetStage) => handleSelectStep(WORKFLOW_STEPS[targetStage.id])} />
 
           {/* Main Content Area */}
-          <main className="min-w-0 min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 pb-20 sm:px-6 sm:py-5 sm:pb-20">
-            <div className="w-full space-y-4">
+          <main className="min-w-0 min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3 pb-16 sm:px-5 sm:py-4 sm:pb-16">
+            <div className="w-full max-w-full space-y-3">
               {/* Demo Hero Banner (Shown on Step 0: Instructions; hidden on Step 1: Upload Qlik Files and subsequent steps) */}
               {activeStepId === 0 && (
-                <section className="mb-6 glass-card p-6 sm:p-8 bg-gradient-to-br from-amber-500/10 via-surface/60 to-primary/10 border border-amber-500/30 shadow-lg rounded-2xl">
-                  <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
-                    <div>
-                      <span className="chip mb-4 text-amber-600 dark:text-amber-400 bg-amber-500/10 border-amber-500/20">
-                        <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+                <section className="w-full h-auto mb-3 p-3.5 sm:p-4 lg:p-5 glass-card bg-gradient-to-br from-amber-500/10 via-surface/60 to-primary/10 border border-amber-500/30 shadow-md rounded-2xl">
+                  <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-3 sm:gap-4">
+                    <div className="min-w-0">
+                      <span className="chip mb-1.5 text-[10px] py-0.5 px-2 text-amber-600 dark:text-amber-400 bg-amber-500/10 border-amber-500/20">
+                        <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
                         DEMO VERSION • GUIDED WORKFLOW
                       </span>
-                      <h1 className="font-display font-black text-[clamp(2.25rem,5vw,3.75rem)] tracking-tight leading-[1.05] mb-3 break-words">
+                      <h1 className="font-display font-black text-[clamp(1.375rem,2.6vw,2rem)] tracking-tight leading-[1.08] mb-1 break-words">
                         <span className="text-foreground">Qlik</span>
-                        <span className="mx-2 text-muted-foreground font-light">→</span>
+                        <span className="mx-1.5 text-muted-foreground font-light">→</span>
                         <span className="gradient-text">Power BI</span>
                       </h1>
-                      <p className="text-muted-foreground text-sm max-w-xl leading-relaxed">
+                      <p className="text-muted-foreground text-xs sm:text-[13px] max-w-2xl leading-snug">
                         Interactive Live Demo Environment. Complete each migration stage sequentially to unlock the next phase, from QlikView visualization extraction to Power Query M and DAX synthesis.
                       </p>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full lg:w-auto">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 w-full xl:w-auto shrink-0">
                       <Metric icon="◎" value="100%" label="Conversion accuracy" />
                       <Metric icon="⚡" value="10x" label="Faster than manual" />
                       <Metric icon="❒" value={tableCount ? `${tableCount}` : "137"} label={tableCount ? "Final tables" : "Demo files"} />
@@ -260,11 +260,11 @@ function DemoWorkspace({ session, onLoggedOut }: { session?: unknown; onLoggedOu
 
 function Metric({ icon, value, label }: { icon: string; value: string; label: string }) {
   return (
-    <div className="surface-card p-3.5 flex items-center gap-3 bg-surface/80 border border-border/60 shadow-sm hover:border-primary/30 transition-all rounded-xl">
-      <div className="grid h-9 w-9 place-items-center rounded-xl bg-primary/10 text-primary text-base font-bold">{icon}</div>
-      <div className="leading-tight">
-        <div className="font-display font-bold text-lg text-foreground">{value}</div>
-        <div className="text-[10px] text-muted-foreground">{label}</div>
+    <div className="surface-card px-3 py-2 flex items-center gap-2.5 bg-surface/80 border border-border/60 shadow-xs hover:border-primary/30 transition-all rounded-xl">
+      <div className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary text-xs font-bold">{icon}</div>
+      <div className="leading-tight min-w-0">
+        <div className="font-display font-bold text-sm sm:text-base text-foreground">{value}</div>
+        <div className="text-[10px] text-muted-foreground whitespace-nowrap">{label}</div>
       </div>
     </div>
   );

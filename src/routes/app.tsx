@@ -157,10 +157,10 @@ function MigrationLayout() {
         <div className="flex min-h-0 flex-1 flex-col md:flex-row overflow-hidden">
           {matchedStep && <StageNav viewportDocked />}
 
-          <main className="min-w-0 min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 pb-20 sm:px-6 sm:py-5 sm:pb-20">
-            <div className="w-full space-y-4">
+          <main className="min-w-0 min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3 pb-16 sm:px-5 sm:py-4 sm:pb-16">
+            <div className="w-full max-w-full space-y-3">
               {isInstructions ? (
-                <Hero tableCount={tableCount} />
+                <Hero tableCount={tableCount} compact />
               ) : !isUploadStep && matchedStep ? (
                 <div className="flex items-center justify-between rounded-xl border border-border/60 bg-surface/60 px-4 py-2 text-xs shadow-xs">
                   <div className="flex items-center gap-2 font-medium text-muted-foreground">
@@ -191,46 +191,46 @@ function MigrationLayout() {
   );
 }
 
-function Hero({ tableCount, compact = false }: { tableCount: number; compact?: boolean }) {
+function Hero({ tableCount, compact = true }: { tableCount: number; compact?: boolean }) {
   return (
     <section
       className={cn(
-        "glass-card rounded-2xl bg-gradient-to-br from-amber-500/10 via-surface/60 to-primary/10 border border-amber-500/30 shadow-lg transition-all duration-300 ease-in-out",
-        compact ? "mb-4 p-4 sm:p-5" : "mb-6 p-6 sm:p-8"
+        "w-full h-auto glass-card rounded-2xl bg-gradient-to-br from-amber-500/10 via-surface/60 to-primary/10 border border-amber-500/30 shadow-md transition-all duration-300 ease-in-out",
+        compact ? "mb-3 p-3.5 sm:p-4 lg:p-5" : "mb-4 p-4 sm:p-5"
       )}
     >
       <div
         className={cn(
-          "flex flex-col lg:flex-row lg:items-center lg:justify-between transition-all duration-300",
-          compact ? "gap-4" : "gap-6"
+          "flex flex-col xl:flex-row xl:items-center xl:justify-between transition-all duration-300",
+          compact ? "gap-3 sm:gap-4" : "gap-4"
         )}
       >
-        <div>
+        <div className="min-w-0">
           <span
             className={cn(
               "chip text-amber-600 dark:text-amber-400 bg-amber-500/10 border-amber-500/20 transition-all duration-300",
-              compact ? "mb-2 text-[10px] py-0.5 px-2" : "mb-4"
+              compact ? "mb-1.5 text-[10px] py-0.5 px-2" : "mb-2 text-[10px] py-0.5 px-2"
             )}
           >
-            <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+            <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
             AI MIGRATION ENGINE ACTIVE
           </span>
           <h1
             className={cn(
-              "font-display font-black tracking-tight leading-[1.05] break-words transition-all duration-300",
+              "font-display font-black tracking-tight leading-[1.08] break-words transition-all duration-300",
               compact
-                ? "text-[clamp(1.5rem,3.2vw,2.25rem)] mb-1.5"
-                : "text-[clamp(2.25rem,5vw,3.75rem)] mb-3"
+                ? "text-[clamp(1.375rem,2.6vw,2rem)] mb-1"
+                : "text-[clamp(1.5rem,3vw,2.25rem)] mb-1.5"
             )}
           >
             <span className="text-foreground">Qlik</span>
-            <span className="mx-2 text-muted-foreground font-light">→</span>
+            <span className="mx-1.5 text-muted-foreground font-light">→</span>
             <span className="gradient-text">Power BI</span>
           </h1>
           <p
             className={cn(
-              "text-muted-foreground leading-relaxed transition-all duration-300",
-              compact ? "text-xs max-w-xl" : "text-sm max-w-xl"
+              "text-muted-foreground leading-snug transition-all duration-300",
+              compact ? "text-xs sm:text-[13px] max-w-2xl" : "text-xs sm:text-sm max-w-2xl"
             )}
           >
             Enterprise-grade automated migration. Upload your Qlik scripts, run the analysis engine, and export a deployment-ready Power BI PBIP project with star-schema modeling and DAX translation.
@@ -238,8 +238,8 @@ function Hero({ tableCount, compact = false }: { tableCount: number; compact?: b
         </div>
         <div
           className={cn(
-            "grid grid-cols-1 sm:grid-cols-3 w-full lg:w-auto transition-all duration-300 shrink-0",
-            compact ? "gap-2" : "gap-3"
+            "grid grid-cols-1 sm:grid-cols-3 w-full xl:w-auto transition-all duration-300 shrink-0",
+            compact ? "gap-2" : "gap-2.5"
           )}
         >
           <Metric icon="◎" value="100%" label="Conversion accuracy" compact={compact} />
@@ -255,7 +255,7 @@ function Metric({
   icon,
   value,
   label,
-  compact = false,
+  compact = true,
 }: {
   icon: string;
   value: string;
@@ -265,23 +265,23 @@ function Metric({
   return (
     <div
       className={cn(
-        "surface-card rounded-xl flex items-center bg-surface/80 border border-border/60 shadow-sm hover:border-primary/30 transition-all duration-300",
-        compact ? "p-2.5 sm:p-3 gap-2.5" : "p-3.5 gap-3"
+        "surface-card rounded-xl flex items-center bg-surface/80 border border-border/60 shadow-xs hover:border-primary/30 transition-all duration-300",
+        compact ? "px-3 py-2 gap-2.5" : "p-3 gap-2.5"
       )}
     >
       <div
         className={cn(
-          "grid place-items-center rounded-xl bg-primary/10 text-primary font-bold transition-all duration-300 shrink-0",
-          compact ? "h-8 w-8 text-sm" : "h-9 w-9 text-base"
+          "grid place-items-center rounded-lg bg-primary/10 text-primary font-bold transition-all duration-300 shrink-0",
+          compact ? "h-7 w-7 text-xs" : "h-8 w-8 text-sm"
         )}
       >
         {icon}
       </div>
-      <div className="leading-tight">
+      <div className="leading-tight min-w-0">
         <div
           className={cn(
             "font-display font-bold text-foreground transition-all duration-300",
-            compact ? "text-base" : "text-lg"
+            compact ? "text-sm sm:text-base" : "text-base"
           )}
         >
           {value}
