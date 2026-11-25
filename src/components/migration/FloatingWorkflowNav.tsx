@@ -6,7 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import {
   WORKFLOW_STEPS,
-  LOCKED_STEP_MESSAGE,
+  getLockedStepActionMessage,
   isStepCompleted,
   isStepUnlocked,
   getFirstIncompleteStep,
@@ -32,7 +32,7 @@ export function FloatingWorkflowNav() {
       }
 
       const incomplete = getFirstIncompleteStep(stage.id, isDemo);
-      toast.error(LOCKED_STEP_MESSAGE, {
+      toast.error(getLockedStepActionMessage(incomplete.id), {
         description: `Step ${incomplete.stepNumber} (${incomplete.label}) must be completed before accessing Step ${stage.stepNumber} (${stage.label}).`,
         action: {
             label: `Go to Step ${incomplete.stepNumber}`,

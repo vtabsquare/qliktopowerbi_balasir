@@ -18,7 +18,7 @@ import {
   getFirstIncompleteStep,
   markStepCompleted,
   consumePendingReloadRedirect,
-  LOCKED_STEP_MESSAGE,
+  getLockedStepActionMessage,
   WORKFLOW_STEPS,
 } from "@/lib/migration/workflow-gating";
 import { StageModalOverlay } from "@/components/migration/StageModalOverlay";
@@ -95,7 +95,7 @@ function AuthGuard() {
         const unlocked = isStepUnlocked(currentStep.id, isDemo);
         if (!unlocked) {
           const incomplete = getFirstIncompleteStep(currentStep.id, isDemo);
-          toast.error(LOCKED_STEP_MESSAGE, {
+          toast.error(getLockedStepActionMessage(incomplete.id), {
             description: `Step ${incomplete.stepNumber} (${incomplete.label}) must be completed before accessing Step ${currentStep.stepNumber} (${currentStep.label}).`,
             action: {
                 label: `Go to Step ${incomplete.stepNumber}`,

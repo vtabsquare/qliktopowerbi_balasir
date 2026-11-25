@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import {
   WORKFLOW_STEPS,
   LOCKED_STEP_MESSAGE,
+  getLockedStepActionMessage,
   isStepCompleted,
   isStepUnlocked,
   getFirstIncompleteStep,
@@ -111,7 +112,7 @@ export function StageNav({ activeStepId, onStepSelect, viewportDocked = false }:
         }
 
         const incomplete = getFirstIncompleteStep(targetIdx, isDemo);
-        toast.error(LOCKED_STEP_MESSAGE, {
+        toast.error(getLockedStepActionMessage(incomplete.id), {
           description: `Step ${incomplete.stepNumber} (${incomplete.label}) must be completed before accessing Step ${targetStage.stepNumber} (${targetStage.label}).`,
           action: {
               label: `Go to Step ${incomplete.stepNumber}`,

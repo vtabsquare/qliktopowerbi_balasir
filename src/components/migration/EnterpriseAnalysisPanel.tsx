@@ -2633,10 +2633,12 @@ export function TabValidation({ analysis }: { analysis: EnterpriseAnalysis }) {
         </div>
       )}
 
-      <div className="surface-card p-4">
-        <SectionHeader title="Validation Issues" />
-        {issueRows.length ? <DataTable rows={issueRows} /> : <p className="text-xs text-green-400">No validation issues found.</p>}
-      </div>
+      {issueRows.length > 0 && (
+        <div className="surface-card p-4">
+          <SectionHeader title="Validation Issues" />
+          <DataTable rows={issueRows} />
+        </div>
+      )}
 
       <div className="surface-card p-4">
         <SectionHeader title="Power BI Desktop Openability Diagnostics" sub="Pre-flight checks simulating what Power BI Desktop verifies on open" />

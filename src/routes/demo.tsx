@@ -4,7 +4,7 @@ import { useMigration } from "@/lib/migration/store";
 import { toast } from "sonner";
 import {
   WORKFLOW_STEPS,
-  LOCKED_STEP_MESSAGE,
+  getLockedStepActionMessage,
   isStepUnlocked,
   getFirstIncompleteStep,
   getCompletedSteps,
@@ -141,7 +141,7 @@ function DemoWorkspace({ session, onLoggedOut }: { session?: unknown; onLoggedOu
       }
 
       const incomplete = getFirstIncompleteStep(targetStep.id, true);
-      toast.error(LOCKED_STEP_MESSAGE, {
+      toast.error(getLockedStepActionMessage(incomplete.id), {
         description: `Step ${incomplete.stepNumber} (${incomplete.label}) must be completed before accessing Step ${targetStep.stepNumber} (${targetStep.label}).`,
         action: {
             label: `Go to Step ${incomplete.stepNumber}`,

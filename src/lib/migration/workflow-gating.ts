@@ -143,6 +143,19 @@ export function getStepByKey(key: string): WorkflowStep | undefined {
 
 export const LOCKED_STEP_MESSAGE = "Complete the previous step successfully to unlock this step.";
 
+export function getLockedStepActionMessage(incompleteStepId: number): string {
+  switch (incompleteStepId) {
+    case 4:
+      return "Please complete Apply Mapping & Re-run Conversion before proceeding to Power Query.";
+    case 5:
+      return "Please complete Regenerate M Query before proceeding to DAX Measures.";
+    case 6:
+      return "Please complete Apply & Regenerate and resolve all blocking errors before proceeding to Power BI Model.";
+    default:
+      return LOCKED_STEP_MESSAGE;
+  }
+}
+
 let activeWorkflowScope: string | null = null;
 let reloadResetProcessed = false;
 let pendingReloadRedirect = false;
