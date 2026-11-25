@@ -1,4 +1,5 @@
-import { Toaster as Sonner } from "sonner";
+import { useEffect } from "react";
+import { Toaster as Sonner, toast } from "sonner";
 import { useRouterState } from "@tanstack/react-router";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -9,9 +10,19 @@ const Toaster = ({ ...props }: ToasterProps) => {
   const { isDemo: authIsDemo } = useAuth();
   const isDemo = authIsDemo || pathname.startsWith("/demo");
 
+  useEffect(() => {
+    if (isDemo) {
+      toast.dismiss();
+    }
+  }, [isDemo]);
+
+  if (isDemo) {
+    return null;
+  }
+
   return (
     <Sonner
-      position={isDemo ? "top-center" : "bottom-center"}
+      position="bottom-center"
       offset={16}
       closeButton
       className="toaster group"
