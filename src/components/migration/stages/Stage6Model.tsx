@@ -240,7 +240,7 @@ export function Stage6Model({ onNext, analysis }: { onNext?: () => void, analysi
           <div>
             <h3 className="font-display text-xl font-semibold">Semantic Model Architecture Comparison</h3>
             <p className="text-sm text-muted-foreground mt-1">
-              Compare original Qlik associative field vectors side-by-side with optimised Power BI orthogonal star schema connection layouts.
+              Compare original Qlik associative field vectors with optimised Power BI orthogonal star schema connection layouts.
             </p>
           </div>
           <div className="flex items-center gap-2.5">
@@ -272,7 +272,7 @@ export function Stage6Model({ onNext, analysis }: { onNext?: () => void, analysi
         </div>
       </div>
 
-      <div className="grid lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-6">
         <ModelPanel title="Qlik Data Model Viewer (Associative)" tables={finalTables} relationships={qlikAssociations} variant="qlik" />
         <ModelPanel title="Power BI Model View (Tabular Star Schema)" tables={allTables} relationships={pbiRelationships} variant="pbi" facts={facts} others={others} />
       </div>
