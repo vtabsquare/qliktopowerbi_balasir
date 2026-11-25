@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { Check, Layers, Grid, Lock, Minimize2, Maximize2, PanelLeftClose, PanelLeftOpen, Menu, X, Calendar, LayoutTemplate, ScrollText, Workflow } from "lucide-react";
+import { Check, Layers, Grid, Lock, Minimize2, Maximize2, PanelLeftClose, PanelLeftOpen, Menu, X } from "lucide-react";
 import { useMigration } from "@/lib/migration/store";
 import { cn } from "@/lib/utils";
 import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
@@ -173,80 +173,6 @@ export function StageNav({ activeStepId, onStepSelect, viewportDocked = false }:
 
   if (viewportDocked) {
     const activeStage = STAGES[activeIndex] || STAGES[0];
-    const mainNavItems = [
-      { label: "Pipeline", to: isDemo ? "/demo" : "/app", icon: Workflow, locked: false },
-      { label: "Calendars", to: "/app/calendar-analysis", icon: Calendar, locked: isDemo },
-      { label: "Report Designer", to: "/app/report-designer", icon: LayoutTemplate, locked: isDemo },
-      { label: "Logs", to: "/app/logs", icon: ScrollText, locked: isDemo },
-    ];
-
-    const renderSidebarBrandAndNav = (collapsed: boolean, onSelectClose?: () => void) => (
-      <div className="border-b border-border/60 p-2.5 space-y-2.5">
-        <div className={cn("flex items-center gap-2.5", collapsed ? "justify-center" : "px-1")}>
-          <Link to="/" className="flex shrink-0 items-center gap-2.5 group" onClick={onSelectClose}>
-            <div className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-primary to-[oklch(0.62_0.2_260)] text-primary-foreground font-bold shadow-sm group-hover:scale-105 transition-transform">
-              <span className="text-xs tracking-tight">VT</span>
-            </div>
-            {!collapsed && (
-              <div className="leading-tight">
-                <div className="font-display font-bold text-sm tracking-wide text-foreground">VTAB SQUARE</div>
-                <div className="mt-0.5 inline-flex items-center gap-1 text-[10px] font-semibold text-primary">
-                  <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
-                  <span>AI MIGRATION ENGINE v2.0</span>
-                </div>
-              </div>
-            )}
-          </Link>
-        </div>
-
-        <nav aria-label="Main navigation" className={cn("grid gap-1", collapsed ? "grid-cols-1" : "grid-cols-2")}>
-          {mainNavItems.map((item) => {
-            const Icon = item.icon;
-            if (item.locked) {
-              return (
-                <button
-                  key={item.label}
-                  type="button"
-                  onClick={() => toast.info(`🔒 ${item.label} is locked in the Demo Version.`)}
-                  title={`${item.label} is locked in Demo Version`}
-                  className={cn(
-                    "flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-[11px] font-medium text-muted-foreground/50 opacity-50 cursor-not-allowed",
-                    collapsed && "justify-center px-1",
-                  )}
-                >
-                  <Icon className="h-3.5 w-3.5 shrink-0" />
-                  {!collapsed && <span className="truncate">{item.label}</span>}
-                </button>
-              );
-            }
-            const isCurrent =
-              item.to === "/app"
-                ? normalizedPath === "/app" || normalizedPath.startsWith("/app/") && !["/app/calendar-analysis", "/app/report-designer", "/app/logs"].includes(normalizedPath)
-                : item.to === "/demo"
-                ? isDemoRoute
-                : normalizedPath === item.to;
-            return (
-              <Link
-                key={item.label}
-                to={item.to}
-                onClick={onSelectClose}
-                title={item.label}
-                className={cn(
-                  "flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-[11px] font-semibold transition-colors",
-                  collapsed && "justify-center px-1",
-                  isCurrent
-                    ? "bg-primary text-primary-foreground shadow-xs"
-                    : "text-muted-foreground hover:bg-muted/70 hover:text-foreground",
-                )}
-              >
-                <Icon className="h-3.5 w-3.5 shrink-0" />
-                {!collapsed && <span className="truncate">{item.label}</span>}
-              </Link>
-            );
-          })}
-        </nav>
-      </div>
-    );
 
     const renderVerticalList = (collapsed: boolean, onSelectClose?: () => void) => (
       <div className="flex flex-col gap-3 p-2.5">
@@ -367,7 +293,6 @@ export function StageNav({ activeStepId, onStepSelect, viewportDocked = false }:
                 </button>
               </div>
               <div className="min-h-0 flex-1 overflow-y-auto">
-                {renderSidebarBrandAndNav(false, () => setMobileDrawerOpen(false))}
                 {renderVerticalList(false, () => setMobileDrawerOpen(false))}
               </div>
             </aside>
@@ -383,8 +308,7 @@ export function StageNav({ activeStepId, onStepSelect, viewportDocked = false }:
             sidebarCollapsed ? "md:w-16" : "md:w-64 lg:w-72",
           )}
         >
-          {renderSidebarBrandAndNav(sidebarCollapsed)}
-          <div className="flex items-center justify-between border-b border-border/50 px-3 py-2">
+          <div className="flex items-center justify-between border-b border-border/50 px-3 py-2.5">
             {!sidebarCollapsed && (
               <div className="flex items-center gap-2 min-w-0">
                 <Layers className="h-3.5 w-3.5 shrink-0 text-primary" />

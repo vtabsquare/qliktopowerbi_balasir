@@ -58,9 +58,99 @@ export function AppHeader() {
   };
 
   return (
-    <header className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur-xl supports-[backdrop-filter]:bg-background/60 transition-all">
-      <div className="flex w-full items-center justify-end gap-2 px-4 py-2 sm:px-6">
-        <div className="ml-auto flex shrink-0 items-center gap-2">
+    <header className="sticky top-0 z-40 border-b border-border/80 bg-background/85 backdrop-blur-xl supports-[backdrop-filter]:bg-background/60 shadow-xs transition-all">
+      <div className="flex w-full items-center justify-between gap-4 px-4 py-2 sm:px-6">
+        {/* Left: Logo, Branding, AI Engine v2.0 */}
+        <div className="flex shrink-0 items-center gap-3">
+          <Link to="/" className="flex shrink-0 items-center gap-2.5 group">
+            <div className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-primary to-[oklch(0.62_0.2_260)] text-primary-foreground font-bold shadow-sm group-hover:scale-105 transition-transform">
+              <span className="text-xs tracking-tight">VT</span>
+            </div>
+            <div className="leading-tight">
+              <div className="font-display font-bold text-sm tracking-wide text-foreground">VTAB SQUARE</div>
+              <div className="mt-0.5 hidden sm:inline-flex items-center gap-1.5 text-[10px] font-semibold tracking-wide text-primary">
+                <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
+                <span>AI MIGRATION ENGINE v2.0</span>
+              </div>
+            </div>
+          </Link>
+        </div>
+
+        {/* Center: Main Navigation */}
+        <nav aria-label="Main navigation" className="hidden min-w-0 items-center gap-1 overflow-x-auto whitespace-nowrap rounded-full border border-border/60 bg-surface/70 p-1 text-xs font-medium shadow-xs md:flex">
+          <Link
+            to={isDemo ? "/demo" : "/app"}
+            activeProps={{ className: "bg-primary text-primary-foreground shadow-sm" }}
+            className="rounded-full px-3.5 py-1.5 text-muted-foreground hover:text-foreground transition-all"
+          >
+            Pipeline
+          </Link>
+          {isDemo ? (
+            <button
+              type="button"
+              disabled
+              onClick={() => toast.info("🔒 Calendars is locked in the Demo Version.")}
+              title="Calendars is locked in Demo Version"
+              className="inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-muted-foreground/50 opacity-40 cursor-not-allowed select-none transition-all hover:bg-muted/20"
+            >
+              <span>Calendars</span>
+              <Lock className="h-3 w-3 opacity-70" />
+            </button>
+          ) : (
+            <Link
+              to="/app/calendar-analysis"
+              activeProps={{ className: "bg-primary text-primary-foreground shadow-sm" }}
+              className="rounded-full px-3.5 py-1.5 text-muted-foreground hover:text-foreground transition-all"
+            >
+              Calendars
+            </Link>
+          )}
+
+          {isDemo ? (
+            <button
+              type="button"
+              disabled
+              onClick={() => toast.info("🔒 Report Designer is locked in the Demo Version.")}
+              title="Report Designer is locked in Demo Version"
+              className="inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-muted-foreground/50 opacity-40 cursor-not-allowed select-none transition-all hover:bg-muted/20"
+            >
+              <span>Report Designer</span>
+              <Lock className="h-3 w-3 opacity-70" />
+            </button>
+          ) : (
+            <Link
+              to="/app/report-designer"
+              activeProps={{ className: "bg-primary text-primary-foreground shadow-sm" }}
+              className="rounded-full px-3.5 py-1.5 text-muted-foreground hover:text-foreground transition-all"
+            >
+              Report Designer
+            </Link>
+          )}
+
+          {isDemo ? (
+            <button
+              type="button"
+              disabled
+              onClick={() => toast.info("🔒 Logs is locked in the Demo Version.")}
+              title="Logs is locked in Demo Version"
+              className="inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-muted-foreground/50 opacity-40 cursor-not-allowed select-none transition-all hover:bg-muted/20"
+            >
+              <span>Logs</span>
+              <Lock className="h-3 w-3 opacity-70" />
+            </button>
+          ) : (
+            <Link
+              to="/app/logs"
+              activeProps={{ className: "bg-primary text-primary-foreground shadow-sm" }}
+              className="rounded-full px-3.5 py-1.5 text-muted-foreground hover:text-foreground transition-all"
+            >
+              Logs
+            </Link>
+          )}
+        </nav>
+
+        {/* Right: Demo controls / Sign Out + Options */}
+        <div className="flex shrink-0 items-center gap-2">
           {isDemo && (
             <button
               type="button"
