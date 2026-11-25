@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState, useMemo } from 'react';
+import { useRouterState } from '@tanstack/react-router';
 import { Session, User } from '@supabase/supabase-js';
 import { supabaseProd, supabaseDemo, isDemoEnvironment, getSupabase } from '@/lib/supabase';
 import { toast } from 'sonner';
@@ -32,7 +33,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [loading, setLoading] = useState(true);
   const inactivityTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const isDemoEnv = useMemo(() => isDemoEnvironment(), []);
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const isDemoEnv = useMemo(() => pathname.startsWith('/demo') || isDemoEnvironment(), [pathname]);
   const activeClient = useMemo(() => getSupabase(isDemoEnv), [isDemoEnv]);
 
   // ── Inactivity auto-logout ──────────────────────────────────────────────────
