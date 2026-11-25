@@ -29,7 +29,7 @@ export function stableGuid(seed: string): string {
       values[j] ^= values[j] >>> 13;
     }
   }
-  const hex = values.map((value) => value.toString(16).padStart(8, "0")).join("");
+  const hex = values.map((value) => (value >>> 0).toString(16).padStart(8, "0")).join("");
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-8${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
 }
 

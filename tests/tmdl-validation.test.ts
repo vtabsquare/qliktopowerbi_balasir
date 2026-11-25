@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { serializeTmdlFolder, validateTomModelSpec, type TomDatabaseSpec } from "../src/lib/migration/tmdl";
+import { serializeTmdlFolder, stableGuid, validateTomModelSpec, type TomDatabaseSpec } from "../src/lib/migration/tmdl";
 
 function validSpec(): TomDatabaseSpec {
   return {
@@ -38,7 +38,7 @@ describe("TMDL validation and serialization", () => {
     expect(validateTomModelSpec(spec).some((item) => item.code === "TMDL_MULTIPLE_TABLE_KEYS")).toBe(true);
   });
 
-  it("serializes expressions.tmdl without invalid enableLoad property", () => {
+  it("serializes expressions.tmdl without invalid enableLoad property and fences multi-line expressions", () => {
     const spec = validSpec();
     spec.model.expressions.push({
       id: "expr:Source_Customers",
@@ -50,9 +50,15 @@ describe("TMDL validation and serialization", () => {
     });
     const result = serializeTmdlFolder(spec);
     const expressionsFile = result.files["expressions.tmdl"];
-    expect(expressionsFile).toContain("expression Source_Customers =");
+    expect(expressionsFile).toContain("expression Source_Customers = ```");
+    expect(expressionsFile).toContain("\t```\n\tannotation 'Qlik.LoadEnabled' = \"false\"");
     expect(expressionsFile).not.toContain("enableLoad:");
-    expect(expressionsFile).toContain("annotation 'Qlik.LoadEnabled' = \"false\"");
+  });
+
+  it("generates valid unsigned hexadecimal UUIDs in stableGuid", () => {
+    for (const seed of ["Customers", "Sales:CustomerID", "VAR-lxzpjl", "REL-sales-customerid-customers-customerid-0", "CustomerID"]) {
+      expect(stableGuid(seed)).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-8[0-9a-f]{3}-[0-9a-f]{12}$/);
+    }
   });
 
 });

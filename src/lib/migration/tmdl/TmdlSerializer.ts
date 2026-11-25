@@ -21,9 +21,14 @@ function serializeAnnotations(values: TomAnnotation[] | undefined, depth: number
 
 function serializeExpressionObject(header: string, expression: string, depth: number): string[] {
   const indent = "\t".repeat(depth);
+  const bodyIndent = "\t".repeat(depth + 1);
   const lines = expression.replace(/\r\n/g, "\n").split("\n");
   if (lines.length === 1 && lines[0].trim() && !/[\r\n]/.test(lines[0])) return [`${indent}${header} = ${lines[0].trim()}`];
-  return [`${indent}${header} =`, ...indentExpression(expression, depth + 1)];
+  return [
+    `${indent}${header} = \`\`\``,
+    ...indentExpression(expression, depth + 1),
+    `${bodyIndent}\`\`\``,
+  ];
 }
 
 function serializeColumn(column: TomColumn): string[] {
@@ -80,8 +85,9 @@ function serializePartition(partition: TomPartition): string[] {
   if (expressionLines.length === 1 && expressionLines[0].trim()) {
     lines.push(`\t\tsource = ${expressionLines[0].trim()}`);
   } else {
-    lines.push("\t\tsource =");
+    lines.push("\t\tsource = ```");
     lines.push(...indentExpression(partition.expression, 3));
+    lines.push("\t\t\t```");
   }
   lines.push(...serializeAnnotations(partition.annotations, 2));
   return lines;
