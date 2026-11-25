@@ -69,12 +69,28 @@ describe("Phase 2 DAX quality gate", () => {
 
   it("repairs supported Qlik date functions and a safely missing closing parenthesis", () => {
     const broken = measure("M-Period", "Period start", "MonthStart(MAX('Sales'[OrderDate])");
-    const repaired = repairDaxDependencies([table("Sales", ["OrderDate"], [broken])]).tables[0].measures[0];
+    const addMonthsBroken = measure(
+      "M-vDateStart",
+      "vDateStart",
+      "DATE(YEAR(AddMonths(MAX('Sales'[OrderDate]), -11)), MONTH(AddMonths(MAX('Sales'[OrderDate]), -11)), 1)",
+    );
+    const repairedTables = repairDaxDependencies([table("Sales", ["OrderDate"], [broken, addMonthsBroken])]).tables;
+    const repaired = repairedTables[0].measures[0];
+    const repairedDateStart = repairedTables[0].measures[1];
 
     expect(repaired.expression).toBe("DATE(YEAR(MAX('Sales'[OrderDate])), MONTH(MAX('Sales'[OrderDate])), 1)");
-    const result = validateDaxMeasures([{ id: repaired.id, name: repaired.name, expression: repaired.expression, table: "Sales" }], [table("Sales", ["OrderDate"], [repaired])]);
+    expect(repairedDateStart.expression).toBe("DATE(YEAR(EDATE(MAX('Sales'[OrderDate]), -11)), MONTH(EDATE(MAX('Sales'[OrderDate]), -11)), 1)");
+    const result = validateDaxMeasures(
+      [
+        { id: repaired.id, name: repaired.name, expression: repaired.expression, table: "Sales" },
+        { id: repairedDateStart.id, name: repairedDateStart.name, expression: repairedDateStart.expression, table: "Sales" },
+      ],
+      repairedTables,
+    );
     expect(result[0].status).toBe("valid");
+    expect(result[1].status).toBe("valid");
     expect(repaired.approved).toBe(true);
+    expect(repairedDateStart.approved).toBe(true);
   });
 
   it("keeps Qlik locale and formatting settings out of the measure inventory", () => {

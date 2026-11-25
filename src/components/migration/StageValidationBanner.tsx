@@ -93,15 +93,17 @@ export function StageValidationBanner({ stepId, canProceed, blockedReason }: Sta
       const enterpriseInputs = (enterpriseAnalysis?.daxMeasures ?? [])
         .filter((m) => !known.has(`${m.table.toLowerCase()}::${m.measureName.toLowerCase()}`))
         .map((m, i) => ({ id: `enterprise:${i}:${m.measureName}`, name: m.measureName, expression: m.dax, table: m.table }));
+      const inputById = new Map([...modelInputs, ...enterpriseInputs].map((m) => [m.id, m]));
       const daxResults = validatedModel ? validateDaxMeasures([...modelInputs, ...enterpriseInputs], validatedModel.tables) : [];
       for (const res of daxResults) {
+        const tableName = res.table || inputById.get(res.measureId)?.table;
         for (const issue of res.issues) {
           if (issue.severity === "error" || issue.severity === "warning") {
             items.push({
               id: `dax-${res.measureId}-${issue.code}`,
               severity: issue.severity,
               stepLabel,
-              target: `Measure: ${res.measureName} (${res.table})`,
+              target: tableName ? `Measure: ${res.measureName} (${tableName})` : `Measure: ${res.measureName}`,
               cause: issue.message,
               resolution: issue.severity === "error"
                 ? "Click 'Fix all fixable issues' or 'AI Fix' on the measure to repair and revalidate."

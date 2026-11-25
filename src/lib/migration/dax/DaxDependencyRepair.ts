@@ -99,6 +99,38 @@ function resolvePeekBoundExpression(
   return null;
 }
 
+function splitTopLevelArgs(value: string): string[] {
+  const args: string[] = [];
+  let current = "";
+  let depth = 0;
+  let quote = false;
+  for (let i = 0; i < value.length; i += 1) {
+    const ch = value[i];
+    if (ch === '"') {
+      if (quote && value[i + 1] === '"') {
+        current += '""';
+        i += 1;
+        continue;
+      }
+      quote = !quote;
+      current += ch;
+      continue;
+    }
+    if (!quote) {
+      if (ch === "(") depth += 1;
+      else if (ch === ")") depth = Math.max(0, depth - 1);
+      else if (ch === "," && depth === 0) {
+        args.push(current.trim());
+        current = "";
+        continue;
+      }
+    }
+    current += ch;
+  }
+  if (current.trim()) args.push(current.trim());
+  return args;
+}
+
 function repairQlikFunctions(expression: string, tables: PowerBiTable[] = [], originalQlikExpression = ""): string {
   let result = rewriteQlikColourFunctions(expression);
 
@@ -124,6 +156,18 @@ function repairQlikFunctions(expression: string, tables: PowerBiTable[] = [], or
   result = result.replace(/\/\/\s*FUNCTION_NOT_MAPPED[^\r\n]*/gi, "").trim();
   result = result.replace(/\/\/\s*PLACEHOLDER[^\r\n]*/gi, "").trim();
 
+  result = replaceBalancedCalls(result, "AddMonths", (arg) => {
+    const parts = splitTopLevelArgs(arg);
+    const dateExpr = parts[0] || arg;
+    const monthsExpr = parts[1] || "0";
+    return `EDATE(${dateExpr}, ${monthsExpr})`;
+  });
+  result = replaceBalancedCalls(result, "AddYears", (arg) => {
+    const parts = splitTopLevelArgs(arg);
+    const dateExpr = parts[0] || arg;
+    const yearsExpr = parts[1] || "0";
+    return `EDATE(${dateExpr}, (${yearsExpr}) * 12)`;
+  });
   result = replaceBalancedCalls(result, "MonthStart", (arg) => `DATE(YEAR(${arg}), MONTH(${arg}), 1)`);
   result = replaceBalancedCalls(result, "MonthEnd", (arg) => `EOMONTH(${arg}, 0)`);
   result = replaceBalancedCalls(result, "YearStart", (arg) => `DATE(YEAR(${arg}), 1, 1)`);
