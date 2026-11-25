@@ -1,10 +1,12 @@
 import { useMemo } from "react";
 import { useMigration } from "@/lib/migration/store";
+import { useAuth } from "@/contexts/AuthContext";
 import { validatePowerBiModel } from "@/lib/migration/model";
-import { validateStepCompletion } from "@/lib/migration/workflow-gating";
+import { isRequiredActionCompleted, validateStepCompletion } from "@/lib/migration/workflow-gating";
 import { modelDaxInputs, validateDaxMeasures } from "@/lib/migration/dax";
 
 export function useStageReadiness(stepId: number) {
+  const { isDemo } = useAuth();
   const {
     enterpriseFiles,
     enterpriseAnalysis,
@@ -47,6 +49,9 @@ export function useStageReadiness(stepId: number) {
       hasBlockingDaxErrors: daxBlocking,
       isQvsOnlyMode: enterpriseFiles.length > 0 && !enterpriseFiles.some((file) => file.extension.toLowerCase() === ".qvw"),
       unresolvedSourceMappingsCount,
+      hasAppliedEtlMapping: isRequiredActionCompleted(4, isDemo),
+      hasRegeneratedPowerQuery: isRequiredActionCompleted(5, isDemo),
+      hasAppliedDax: isRequiredActionCompleted(6, isDemo),
     });
 
     return {

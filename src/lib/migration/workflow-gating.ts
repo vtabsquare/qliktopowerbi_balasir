@@ -194,7 +194,7 @@ export function resetWorkflowStorageOnReload(force = false): boolean {
     for (let i = 0; i < sessionStorage.length; i++) {
       const k = sessionStorage.key(i);
       if (!k) continue;
-      if (k === "app_pipeline_started" || k.startsWith("bulk_alternate_folder")) {
+      if (k === "app_pipeline_started" || k.startsWith("bulk_alternate_folder") || k.startsWith("workflow_required_actions_")) {
         ssKeysToRemove.push(k);
       }
     }
@@ -230,6 +230,40 @@ export function getWorkflowScope(): string | null {
 function getStorageKey(isDemo: boolean): string {
   const base = isDemo ? "workflow_completed_steps_demo_v2" : "workflow_completed_steps_prod_v2";
   return activeWorkflowScope ? `${base}_${activeWorkflowScope}` : base;
+}
+
+function getActionsStorageKey(isDemo: boolean): string {
+  const base = isDemo ? "workflow_required_actions_demo_v2" : "workflow_required_actions_prod_v2";
+  return activeWorkflowScope ? `${base}_${activeWorkflowScope}` : base;
+}
+
+export function setRequiredActionCompleted(stepId: number, isDemo: boolean, completed: boolean): void {
+  if (typeof window === "undefined") return;
+  try {
+    const raw = sessionStorage.getItem(getActionsStorageKey(isDemo));
+    const map: Record<string, boolean> = raw ? JSON.parse(raw) : {};
+    if (completed) {
+      map[String(stepId)] = true;
+    } else {
+      delete map[String(stepId)];
+    }
+    sessionStorage.setItem(getActionsStorageKey(isDemo), JSON.stringify(map));
+    window.dispatchEvent(new CustomEvent("workflow-step-completed", { detail: { stepId, isDemo, actionCompleted: completed } }));
+  } catch {
+    // ignore storage errors
+  }
+}
+
+export function isRequiredActionCompleted(stepId: number, isDemo: boolean): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const raw = sessionStorage.getItem(getActionsStorageKey(isDemo));
+    if (!raw) return false;
+    const map: Record<string, boolean> = JSON.parse(raw);
+    return Boolean(map[String(stepId)]);
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -304,6 +338,9 @@ export function invalidateDownstreamSteps(fromStepId: number, isDemo: boolean): 
   if (typeof window !== "undefined") {
     try {
       localStorage.setItem(getStorageKey(isDemo), JSON.stringify(retained));
+      for (const id of removed) {
+        setRequiredActionCompleted(id, isDemo, false);
+      }
       window.dispatchEvent(new CustomEvent("workflow-step-completed", { detail: { stepId: fromStepId, isDemo, invalidated: removed } }));
     } catch (e) {
       console.error("Failed to invalidate downstream workflow steps:", e);
@@ -359,6 +396,9 @@ export interface WorkflowValidationContext {
   hasBlockingDaxErrors?: boolean;
   isQvsOnlyMode?: boolean;
   unresolvedSourceMappingsCount?: number;
+  hasAppliedEtlMapping?: boolean;
+  hasRegeneratedPowerQuery?: boolean;
+  hasAppliedDax?: boolean;
 }
 
 /**
@@ -409,6 +449,12 @@ export function validateStepCompletion(
           reason: `${ctx.unresolvedSourceMappingsCount} file-based source mapping(s) require resolution. Select a folder with Browse Folder, run Auto Fill All Paths, and click Apply Mapping & Re-run Conversion.`,
         };
       }
+      if (ctx.hasAppliedEtlMapping === false) {
+        return {
+          ok: false,
+          reason: "Please complete Apply Mapping & Re-run Conversion before proceeding to Power Query.",
+        };
+      }
       return { ok: true };
 
     case 5: // Power Query
@@ -418,6 +464,9 @@ export function validateStepCompletion(
       if (!ctx.hasPowerQueryOutput) {
         return { ok: false, reason: "Generate Power Query output for the materialized model tables before proceeding." };
       }
+      if (ctx.hasRegeneratedPowerQuery === false) {
+        return { ok: false, reason: "Please complete Regenerate M Query before proceeding to DAX Measures." };
+      }
       return { ok: true };
 
     case 6: // DAX Measures
@@ -425,7 +474,10 @@ export function validateStepCompletion(
         return { ok: false, reason: "Run DAX validation against the latest saved measure expressions before proceeding." };
       }
       if (ctx.hasBlockingDaxErrors) {
-        return { ok: false, reason: "Resolve all blocking DAX syntax, reference, function, and dependency errors before proceeding." };
+        return { ok: false, reason: "Please complete Apply & Regenerate and resolve all blocking errors before proceeding to Power BI Model." };
+      }
+      if (ctx.hasAppliedDax === false) {
+        return { ok: false, reason: "Please complete Apply & Regenerate and resolve all blocking errors before proceeding to Power BI Model." };
       }
       return { ok: true };
 

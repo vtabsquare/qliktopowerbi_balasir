@@ -26,6 +26,7 @@ import type { ExtractedFile } from "./MultiFileDropzone";
 import { useMigration } from "@/lib/migration/store";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePowerQueryWorkflow } from "@/lib/migration/power-query-workflow-state";
+import { setRequiredActionCompleted } from "@/lib/migration/workflow-gating";
 import { collectCompilerInvariantIssues, compileAuthoritatively, compilerFingerprint } from "@/lib/migration/QlikCompilerService";
 import { AutoFixCenter } from "./AutoFixCenter";
 import { repairDomId } from "@/lib/migration/autofix";
@@ -1642,6 +1643,7 @@ export function TabMQueryDataTypes({
       onAnalysisUpdate(reviewedResult);
       const fingerprint = compilerFingerprint(reviewedResult);
       setStepStatus(1, "completed");
+      setRequiredActionCompleted(5, isDemo, true);
       // Since Step 1 was regenerated, invalidate dependent steps 2 and 3
       invalidateFromStep(2);
       toast.success("M Query generated successfully! Step 2 (Apply and Regenerate Power Query) is now unlocked.", {
@@ -1651,6 +1653,7 @@ export function TabMQueryDataTypes({
       const errMessage = e instanceof Error ? e.message : String(e);
       setAiError("Failed to compile Power Query: " + errMessage);
       setStepStatus(1, "failed", errMessage);
+      setRequiredActionCompleted(5, isDemo, false);
       toast.error("Failed to generate M Query: " + errMessage);
     } finally {
       setGeneratingAi(false);
@@ -2002,52 +2005,54 @@ export function TabMQueryDataTypes({
             </tbody>
           </table>
         </div>
-        <div className="mt-4 flex flex-col md:flex-row items-start gap-3">
-          {/* Save button */}
-          <button
-            onClick={handleSave}
-            disabled={!hasUnsavedChanges}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-border text-sm font-medium shadow-sm hover:bg-surface-elevated disabled:opacity-40 transition-all shrink-0"
-          >
-            {saveSuccess
-              ? <><Check className="h-4 w-4 text-success" /><span className="text-success">Saved!</span></>
-              : <><Save className="h-4 w-4" />Save data types</>
-            }
-          </button>
+        <div className="mt-4 flex flex-col gap-3">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            {/* Save button */}
+            <button
+              onClick={handleSave}
+              disabled={!hasUnsavedChanges}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-border text-sm font-medium shadow-sm hover:bg-surface-elevated disabled:opacity-40 transition-all shrink-0 cursor-pointer"
+            >
+              {saveSuccess
+                ? <><Check className="h-4 w-4 text-success" /><span className="text-success">Saved!</span></>
+                : <><Save className="h-4 w-4" />Save data types</>
+              }
+            </button>
 
-          {/* Generate / Regenerate button */}
-          <button
-            data-tour="generate-m-query"
-            onClick={() => handleAiGenerate()}
-            disabled={generatingAi || hasUnsavedChanges}
-            title={hasUnsavedChanges ? "Save your data type changes first" : undefined}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-medium shadow-sm hover:opacity-90 disabled:opacity-50 transition-all shrink-0 cursor-pointer"
-          >
-            {generatingAi ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : pqState.step1Status === "completed" ? (
-              <Check className="h-4 w-4 text-emerald-400" />
-            ) : pqState.step1Status === "failed" ? (
-              <AlertCircle className="h-4 w-4 text-red-300" />
-            ) : (
-              <Sparkles className="h-4 w-4" />
-            )}
-            <span>
-              {generatingAi
-                ? "Generating..."
-                : pqState.step1Status === "completed"
-                ? "Regenerate M Query"
-                : pqState.step1Status === "failed"
-                ? "Retry Generate M Query"
-                : "Generate M Query"}
-            </span>
-            {pqState.step1Status === "completed" && (
-              <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 ml-1">Completed</span>
-            )}
-            {pqState.step1Status === "failed" && (
-              <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-red-500/20 text-red-300 ml-1">Failed</span>
-            )}
-          </button>
+            {/* Generate / Regenerate button (Right-aligned) */}
+            <button
+              data-tour="generate-m-query"
+              onClick={() => handleAiGenerate()}
+              disabled={generatingAi || hasUnsavedChanges}
+              title={hasUnsavedChanges ? "Save your data type changes first" : undefined}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-medium shadow-sm hover:opacity-90 disabled:opacity-50 transition-all shrink-0 sm:ml-auto cursor-pointer"
+            >
+              {generatingAi ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : pqState.step1Status === "completed" ? (
+                <Check className="h-4 w-4 text-emerald-400" />
+              ) : pqState.step1Status === "failed" ? (
+                <AlertCircle className="h-4 w-4 text-red-300" />
+              ) : (
+                <Sparkles className="h-4 w-4" />
+              )}
+              <span>
+                {generatingAi
+                  ? "Generating..."
+                  : pqState.step1Status === "completed"
+                  ? "Regenerate M Query"
+                  : pqState.step1Status === "failed"
+                  ? "Retry Generate M Query"
+                  : "Generate M Query"}
+              </span>
+              {pqState.step1Status === "completed" && (
+                <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 ml-1">Completed</span>
+              )}
+              {pqState.step1Status === "failed" && (
+                <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-red-500/20 text-red-300 ml-1">Failed</span>
+              )}
+            </button>
+          </div>
 
           {/* Info tip */}
           {hasUnsavedChanges && (

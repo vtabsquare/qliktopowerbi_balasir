@@ -8,6 +8,8 @@ import {
   markStepCompleted,
   invalidateDownstreamSteps,
   setWorkflowScope,
+  setRequiredActionCompleted,
+  isRequiredActionCompleted,
   resetWorkflowStorageOnReload,
   consumePendingReloadRedirect,
   getFirstIncompleteStep,
@@ -239,6 +241,39 @@ describe("Step-by-Step Workflow Locking System", () => {
     // Auth tokens are untouched
     expect(localStorage.getItem("sb-prod-auth-token")).toBe("keep-prod-auth");
     expect(localStorage.getItem("sb-demo-auth-token")).toBe("keep-demo-auth");
+  });
+
+  it("enforces mandatory action completion for ETL Analysis, Power Query, and DAX Measures", () => {
+    const etlBlocked = validateStepCompletion(4, {
+      hasEnterpriseAnalysis: true,
+      unresolvedSourceMappingsCount: 0,
+      hasAppliedEtlMapping: false,
+    });
+    expect(etlBlocked.ok).toBe(false);
+    expect(etlBlocked.reason).toBe("Please complete Apply Mapping & Re-run Conversion before proceeding to Power Query.");
+
+    const pqBlocked = validateStepCompletion(5, {
+      hasEnterpriseAnalysis: true,
+      hasPowerQueryOutput: true,
+      hasRegeneratedPowerQuery: false,
+    });
+    expect(pqBlocked.ok).toBe(false);
+    expect(pqBlocked.reason).toBe("Please complete Regenerate M Query before proceeding to DAX Measures.");
+
+    const daxBlocked = validateStepCompletion(6, {
+      hasCurrentDaxValidation: true,
+      hasBlockingDaxErrors: false,
+      hasAppliedDax: false,
+    });
+    expect(daxBlocked.ok).toBe(false);
+    expect(daxBlocked.reason).toBe("Please complete Apply & Regenerate and resolve all blocking errors before proceeding to Power BI Model.");
+
+    setRequiredActionCompleted(4, false, true);
+    setRequiredActionCompleted(5, false, true);
+    setRequiredActionCompleted(6, false, true);
+    expect(isRequiredActionCompleted(4, false)).toBe(true);
+    expect(isRequiredActionCompleted(5, false)).toBe(true);
+    expect(isRequiredActionCompleted(6, false)).toBe(true);
   });
 });
 

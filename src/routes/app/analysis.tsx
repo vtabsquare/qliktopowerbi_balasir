@@ -8,7 +8,7 @@ import { TabSourceMapping } from "@/components/migration/EnterpriseAnalysisPanel
 import { RepairFocusNotice } from "@/components/migration/RepairFocusNotice";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
-import { invalidateDownstreamSteps, markStepCompleted, navigateWorkflow, unmarkStepCompleted, validateStepCompletion } from "@/lib/migration/workflow-gating";
+import { invalidateDownstreamSteps, isRequiredActionCompleted, markStepCompleted, navigateWorkflow, setRequiredActionCompleted, unmarkStepCompleted, validateStepCompletion } from "@/lib/migration/workflow-gating";
 import { useNavigationLoading } from "@/components/common/NavigationLoadingOverlay";
 
 export const Route = createFileRoute("/app/analysis")({
@@ -41,6 +41,7 @@ export function AnalysisPage() {
     const validation = validateStepCompletion(4, {
       hasEnterpriseAnalysis: Boolean(enterpriseAnalysis),
       unresolvedSourceMappingsCount: unresolvedCount,
+      hasAppliedEtlMapping: isRequiredActionCompleted(4, isDemo),
     });
     if (!validation.ok) {
       toast.error("Complete ETL Analysis before proceeding", { description: validation.reason });
@@ -120,11 +121,14 @@ export function AnalysisPage() {
       invalidateDownstreamSteps(4, isDemo);
       if (updated) {
         if (missingSources.length > 0) {
+          setRequiredActionCompleted(4, isDemo, false);
           unmarkStepCompleted(4, isDemo);
           toast.warning(`Pipeline re-run with ${missingSources.length} unmapped source(s)`, {
             description: missingSources.map((m) => m.table || m.originalRef).join(", "),
           });
         } else {
+          setRequiredActionCompleted(4, isDemo, true);
+          markStepCompleted(4, isDemo);
           toast.success("Mappings applied and migration pipeline synchronized", {
             description: `${updated.finalTables.length} final table(s) and ${Object.keys(updated.mQueries || {}).length} Power Query M script(s) refreshed.`,
           });
