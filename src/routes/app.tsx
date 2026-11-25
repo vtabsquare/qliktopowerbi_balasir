@@ -158,8 +158,8 @@ function MigrationLayout() {
         <div className="flex min-h-0 flex-1 flex-col md:flex-row overflow-hidden">
           {matchedStep && <StageNav viewportDocked />}
 
-          <main className="min-w-0 min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 pb-20 sm:px-6 sm:py-5 sm:pb-20 lg:px-8">
-            <div className="mx-auto w-full max-w-[1440px] space-y-5">
+          <main className="min-w-0 min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 pb-20 sm:px-6 sm:py-5 sm:pb-20">
+            <div className="w-full space-y-4">
               {isInstructions ? (
                 <Hero tableCount={tableCount} compact />
               ) : !isUploadStep && matchedStep ? (

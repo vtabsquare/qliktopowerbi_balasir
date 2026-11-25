@@ -33,7 +33,7 @@ export function StageBottomDock({
   const disabled = !canProceed || hasErrors;
 
   return (
-    <div className="z-30 flex min-h-14 shrink-0 items-center justify-between gap-3 border-t border-border/80 bg-surface/95 px-3 py-2 shadow-[0_-8px_24px_-18px_rgba(0,0,0,0.45)] backdrop-blur-md sm:px-6">
+    <div className="z-30 flex min-h-12 shrink-0 items-center justify-between gap-3 border-t border-border/80 bg-surface/95 px-4 py-1.5 shadow-[0_-6px_20px_-16px_rgba(0,0,0,0.4)] backdrop-blur-md sm:px-6">
       <div className="flex min-w-0 items-center gap-2 sm:gap-3">
         <span
           className={cn(

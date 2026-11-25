@@ -695,10 +695,14 @@ export function TabSourceMapping({
   onApply: () => void;
   applying: boolean;
 }) {
-  const [bulkFolder, setBulkFolder] = useState("");
+  const { isDemo } = useAuth();
+  const storageKey = `qlik2pbi:bulkFolder:${isDemo ? "demo" : "prod"}`;
+  const [bulkFolder, setBulkFolder] = useState(() => {
+    if (typeof window === "undefined") return "";
+    return sessionStorage.getItem(storageKey) || "";
+  });
+  const [bulkFolderError, setBulkFolderError] = useState<string | null>(null);
   const [convertQvd, setConvertQvd] = useState(true);
-  const bulkFolderInputRef = useRef<HTMLInputElement>(null);
-  const bulkFilesInputRef = useRef<HTMLInputElement>(null);
   const editable = mappingRows.filter(m => !m.bypassQvd);
   const bypassed = mappingRows.filter(m => m.bypassQvd);
   const unresolved = editable.filter(m => m.status !== "Mapped").length;
@@ -718,36 +722,85 @@ export function TabSourceMapping({
     onMappingChange(updated);
   };
 
-  const handleBulkBrowseSelection = async (e: React.ChangeEvent<HTMLInputElement>, sourceLabel: string) => {
-    const selected = Array.from(e.target.files || []);
-    e.target.value = "";
-    if (!selected.length) return;
-    const registered = await registerAlternateSourceFiles(selected);
-    const label = sourceLabel === "folder"
-      ? ((selected[0] as File & { webkitRelativePath?: string }).webkitRelativePath?.split("/")[0] || "Selected Folder")
-      : selected.map((f) => f.name).join(", ");
-    setBulkFolder(label);
+  const validateFolderPath = (raw: string): string | null => {
+    const trimmed = raw.trim();
+    if (!trimmed) return "Please enter a folder path (for example: D:\\Migration\\SourceData\\AlternateFolder).";
+    if (/^[a-z]+:\/\//i.test(trimmed)) return "Enter a local or network folder path, not an HTTP/HTTPS URL.";
+    const withoutDrive = trimmed.replace(/^[A-Za-z]:/, "");
+    if (/[<>"|?*:]/.test(withoutDrive)) {
+      return "Folder path contains invalid characters (<, >, \", |, ?, *, or extra :).";
+    }
+    if (!/^([A-Za-z]:[/\\]|\\\\[^\\/]+[/\\]|\/|\.\.?[/\\]|[A-Za-z0-9._-])/.test(trimmed)) {
+      return "Invalid folder path format. Use a Windows path (D:\\Folder), UNC path (\\\\Server\\Share), or POSIX path (/data/folder).";
+    }
+    return null;
+  };
 
-    let matchedCount = 0;
+  const handleAutoFillAllPaths = () => {
+    const validationError = validateFolderPath(bulkFolder);
+    if (validationError) {
+      setBulkFolderError(validationError);
+      toast.error("Invalid folder path", { description: validationError });
+      return;
+    }
+    setBulkFolderError(null);
+    const trimmedBase = bulkFolder.trim().replace(/[/\\]+$/, "");
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem(storageKey, trimmedBase);
+    }
+
+    const sep = trimmedBase.includes("\\") || /^[A-Za-z]:/.test(trimmedBase) ? "\\" : "/";
+    const nonFileConnectors = new Set(["SQL Server", "PostgreSQL", "MySQL", "Database/SQL", "SharePoint", "Web/API"]);
+    let updatedCount = 0;
+
     const updated = mappingRows.map((r) => {
       if (r.bypassQvd || r.status === "Bypassed") return r;
-      const matchedFile = matchSourceFileForRow(r, registered);
-      if (!matchedFile) return r;
-      matchedCount += 1;
-      const ct = connector(matchedFile.path);
+      if (nonFileConnectors.has(r.connectorType)) return r;
+
+      const sourceCandidate = (r.mappedRef || r.originalRef || "").trim();
+      const withoutQlikVar = sourceCandidate.replace(/^\$\([^)]+\)[/\\]?/, "").replace(/^["']|["']$/g, "");
+      let relative = withoutQlikVar
+        .replace(/^[A-Za-z]:[/\\]+/, "")
+        .replace(/^(\.\.?[/\\])+/, "")
+        .replace(/^[/\\]+/, "")
+        .split("?")[0];
+      if (!relative) return r;
+      if (convertQvd && relative.toLowerCase().endsWith(".qvd")) {
+        relative = relative.slice(0, -4) + ".csv";
+      }
+      const normalizedRel = relative.split(/[/\\]+/).filter(Boolean).join(sep);
+      const mapped = `${trimmedBase}${sep}${normalizedRel}`;
+      const ct = connector(mapped);
+      updatedCount += 1;
       return {
         ...r,
-        mappedRef: matchedFile.path,
+        mappedRef: mapped,
         connectorType: ct !== "Unknown" ? ct : r.connectorType,
         status: ["Unknown", "QVD - map to supported source"].includes(ct) ? "Needs review" : "Mapped",
       };
     });
+
     onMappingChange(updated);
-    toast.success(`Loaded "${label}" (${registered.length} file(s))`, {
-      description: matchedCount
-        ? `Matched ${matchedCount} source table(s) automatically. Click Apply Mapping & Re-run Conversion to sync.`
-        : "Files registered; click Replace on any row to assign a specific file.",
-    });
+    useMigration.getState().setEnterpriseMappingUpdates(
+      rowsToUpdates(
+        updated.map((r) => ({
+          original_ref: r.originalRef,
+          mapped_ref: r.mappedRef,
+          connector_type: r.connectorType,
+          status: r.status,
+          notes: r.notes,
+          bypass_qvd: r.bypassQvd ? "true" : "false",
+        })),
+      ),
+    );
+
+    if (updatedCount === 0) {
+      toast.info("No file-based source paths needed updating.");
+    } else {
+      toast.success(`Auto-filled ${updatedCount} source path(s)`, {
+        description: `Applied base folder "${trimmedBase}". Click Apply Mapping & Re-run Conversion to refresh outputs.`,
+      });
+    }
   };
 
   return (
@@ -765,44 +818,39 @@ export function TabSourceMapping({
         </div>
       )}
 
-      <div className="surface-card p-4">
-        <SectionHeader title="Bulk Alternate Folder" sub="Browse files, a ZIP archive, or a folder to auto-fill and ingest source tables" />
-        <div className="flex flex-wrap items-center gap-2.5">
+      <div className="surface-card p-4 space-y-2.5">
+        <SectionHeader title="Bulk Alternate Folder" sub="Enter a common base folder path to populate all file-based source paths while preserving relative filenames" />
+        <label htmlFor="bulk-alternate-folder-input" className="block text-xs font-semibold text-foreground">
+          Folder Path:
+        </label>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <input
-            ref={bulkFilesInputRef}
-            type="file"
-            multiple
-            accept={SUPPORTED_SOURCE_ACCEPT}
-            className="hidden"
-            onChange={(e) => void handleBulkBrowseSelection(e, "files")}
-          />
-          <input
-            ref={bulkFolderInputRef}
-            type="file"
-            className="hidden"
-            {...({ webkitdirectory: "", directory: "" } as Record<string, string>)}
-            onChange={(e) => void handleBulkBrowseSelection(e, "folder")}
+            id="bulk-alternate-folder-input"
+            type="text"
+            value={bulkFolder}
+            onChange={(e) => {
+              setBulkFolder(e.target.value);
+              if (bulkFolderError) setBulkFolderError(null);
+            }}
+            placeholder="D:\Migration\SourceData\AlternateFolder"
+            className={cn(
+              "flex-1 rounded-lg border bg-surface px-3 py-2 font-mono text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40",
+              bulkFolderError ? "border-destructive" : "border-border",
+            )}
           />
           <button
             type="button"
-            onClick={() => bulkFilesInputRef.current?.click()}
-            className="inline-flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-4 py-2 text-sm font-medium text-primary hover:bg-primary/15"
+            onClick={handleAutoFillAllPaths}
+            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
           >
-            <Upload className="h-4 w-4" />
-            Browse Files / ZIP
+            Auto Fill All Paths
           </button>
-          <button
-            type="button"
-            onClick={() => bulkFolderInputRef.current?.click()}
-            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
-          >
-            <FolderOpen className="h-4 w-4" />
-            {bulkFolder ? "Replace Folder" : "Browse Folder"}
-          </button>
-          <span className="text-xs font-mono text-muted-foreground">
-            {bulkFolder ? `Selected: ${bulkFolder}` : "Supports CSV, XLSX, XLS, TXT, JSON, XML, QVD, and ZIP"}
-          </span>
         </div>
+        {bulkFolderError && (
+          <p role="alert" className="text-xs font-medium text-destructive">
+            {bulkFolderError}
+          </p>
+        )}
       </div>
 
       <div className="surface-card p-4">

@@ -175,8 +175,8 @@ function DemoWorkspace({ session, onLoggedOut }: { session?: unknown; onLoggedOu
           <StageNav viewportDocked activeStepId={activeStepId} onStepSelect={(targetStage) => handleSelectStep(WORKFLOW_STEPS[targetStage.id])} />
 
           {/* Main Content Area */}
-          <main className="min-w-0 min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 pb-20 sm:px-6 sm:py-5 sm:pb-20 lg:px-8">
-            <div className="mx-auto w-full max-w-[1440px] space-y-5">
+          <main className="min-w-0 min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 pb-20 sm:px-6 sm:py-5 sm:pb-20">
+            <div className="w-full space-y-4">
               {/* Demo Hero Banner (Shown on Step 0: Instructions; hidden on Step 1: Upload Qlik Files and subsequent steps) */}
               {activeStepId === 0 && (
                 <section className="mb-6 glass-card p-6 sm:p-8 bg-gradient-to-br from-amber-500/10 via-surface/60 to-primary/10 border border-amber-500/30 shadow-lg rounded-2xl">

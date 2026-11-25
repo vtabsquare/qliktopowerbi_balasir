@@ -175,84 +175,71 @@ export function StageNav({ activeStepId, onStepSelect, viewportDocked = false }:
     const activeStage = STAGES[activeIndex] || STAGES[0];
 
     const renderVerticalList = (collapsed: boolean, onSelectClose?: () => void) => (
-      <div className="flex flex-col gap-3 p-2.5">
-        {phases.map((phase) => (
-          <div key={phase.id} className="space-y-1">
-            {!collapsed && (
-              <div className="flex items-center justify-between px-2 pt-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                <span>Phase {phase.id}: {phase.name}</span>
-                {isDemo && phase.id === 3 && <Lock className="h-3 w-3 text-amber-500" />}
-              </div>
-            )}
-            <div className="space-y-1">
-              {STAGES.slice(phase.start, phase.end + 1).map((stage, idx) => {
-                const actualIdx = phase.start + idx;
-                const isActive = actualIdx === activeIndex;
-                const isCompleted = hydrated ? isStepCompleted(actualIdx, isDemo) : actualIdx === 0;
-                const isLocked = hydrated ? !isStepUnlocked(actualIdx, isDemo) : actualIdx > 1;
-                const prereq = isLocked ? (hydrated ? getFirstIncompleteStep(actualIdx, isDemo) : WORKFLOW_STEPS[1]) : null;
-                return (
-                  <button
-                    key={stage.id}
-                    type="button"
-                    onClick={() => {
-                      onSelectClose?.();
-                      handleStageNavigation(stage);
-                    }}
-                    title={
-                      isLocked && prereq
-                        ? `Locked: Complete Step ${prereq.stepNumber} (${prereq.label}) first`
-                        : `Step ${stage.stepNumber}: ${stage.label}`
-                    }
-                    className={cn(
-                      "group flex w-full items-center gap-2.5 rounded-xl border px-2.5 py-2 text-left text-xs font-medium transition-all",
-                      collapsed && "justify-center px-1.5",
-                      isLocked
-                        ? "border-border/40 bg-surface/20 opacity-65 hover:opacity-100 hover:border-amber-500/50"
-                        : isActive
-                        ? "border-primary/80 bg-primary/15 text-primary shadow-xs ring-1 ring-primary/20"
-                        : isCompleted
-                        ? "border-border/70 bg-surface/80 text-foreground hover:bg-surface hover:border-primary/40"
-                        : "border-transparent bg-transparent text-muted-foreground hover:bg-surface/60 hover:text-foreground",
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        "grid h-6 w-6 shrink-0 place-items-center rounded-lg text-[10px] font-bold transition-colors",
-                        isLocked
-                          ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
-                          : isActive
-                          ? "bg-primary text-primary-foreground"
-                          : isCompleted
-                          ? "bg-success/20 text-success border border-success/30"
-                          : "bg-muted text-muted-foreground",
-                      )}
-                    >
-                      {isLocked ? (
-                        <Lock className="h-3 w-3" />
-                      ) : isCompleted ? (
-                        <Check className="h-3.5 w-3.5" />
-                      ) : (
-                        stage.stepNumber
-                      )}
-                    </span>
-                    {!collapsed && (
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate font-semibold">{stage.label}</div>
-                        {isLocked && prereq && (
-                          <div className="truncate text-[10px] text-amber-600/80 dark:text-amber-400/80">
-                            Requires Step {prereq.stepNumber}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    {!collapsed && isActive && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        ))}
+      <div className="flex flex-col gap-1 p-2.5">
+        {STAGES.map((stage, actualIdx) => {
+          const isActive = actualIdx === activeIndex;
+          const isCompleted = hydrated ? isStepCompleted(actualIdx, isDemo) : actualIdx === 0;
+          const isLocked = hydrated ? !isStepUnlocked(actualIdx, isDemo) : actualIdx > 1;
+          const prereq = isLocked ? (hydrated ? getFirstIncompleteStep(actualIdx, isDemo) : WORKFLOW_STEPS[1]) : null;
+          return (
+            <button
+              key={stage.id}
+              type="button"
+              onClick={() => {
+                onSelectClose?.();
+                handleStageNavigation(stage);
+              }}
+              title={
+                isLocked && prereq
+                  ? `Locked: Complete Step ${prereq.stepNumber} (${prereq.label}) first`
+                  : `Step ${stage.stepNumber}: ${stage.label}`
+              }
+              className={cn(
+                "group flex w-full items-center gap-2.5 rounded-xl border px-2.5 py-2 text-left text-xs font-medium transition-all",
+                collapsed && "justify-center px-1.5",
+                isLocked
+                  ? "border-border/40 bg-surface/20 opacity-65 hover:opacity-100 hover:border-amber-500/50 cursor-not-allowed"
+                  : isActive
+                  ? "border-primary/80 bg-primary/15 text-primary shadow-xs ring-1 ring-primary/20"
+                  : isCompleted
+                  ? "border-border/70 bg-surface/80 text-foreground hover:bg-surface hover:border-primary/40"
+                  : "border-transparent bg-transparent text-muted-foreground hover:bg-surface/60 hover:text-foreground",
+              )}
+            >
+              <span
+                className={cn(
+                  "grid h-6 w-6 shrink-0 place-items-center rounded-lg text-[10px] font-bold transition-colors",
+                  isLocked
+                    ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                    : isActive
+                    ? "bg-primary text-primary-foreground"
+                    : isCompleted
+                    ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30"
+                    : "bg-muted text-muted-foreground",
+                )}
+              >
+                {isLocked ? (
+                  <Lock className="h-3 w-3" />
+                ) : isCompleted ? (
+                  <Check className="h-3.5 w-3.5" />
+                ) : (
+                  stage.stepNumber
+                )}
+              </span>
+              {!collapsed && (
+                <div className="min-w-0 flex-1">
+                  <div className="truncate font-semibold">{stage.label}</div>
+                  {isLocked && prereq && (
+                    <div className="truncate text-[10px] text-amber-600/80 dark:text-amber-400/80">
+                      Requires Step {prereq.stepNumber}
+                    </div>
+                  )}
+                </div>
+              )}
+              {!collapsed && isActive && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />}
+            </button>
+          );
+        })}
       </div>
     );
 

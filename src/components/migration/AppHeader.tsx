@@ -59,9 +59,9 @@ export function AppHeader() {
 
   return (
     <header className="sticky top-0 z-40 border-b border-border/80 bg-background/85 backdrop-blur-xl supports-[backdrop-filter]:bg-background/60 shadow-xs transition-all">
-      <div className="flex w-full items-center justify-between gap-4 px-4 py-2 sm:px-6">
-        {/* Left: Logo, Branding, AI Engine v2.0 */}
-        <div className="flex shrink-0 items-center gap-3">
+      <div className="flex w-full items-center gap-4 px-4 py-2 sm:px-6">
+        {/* Left: Logo, Branding, AI Engine v2.0 + Main Navigation */}
+        <div className="flex min-w-0 items-center gap-5">
           <Link to="/" className="flex shrink-0 items-center gap-2.5 group">
             <div className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-primary to-[oklch(0.62_0.2_260)] text-primary-foreground font-bold shadow-sm group-hover:scale-105 transition-transform">
               <span className="text-xs tracking-tight">VT</span>
@@ -74,10 +74,8 @@ export function AppHeader() {
               </div>
             </div>
           </Link>
-        </div>
 
-        {/* Center: Main Navigation */}
-        <nav aria-label="Main navigation" className="hidden min-w-0 items-center gap-1 overflow-x-auto whitespace-nowrap rounded-full border border-border/60 bg-surface/70 p-1 text-xs font-medium shadow-xs md:flex">
+          <nav aria-label="Main navigation" className="hidden min-w-0 items-center gap-1 overflow-x-auto whitespace-nowrap rounded-full border border-border/60 bg-surface/70 p-1 text-xs font-medium shadow-xs md:flex">
           <Link
             to={isDemo ? "/demo" : "/app"}
             activeProps={{ className: "bg-primary text-primary-foreground shadow-sm" }}
@@ -148,9 +146,10 @@ export function AppHeader() {
             </Link>
           )}
         </nav>
+        </div>
 
         {/* Right: Demo controls / Sign Out + Options */}
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="ml-auto flex shrink-0 items-center gap-2">
           {isDemo && (
             <button
               type="button"
