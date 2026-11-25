@@ -7,6 +7,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import {
   WORKFLOW_STEPS,
+  LOCKED_STEP_MESSAGE,
   isStepCompleted,
   isStepUnlocked,
   getFirstIncompleteStep,
@@ -110,10 +111,9 @@ export function StageNav({ activeStepId, onStepSelect, viewportDocked = false }:
         }
 
         const incomplete = getFirstIncompleteStep(targetIdx, isDemo);
-        toast.error(
-          `Please complete Step ${incomplete.stepNumber} (${incomplete.label}) before proceeding to Step ${targetStage.stepNumber} (${targetStage.label}).`,
-          {
-            action: {
+        toast.error(LOCKED_STEP_MESSAGE, {
+          description: `Step ${incomplete.stepNumber} (${incomplete.label}) must be completed before accessing Step ${targetStage.stepNumber} (${targetStage.label}).`,
+          action: {
               label: `Go to Step ${incomplete.stepNumber}`,
               onClick: () => {
                 if (isDemoRoute) {
@@ -191,7 +191,7 @@ export function StageNav({ activeStepId, onStepSelect, viewportDocked = false }:
               }}
               title={
                 isLocked && prereq
-                  ? `Locked: Complete Step ${prereq.stepNumber} (${prereq.label}) first`
+                  ? `${LOCKED_STEP_MESSAGE} (Requires Step ${prereq.stepNumber}: ${prereq.label})`
                   : `Step ${stage.stepNumber}: ${stage.label}`
               }
               className={cn(

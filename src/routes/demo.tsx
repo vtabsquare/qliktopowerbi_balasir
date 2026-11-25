@@ -4,6 +4,7 @@ import { useMigration } from "@/lib/migration/store";
 import { toast } from "sonner";
 import {
   WORKFLOW_STEPS,
+  LOCKED_STEP_MESSAGE,
   isStepUnlocked,
   getFirstIncompleteStep,
   getCompletedSteps,
@@ -60,22 +61,40 @@ function DemoWorkspace({ session, onLoggedOut }: { session?: unknown; onLoggedOu
   const [modalStepId, setModalStepId] = useState<number | null>(null);
   const { enterpriseAnalysis } = useMigration();
 
-  // Sync URL ?step= and completed steps after hydration
+  // Sync URL ?step=, browser Back/Forward (popstate), and completed steps after hydration
   useEffect(() => {
     setCompletedSteps(getCompletedSteps(true));
-    const param = new URLSearchParams(window.location.search).get("step");
-    if (param) {
-      const found = WORKFLOW_STEPS.findIndex((s) => s.demoStepParam === param || String(s.id) === param);
-      if (found >= 0 && isStepUnlocked(found, true)) {
-        setActiveStepId(found);
+    const syncStepFromUrl = () => {
+      const param = new URLSearchParams(window.location.search).get("step");
+      if (!param) {
+        setActiveStepId(0);
+        return;
       }
-    }
+      const found = WORKFLOW_STEPS.findIndex((s) => s.demoStepParam === param || String(s.id) === param);
+      if (found < 0) return;
+      if (isStepUnlocked(found, true)) {
+        setActiveStepId(found);
+      } else {
+        const fallback = found >= 10 ? WORKFLOW_STEPS[9] : getFirstIncompleteStep(found, true);
+        const safeStep = isStepUnlocked(fallback.id, true) ? fallback : WORKFLOW_STEPS[0];
+        setActiveStepId(safeStep.id);
+        try {
+          const targetUrl = new URL(window.location.href);
+          targetUrl.searchParams.set("step", safeStep.demoStepParam || String(safeStep.id));
+          window.history.replaceState({}, "", targetUrl.toString());
+        } catch {
+          // ignore
+        }
+      }
+    };
+
+    syncStepFromUrl();
     const handleSync = () => {
       setCompletedSteps(getCompletedSteps(true));
     };
     const handleSetStep = (e: Event) => {
       const stepId = (e as CustomEvent)?.detail?.stepId;
-      if (typeof stepId === "number") {
+      if (typeof stepId === "number" && isStepUnlocked(stepId, true)) {
         setActiveStepId(stepId);
         try {
           const targetUrl = new URL(window.location.href);
@@ -88,9 +107,11 @@ function DemoWorkspace({ session, onLoggedOut }: { session?: unknown; onLoggedOu
     };
     window.addEventListener("workflow-step-completed", handleSync);
     window.addEventListener("demo-set-active-step", handleSetStep);
+    window.addEventListener("popstate", syncStepFromUrl);
     return () => {
       window.removeEventListener("workflow-step-completed", handleSync);
       window.removeEventListener("demo-set-active-step", handleSetStep);
+      window.removeEventListener("popstate", syncStepFromUrl);
     };
   }, []);
 
@@ -106,10 +127,9 @@ function DemoWorkspace({ session, onLoggedOut }: { session?: unknown; onLoggedOu
       }
 
       const incomplete = getFirstIncompleteStep(targetStep.id, true);
-      toast.error(
-        `Please complete Step ${incomplete.stepNumber} (${incomplete.label}) before proceeding to Step ${targetStep.stepNumber} (${targetStep.label}).`,
-        {
-          action: {
+      toast.error(LOCKED_STEP_MESSAGE, {
+        description: `Step ${incomplete.stepNumber} (${incomplete.label}) must be completed before accessing Step ${targetStep.stepNumber} (${targetStep.label}).`,
+        action: {
             label: `Go to Step ${incomplete.stepNumber}`,
             onClick: () => {
               withLoading(

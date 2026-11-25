@@ -2,9 +2,12 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
   WORKFLOW_STEPS,
+  LOCKED_STEP_MESSAGE,
   isStepCompleted,
   isStepUnlocked,
   markStepCompleted,
+  invalidateDownstreamSteps,
+  setWorkflowScope,
   getFirstIncompleteStep,
   resetWorkflow,
   validateStepCompletion,
@@ -155,6 +158,41 @@ describe("Step-by-Step Workflow Locking System", () => {
 
     const validAnalysis = validateStepCompletion(4, { hasEnterpriseAnalysis: true });
     expect(validAnalysis.ok).toBe(true);
+  });
+
+  it("invalidates only affected downstream steps when an earlier step changes", () => {
+    markStepCompleted(0, false);
+    markStepCompleted(1, false);
+    markStepCompleted(2, false);
+    markStepCompleted(3, false);
+    markStepCompleted(4, false);
+
+    const invalidated = invalidateDownstreamSteps(1, false);
+    expect(invalidated).toEqual([2, 3, 4]);
+    expect(isStepCompleted(0, false)).toBe(true);
+    expect(isStepCompleted(1, false)).toBe(true);
+    expect(isStepCompleted(2, false)).toBe(false);
+    expect(isStepCompleted(3, false)).toBe(false);
+    expect(isStepCompleted(4, false)).toBe(false);
+    expect(isStepUnlocked(2, false)).toBe(true);
+    expect(isStepUnlocked(3, false)).toBe(false);
+    expect(LOCKED_STEP_MESSAGE).toBe("Complete the previous step successfully to unlock this step.");
+  });
+
+  it("isolates workflow completion state per project scope", () => {
+    setWorkflowScope("project-a");
+    markStepCompleted(0, false);
+    markStepCompleted(1, false);
+    expect(getCompletedSteps(false)).toEqual([0, 1]);
+
+    setWorkflowScope("project-b");
+    expect(getCompletedSteps(false)).toEqual([]);
+    expect(isStepUnlocked(2, false)).toBe(false);
+
+    setWorkflowScope("project-a");
+    expect(getCompletedSteps(false)).toEqual([0, 1]);
+    expect(isStepUnlocked(2, false)).toBe(true);
+    setWorkflowScope(null);
   });
 });
 

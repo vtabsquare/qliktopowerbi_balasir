@@ -6,6 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import {
   WORKFLOW_STEPS,
+  LOCKED_STEP_MESSAGE,
   isStepCompleted,
   isStepUnlocked,
   getFirstIncompleteStep,
@@ -31,10 +32,9 @@ export function FloatingWorkflowNav() {
       }
 
       const incomplete = getFirstIncompleteStep(stage.id, isDemo);
-      toast.error(
-        `Please complete Step ${incomplete.stepNumber} (${incomplete.label}) before proceeding to Step ${stage.stepNumber} (${stage.label}).`,
-        {
-          action: {
+      toast.error(LOCKED_STEP_MESSAGE, {
+        description: `Step ${incomplete.stepNumber} (${incomplete.label}) must be completed before accessing Step ${stage.stepNumber} (${stage.label}).`,
+        action: {
             label: `Go to Step ${incomplete.stepNumber}`,
             onClick: () => {
               setOpen(false);
@@ -124,7 +124,15 @@ export function FloatingWorkflowNav() {
               {STAGES.map((stage) => {
                 const unlocked = isStepUnlocked(stage.id, isDemo);
                 const isCompleted = isStepCompleted(stage.id, isDemo);
-                const active = path === stage.path || (path === "/app/" && stage.path === "/app");
+                const demoStepParam =
+                  path.startsWith("/demo") && typeof window !== "undefined"
+                    ? new URLSearchParams(window.location.search).get("step")
+                    : null;
+                const active = path.startsWith("/demo")
+                  ? demoStepParam
+                    ? WORKFLOW_STEPS[stage.id]?.demoStepParam === demoStepParam || String(stage.id) === demoStepParam
+                    : stage.id === 0
+                  : path === stage.path || (path === "/app/" && stage.path === "/app");
 
                 if (unlocked) {
                   return (

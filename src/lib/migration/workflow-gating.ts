@@ -141,8 +141,22 @@ export function getStepByKey(key: string): WorkflowStep | undefined {
   return WORKFLOW_STEPS.find((s) => s.key === key || s.demoStepParam === key);
 }
 
+export const LOCKED_STEP_MESSAGE = "Complete the previous step successfully to unlock this step.";
+
+let activeWorkflowScope: string | null = null;
+
+export function setWorkflowScope(scopeId: string | null | undefined): void {
+  const normalized = scopeId ? String(scopeId).trim() : "";
+  activeWorkflowScope = normalized || null;
+}
+
+export function getWorkflowScope(): string | null {
+  return activeWorkflowScope;
+}
+
 function getStorageKey(isDemo: boolean): string {
-  return isDemo ? "workflow_completed_steps_demo_v2" : "workflow_completed_steps_prod_v2";
+  const base = isDemo ? "workflow_completed_steps_demo_v2" : "workflow_completed_steps_prod_v2";
+  return activeWorkflowScope ? `${base}_${activeWorkflowScope}` : base;
 }
 
 /**
@@ -203,6 +217,26 @@ export function unmarkStepCompleted(stepId: number, isDemo: boolean): void {
   } catch (e) {
     console.error("Failed to unmark workflow step completion:", e);
   }
+}
+
+/**
+ * Invalidate all downstream completed steps (> fromStepId) when an upstream
+ * step's inputs, mappings, or configuration change. Preserves earlier completed steps.
+ */
+export function invalidateDownstreamSteps(fromStepId: number, isDemo: boolean): number[] {
+  const current = getCompletedSteps(isDemo);
+  const removed = current.filter((id) => id > fromStepId);
+  if (removed.length === 0) return [];
+  const retained = current.filter((id) => id <= fromStepId);
+  if (typeof window !== "undefined") {
+    try {
+      localStorage.setItem(getStorageKey(isDemo), JSON.stringify(retained));
+      window.dispatchEvent(new CustomEvent("workflow-step-completed", { detail: { stepId: fromStepId, isDemo, invalidated: removed } }));
+    } catch (e) {
+      console.error("Failed to invalidate downstream workflow steps:", e);
+    }
+  }
+  return removed;
 }
 
 /**

@@ -34,7 +34,7 @@ import { DemoUploadChoice } from "@/components/migration/DemoUploadChoice";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTour } from "@/contexts/TourContext";
-import { markStepCompleted, navigateWorkflow } from "@/lib/migration/workflow-gating";
+import { invalidateDownstreamSteps, markStepCompleted, navigateWorkflow, resetWorkflow } from "@/lib/migration/workflow-gating";
 import { useNavigationLoading } from "@/components/common/NavigationLoadingOverlay";
 
 export const Route = createFileRoute("/app/")({
@@ -236,6 +236,9 @@ export function UploadPage() {
     // Persist the complete extracted workspace once. ETL, expressions, QVW UI
     // metadata, data types and PBIP export all consume this same project state.
     setEnterpriseFiles(files);
+    // Invalidate downstream steps (> Upload) when new files are uploaded so
+    // dependent stages must be revalidated against the new package.
+    invalidateDownstreamSteps(1, isDemo);
 
     const autoAssigned = autoAssignSourceAndEtl(files);
     setSelectedSources(autoAssigned.sources);
