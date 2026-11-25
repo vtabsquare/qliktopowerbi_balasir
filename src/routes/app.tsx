@@ -195,7 +195,7 @@ function Hero({ tableCount, compact = false }: { tableCount: number; compact?: b
   return (
     <section
       className={cn(
-        "glass-card rounded-2xl bg-gradient-to-br from-primary/10 via-surface/60 to-primary/5 border border-primary/20 shadow-lg transition-all duration-300 ease-in-out",
+        "glass-card rounded-2xl bg-gradient-to-br from-amber-500/10 via-surface/60 to-primary/10 border border-amber-500/30 shadow-lg transition-all duration-300 ease-in-out",
         compact ? "mb-4 p-4 sm:p-5" : "mb-6 p-6 sm:p-8"
       )}
     >
@@ -208,11 +208,11 @@ function Hero({ tableCount, compact = false }: { tableCount: number; compact?: b
         <div>
           <span
             className={cn(
-              "chip text-primary bg-primary/10 border-primary/20 transition-all duration-300",
+              "chip text-amber-600 dark:text-amber-400 bg-amber-500/10 border-amber-500/20 transition-all duration-300",
               compact ? "mb-2 text-[10px] py-0.5 px-2" : "mb-4"
             )}
           >
-            <span className="h-2 w-2 rounded-full bg-success animate-pulse" />
+            <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
             AI MIGRATION ENGINE ACTIVE
           </span>
           <h1
@@ -265,7 +265,7 @@ function Metric({
   return (
     <div
       className={cn(
-        "surface-card flex items-center bg-surface/80 border border-border/60 shadow-sm hover:border-primary/30 transition-all duration-300",
+        "surface-card rounded-xl flex items-center bg-surface/80 border border-border/60 shadow-sm hover:border-primary/30 transition-all duration-300",
         compact ? "p-2.5 sm:p-3 gap-2.5" : "p-3.5 gap-3"
       )}
     >
