@@ -1,11 +1,17 @@
 import { Toaster as Sonner } from "sonner";
+import { useRouterState } from "@tanstack/react-router";
+import { useAuth } from "@/contexts/AuthContext";
 
 type ToasterProps = React.ComponentProps<typeof Sonner>;
 
 const Toaster = ({ ...props }: ToasterProps) => {
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const { isDemo: authIsDemo } = useAuth();
+  const isDemo = authIsDemo || pathname.startsWith("/demo");
+
   return (
     <Sonner
-      position="bottom-center"
+      position={isDemo ? "top-center" : "bottom-center"}
       offset={16}
       closeButton
       className="toaster group"
