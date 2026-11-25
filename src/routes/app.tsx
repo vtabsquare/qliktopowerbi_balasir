@@ -154,12 +154,11 @@ function MigrationLayout() {
   return (
     <TourProvider>
       <div className="flex h-screen w-screen flex-col overflow-hidden bg-background" id="vtab-demo-app" data-testid="vtab-demo-app">
+        <div className="z-30 shrink-0"><AppHeader /></div>
         <div className="flex min-h-0 flex-1 flex-col md:flex-row overflow-hidden">
           {matchedStep && <StageNav viewportDocked />}
 
-          <div className="flex min-w-0 min-h-0 flex-1 flex-col overflow-hidden">
-            <div className="z-30 shrink-0"><AppHeader /></div>
-            <main className="min-w-0 min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 pb-20 sm:px-6 sm:py-5 lg:px-8">
+          <main className="min-w-0 min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 pb-20 sm:px-6 sm:py-5 sm:pb-20 lg:px-8">
             <div className="mx-auto w-full max-w-[1440px] space-y-5">
               {isInstructions ? (
                 <Hero tableCount={tableCount} compact />
@@ -182,7 +181,6 @@ function MigrationLayout() {
               <Outlet />
             </div>
           </main>
-          </div>
         </div>
 
         {matchedStep && <StageBottomDock currentStepId={currentStep.id} isDemo={isDemo} onProceedNext={openNextStage} onGoPrevious={() => { const previous = WORKFLOW_STEPS[currentStep.id - 1]; if (previous) navigate({ to: previous.path }); }} canProceed={readiness.canProceed} hasErrors={readiness.hasErrors} statusLabel={readiness.statusLabel} blockedReason={readiness.reason} />}

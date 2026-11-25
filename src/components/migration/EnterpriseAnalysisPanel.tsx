@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
+import JSZip from "jszip";
 import { toast } from "sonner";
 import {
   runEnterpriseAnalysis,
@@ -515,15 +516,45 @@ function buildMappedRef(parts: Record<string, string>): string {
     .join(';');
 }
 
-const TEXT_SOURCE_EXTENSIONS = new Set([".csv", ".tsv", ".txt", ".json", ".xml"]);
+const TEXT_SOURCE_EXTENSIONS = new Set([".csv", ".tsv", ".txt", ".json", ".xml", ".qvs"]);
+const SUPPORTED_SOURCE_ACCEPT = ".csv,.tsv,.txt,.xlsx,.xls,.xlsm,.parquet,.json,.xml,.qvd,.qvs,.zip";
 
 async function registerAlternateSourceFiles(fileList: File[]): Promise<ExtractedFile[]> {
   const created: ExtractedFile[] = [];
   for (const file of fileList) {
     const ext = file.name.includes(".") ? `.${file.name.split(".").pop()!.toLowerCase()}` : "";
+    if (ext === ".zip") {
+      try {
+        const zip = await JSZip.loadAsync(await file.arrayBuffer());
+        for (const [entryPath, entry] of Object.entries(zip.files)) {
+          if (entry.dir) continue;
+          const baseName = entryPath.split("/").pop() || entryPath;
+          const entryExt = baseName.includes(".") ? `.${baseName.split(".").pop()!.toLowerCase()}` : "";
+          const isText = TEXT_SOURCE_EXTENSIONS.has(entryExt);
+          const text = isText ? await entry.async("string") : null;
+          const bytes = await entry.async("uint8array");
+          created.push({
+            path: entryPath,
+            name: baseName,
+            extension: entryExt,
+            sizeKb: Math.max(1, Math.round(bytes.byteLength / 1024)),
+            text,
+            parsedAsText: isText && text !== null,
+            originPackage: file.name,
+          });
+        }
+      } catch (err) {
+        toast.error(`Failed to extract ZIP "${file.name}"`, {
+          description: err instanceof Error ? err.message : String(err),
+        });
+      }
+      continue;
+    }
+
     const isText = TEXT_SOURCE_EXTENSIONS.has(ext);
     const text = isText ? await file.text() : null;
-    const relPath = (file as File & { webkitRelativePath?: string }).webkitRelativePath || `SourceData/${file.name}`;
+    const browserFile = file as File & { webkitRelativePath?: string; path?: string };
+    const relPath = browserFile.path || browserFile.webkitRelativePath || file.name;
     created.push({
       path: relPath,
       name: file.name,
@@ -542,7 +573,24 @@ async function registerAlternateSourceFiles(fileList: File[]): Promise<Extracted
   return created;
 }
 
-function DynamicMappingInput({ connectorType, value, onChange, onFileSelected }: { connectorType: string; value: string; onChange: (val: string) => void; onFileSelected?: (file: ExtractedFile) => void }) {
+function matchSourceFileForRow(row: Pick<MappingRow, "table" | "originalRef">, candidates: ExtractedFile[]): ExtractedFile | undefined {
+  const rawPath = row.originalRef.replace(/^\$\([^)]+\)/, "");
+  let basename = (rawPath.split("/").pop() || rawPath.split("\\").pop() || "").split("?")[0];
+  if (basename.toLowerCase().endsWith(".qvd")) basename = basename.slice(0, -4) + ".csv";
+  const byExact = candidates.find((f) => f.name.toLowerCase() === basename.toLowerCase());
+  if (byExact) return byExact;
+  const stem = (row.table || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  if (stem) {
+    const byStem = candidates.find((f) => {
+      const fStem = f.name.replace(/\.[^.]+$/, "").toLowerCase().replace(/[^a-z0-9]/g, "");
+      return fStem === stem || stem.startsWith(fStem) || fStem.startsWith(stem);
+    });
+    if (byStem) return byStem;
+  }
+  return candidates.find((f) => [".csv", ".tsv", ".txt", ".xlsx", ".xls", ".json", ".xml", ".parquet", ".qvd"].includes(f.extension.toLowerCase()));
+}
+
+function DynamicMappingInput({ connectorType, value, tableName, originalRef, onChange }: { connectorType: string; value: string; tableName?: string; originalRef?: string; onChange: (val: string) => void }) {
   const parts = parseMappedRef(value);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -550,13 +598,6 @@ function DynamicMappingInput({ connectorType, value, onChange, onFileSelected }:
     const isFolder = connectorType === "Folder";
     const rawPath = (!value.includes("=") ? value : parts["FilePath"]) || "";
     const displayName = rawPath.split(/[/\\]/).filter(Boolean).pop() || rawPath;
-    const acceptMap: Record<string, string> = {
-      "CSV/Text": ".csv,.tsv,.txt",
-      Excel: ".xlsx,.xls,.xlsm",
-      Parquet: ".parquet",
-      JSON: ".json",
-      XML: ".xml",
-    };
 
     const handleBrowseChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
       const selected = Array.from(e.target.files || []);
@@ -567,20 +608,22 @@ function DynamicMappingInput({ connectorType, value, onChange, onFileSelected }:
         const folderName = (selected[0] as File & { webkitRelativePath?: string }).webkitRelativePath?.split("/")[0] || selected[0].name;
         onChange(folderName);
         toast.success(`Selected folder "${folderName}" (${registered.length} file(s) loaded)`);
-      } else if (registered[0]) {
-        onChange(registered[0].path);
-        onFileSelected?.(registered[0]);
-        toast.success(`Selected alternate file: ${registered[0].name}`);
+      } else {
+        const matched = matchSourceFileForRow({ table: tableName || "", originalRef: originalRef || "" }, registered) || registered[0];
+        if (matched) {
+          onChange(matched.path);
+          toast.success(`Updated mapping to ${matched.path}`);
+        }
       }
     };
 
     return (
-      <div className="flex min-w-[220px] items-center gap-2">
+      <div className="flex min-w-[230px] items-center gap-2">
         <input
           ref={fileInputRef}
           type="file"
           className="hidden"
-          accept={isFolder ? undefined : acceptMap[connectorType]}
+          accept={isFolder ? undefined : SUPPORTED_SOURCE_ACCEPT}
           {...(isFolder ? ({ webkitdirectory: "", directory: "" } as Record<string, string>) : {})}
           onChange={(e) => void handleBrowseChange(e)}
         />
@@ -593,7 +636,7 @@ function DynamicMappingInput({ connectorType, value, onChange, onFileSelected }:
           )}
           title={rawPath || "No file selected"}
         >
-          {displayName || (isFolder ? "No folder selected" : "No file selected")}
+          {rawPath || (isFolder ? "No folder selected" : "No file selected")}
         </span>
         <button
           type="button"
@@ -655,6 +698,7 @@ export function TabSourceMapping({
   const [bulkFolder, setBulkFolder] = useState("");
   const [convertQvd, setConvertQvd] = useState(true);
   const bulkFolderInputRef = useRef<HTMLInputElement>(null);
+  const bulkFilesInputRef = useRef<HTMLInputElement>(null);
   const editable = mappingRows.filter(m => !m.bypassQvd);
   const bypassed = mappingRows.filter(m => m.bypassQvd);
   const unresolved = editable.filter(m => m.status !== "Mapped").length;
@@ -674,33 +718,35 @@ export function TabSourceMapping({
     onMappingChange(updated);
   };
 
-  const handleBulkFolderBrowse = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleBulkBrowseSelection = async (e: React.ChangeEvent<HTMLInputElement>, sourceLabel: string) => {
     const selected = Array.from(e.target.files || []);
     e.target.value = "";
     if (!selected.length) return;
     const registered = await registerAlternateSourceFiles(selected);
-    const folderName = (selected[0] as File & { webkitRelativePath?: string }).webkitRelativePath?.split("/")[0] || "Selected Folder";
-    setBulkFolder(folderName);
+    const label = sourceLabel === "folder"
+      ? ((selected[0] as File & { webkitRelativePath?: string }).webkitRelativePath?.split("/")[0] || "Selected Folder")
+      : selected.map((f) => f.name).join(", ");
+    setBulkFolder(label);
 
-    const byBase = new Map(registered.map((f) => [f.name.toLowerCase(), f]));
     let matchedCount = 0;
-    const updated = mappingRows.map(r => {
+    const updated = mappingRows.map((r) => {
       if (r.bypassQvd || r.status === "Bypassed") return r;
-      const rawPath = r.originalRef.replace(/^\$\([^)]+\)/, "");
-      let basename = (rawPath.split("/").pop() || rawPath.split("\\").pop() || "").split("?")[0];
-      if (!basename) return r;
-      if (convertQvd && basename.toLowerCase().endsWith(".qvd")) {
-        basename = basename.substring(0, basename.length - 4) + ".csv";
-      }
-      const matchedFile = byBase.get(basename.toLowerCase());
-      const mapped = matchedFile ? matchedFile.path : `${folderName}/${basename}`;
-      if (matchedFile) matchedCount += 1;
-      const ct = connector(mapped);
-      return { ...r, mappedRef: mapped, connectorType: ct, status: ["Unknown","QVD - map to supported source"].includes(ct) ? "Needs review" : "Mapped" };
+      const matchedFile = matchSourceFileForRow(r, registered);
+      if (!matchedFile) return r;
+      matchedCount += 1;
+      const ct = connector(matchedFile.path);
+      return {
+        ...r,
+        mappedRef: matchedFile.path,
+        connectorType: ct !== "Unknown" ? ct : r.connectorType,
+        status: ["Unknown", "QVD - map to supported source"].includes(ct) ? "Needs review" : "Mapped",
+      };
     });
     onMappingChange(updated);
-    toast.success(`Loaded "${folderName}" (${registered.length} file(s))`, {
-      description: matchedCount ? `Matched ${matchedCount} source file(s) automatically.` : "Updated unresolved paths from the selected folder.",
+    toast.success(`Loaded "${label}" (${registered.length} file(s))`, {
+      description: matchedCount
+        ? `Matched ${matchedCount} source table(s) automatically. Click Apply Mapping & Re-run Conversion to sync.`
+        : "Files registered; click Replace on any row to assign a specific file.",
     });
   };
 
@@ -720,15 +766,31 @@ export function TabSourceMapping({
       )}
 
       <div className="surface-card p-4">
-        <SectionHeader title="Bulk Alternate Folder" sub="Browse a local folder to auto-fill and ingest unresolved source files" />
-        <div className="flex flex-wrap items-center gap-3">
+        <SectionHeader title="Bulk Alternate Folder" sub="Browse files, a ZIP archive, or a folder to auto-fill and ingest source tables" />
+        <div className="flex flex-wrap items-center gap-2.5">
+          <input
+            ref={bulkFilesInputRef}
+            type="file"
+            multiple
+            accept={SUPPORTED_SOURCE_ACCEPT}
+            className="hidden"
+            onChange={(e) => void handleBulkBrowseSelection(e, "files")}
+          />
           <input
             ref={bulkFolderInputRef}
             type="file"
             className="hidden"
             {...({ webkitdirectory: "", directory: "" } as Record<string, string>)}
-            onChange={(e) => void handleBulkFolderBrowse(e)}
+            onChange={(e) => void handleBulkBrowseSelection(e, "folder")}
           />
+          <button
+            type="button"
+            onClick={() => bulkFilesInputRef.current?.click()}
+            className="inline-flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-4 py-2 text-sm font-medium text-primary hover:bg-primary/15"
+          >
+            <Upload className="h-4 w-4" />
+            Browse Files / ZIP
+          </button>
           <button
             type="button"
             onClick={() => bulkFolderInputRef.current?.click()}
@@ -738,7 +800,7 @@ export function TabSourceMapping({
             {bulkFolder ? "Replace Folder" : "Browse Folder"}
           </button>
           <span className="text-xs font-mono text-muted-foreground">
-            {bulkFolder ? `Selected: ${bulkFolder}` : "No alternate folder selected"}
+            {bulkFolder ? `Selected: ${bulkFolder}` : "Supports CSV, XLSX, XLS, TXT, JSON, XML, QVD, and ZIP"}
           </span>
         </div>
       </div>
@@ -770,7 +832,13 @@ export function TabSourceMapping({
                   </td>
                   <td className="px-3 py-1.5">
                     {row.bypassQvd ? <span className="text-muted-foreground text-[10px]">{row.effectiveRef}</span> : (
-                      <DynamicMappingInput connectorType={row.connectorType} value={row.mappedRef} onChange={val => handleCellChange(i, "mappedRef", val)} />
+                      <DynamicMappingInput
+                        connectorType={row.connectorType}
+                        value={row.mappedRef}
+                        tableName={row.table}
+                        originalRef={row.originalRef}
+                        onChange={val => handleCellChange(i, "mappedRef", val)}
+                      />
                     )}
                   </td>
                   <td className="px-3 py-1.5">

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { Check, Layers, Grid, Lock, Minimize2, Maximize2, PanelLeftClose, PanelLeftOpen, Menu, X, Workflow, CalendarDays, LayoutDashboard, ScrollText } from "lucide-react";
+import { Check, Layers, Grid, Lock, Minimize2, Maximize2, PanelLeftClose, PanelLeftOpen, Menu, X, Calendar, LayoutTemplate, ScrollText, Workflow } from "lucide-react";
 import { useMigration } from "@/lib/migration/store";
 import { cn } from "@/lib/utils";
 import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
@@ -171,99 +171,67 @@ export function StageNav({ activeStepId, onStepSelect, viewportDocked = false }:
   if (viewportDocked) {
     const activeStage = STAGES[activeIndex] || STAGES[0];
     const mainNavItems = [
-      { label: "Pipeline", to: isDemo ? "/demo" : "/app", icon: Workflow, lockedInDemo: false, isPipeline: true },
-      { label: "Calendars", to: "/app/calendar-analysis", icon: CalendarDays, lockedInDemo: true, isPipeline: false },
-      { label: "Report Designer", to: "/app/report-designer", icon: LayoutDashboard, lockedInDemo: true, isPipeline: false },
-      { label: "Logs", to: "/app/logs", icon: ScrollText, lockedInDemo: true, isPipeline: false },
-    ] as const;
+      { label: "Pipeline", to: isDemo ? "/demo" : "/app", icon: Workflow, locked: false },
+      { label: "Calendars", to: "/app/calendar-analysis", icon: Calendar, locked: isDemo },
+      { label: "Report Designer", to: "/app/report-designer", icon: LayoutTemplate, locked: isDemo },
+      { label: "Logs", to: "/app/logs", icon: ScrollText, locked: isDemo },
+    ];
 
-    const isPipelineRoute =
-      currentPath === "/app" ||
-      currentPath === "/app/" ||
-      currentPath.startsWith("/demo") ||
-      WORKFLOW_STEPS.some((s) => s.path === currentPath && s.path !== "/app/logs");
-
-    const renderSidebarHeaderAndNav = (collapsed: boolean, onSelectClose?: () => void) => (
-      <div className="border-b border-border/60 p-3 space-y-3">
-        {/* Branding + Collapse */}
-        <div className="flex items-center justify-between gap-2">
-          <Link
-            to="/"
-            onClick={() => onSelectClose?.()}
-            className={cn("flex min-w-0 items-center gap-2.5 group", collapsed && "justify-center")}
-          >
-            <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-primary to-[oklch(0.62_0.2_260)] text-primary-foreground font-bold shadow-sm group-hover:scale-105 transition-transform">
+    const renderSidebarBrandAndNav = (collapsed: boolean, onSelectClose?: () => void) => (
+      <div className="border-b border-border/60 p-2.5 space-y-2.5">
+        <div className={cn("flex items-center gap-2.5", collapsed ? "justify-center" : "px-1")}>
+          <Link to="/" className="flex shrink-0 items-center gap-2.5 group" onClick={onSelectClose}>
+            <div className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-primary to-[oklch(0.62_0.2_260)] text-primary-foreground font-bold shadow-sm group-hover:scale-105 transition-transform">
               <span className="text-xs tracking-tight">VT</span>
             </div>
             {!collapsed && (
-              <div className="min-w-0 leading-tight">
-                <div className="font-display font-bold text-sm tracking-wide text-foreground truncate">VTAB</div>
-                <div className="font-display font-bold text-[11px] tracking-wide text-muted-foreground -mt-0.5 truncate">SQUARE</div>
+              <div className="leading-tight">
+                <div className="font-display font-bold text-sm tracking-wide text-foreground">VTAB SQUARE</div>
+                <div className="mt-0.5 inline-flex items-center gap-1 text-[10px] font-semibold text-primary">
+                  <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
+                  <span>AI MIGRATION ENGINE v2.0</span>
+                </div>
               </div>
             )}
           </Link>
-          {!onSelectClose && (
-            <button
-              type="button"
-              onClick={() => setSidebarCollapsed((v) => !v)}
-              className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground shrink-0"
-              title={collapsed ? "Expand navigation panel" : "Collapse navigation panel"}
-              aria-label={collapsed ? "Expand navigation panel" : "Collapse navigation panel"}
-            >
-              {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
-            </button>
-          )}
         </div>
 
-        {/* AI Migration Engine v2.0 indicator */}
-        {!collapsed && (
-          <div className="inline-flex w-full items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-[10px] font-semibold tracking-wide">
-            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-success animate-pulse" />
-            <span className="truncate">AI MIGRATION ENGINE v2.0</span>
-          </div>
-        )}
-
-        {/* Main Application Navigation */}
-        <nav aria-label="Main navigation" className="space-y-1">
+        <nav aria-label="Main navigation" className={cn("grid gap-1", collapsed ? "grid-cols-1" : "grid-cols-2")}>
           {mainNavItems.map((item) => {
             const Icon = item.icon;
-            const locked = isDemo && item.lockedInDemo;
-            const active = item.isPipeline ? isPipelineRoute : currentPath === item.to;
-
-            if (locked) {
+            if (item.locked) {
               return (
                 <button
                   key={item.label}
                   type="button"
-                  disabled
                   onClick={() => toast.info(`🔒 ${item.label} is locked in the Demo Version.`)}
                   title={`${item.label} is locked in Demo Version`}
                   className={cn(
-                    "flex w-full items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-xs font-medium text-muted-foreground/50 opacity-50 cursor-not-allowed select-none",
-                    collapsed && "justify-center px-1.5",
+                    "flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-[11px] font-medium text-muted-foreground/50 opacity-50 cursor-not-allowed",
+                    collapsed && "justify-center px-1",
                   )}
                 >
                   <Icon className="h-3.5 w-3.5 shrink-0" />
-                  {!collapsed && (
-                    <>
-                      <span className="truncate flex-1 text-left">{item.label}</span>
-                      <Lock className="h-3 w-3 shrink-0 opacity-70" />
-                    </>
-                  )}
+                  {!collapsed && <span className="truncate">{item.label}</span>}
                 </button>
               );
             }
-
+            const isCurrent =
+              item.to === "/app"
+                ? normalizedPath === "/app" || normalizedPath.startsWith("/app/") && !["/app/calendar-analysis", "/app/report-designer", "/app/logs"].includes(normalizedPath)
+                : item.to === "/demo"
+                ? isDemoRoute
+                : normalizedPath === item.to;
             return (
               <Link
                 key={item.label}
                 to={item.to}
-                onClick={() => onSelectClose?.()}
+                onClick={onSelectClose}
                 title={item.label}
                 className={cn(
-                  "flex w-full items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-xs font-semibold transition-all",
-                  collapsed && "justify-center px-1.5",
-                  active
+                  "flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-[11px] font-semibold transition-colors",
+                  collapsed && "justify-center px-1",
+                  isCurrent
                     ? "bg-primary text-primary-foreground shadow-xs"
                     : "text-muted-foreground hover:bg-muted/70 hover:text-foreground",
                 )}
@@ -279,12 +247,6 @@ export function StageNav({ activeStepId, onStepSelect, viewportDocked = false }:
 
     const renderVerticalList = (collapsed: boolean, onSelectClose?: () => void) => (
       <div className="flex flex-col gap-3 p-2.5">
-        {!collapsed && (
-          <div className="flex items-center justify-between px-2 text-[10px] font-bold uppercase tracking-wider text-primary">
-            <span>Workflow Steps</span>
-            <span>{activeStage.stepNumber}/{STAGES.length}</span>
-          </div>
-        )}
         {phases.map((phase) => (
           <div key={phase.id} className="space-y-1">
             {!collapsed && (
@@ -387,18 +349,22 @@ export function StageNav({ activeStepId, onStepSelect, viewportDocked = false }:
           <div className="fixed inset-0 z-50 flex md:hidden">
             <div className="fixed inset-0 bg-background/80 backdrop-blur-xs" onClick={() => setMobileDrawerOpen(false)} />
             <aside className="relative z-10 flex h-full w-72 max-w-[85vw] flex-col border-r border-border bg-surface shadow-2xl">
-              <div className="flex items-center justify-end border-b border-border/40 px-3 py-2">
+              <div className="flex items-center justify-between border-b border-border/60 px-3 py-2.5">
+                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-primary">
+                  <Layers className="h-4 w-4" />
+                  <span>Migration Steps</span>
+                </div>
                 <button
                   type="button"
                   onClick={() => setMobileDrawerOpen(false)}
                   className="rounded-lg p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-                  aria-label="Close navigation menu"
+                  aria-label="Close workflow steps menu"
                 >
                   <X className="h-4 w-4" />
                 </button>
               </div>
               <div className="min-h-0 flex-1 overflow-y-auto">
-                {renderSidebarHeaderAndNav(false, () => setMobileDrawerOpen(false))}
+                {renderSidebarBrandAndNav(false, () => setMobileDrawerOpen(false))}
                 {renderVerticalList(false, () => setMobileDrawerOpen(false))}
               </div>
             </aside>
@@ -410,11 +376,30 @@ export function StageNav({ activeStepId, onStepSelect, viewportDocked = false }:
           id="migration-stage-menu"
           aria-label="Migration stages"
           className={cn(
-            "hidden md:flex md:flex-col md:shrink-0 md:border-r md:border-border/60 md:bg-surface/80 md:backdrop-blur-md transition-all duration-200",
+            "hidden md:flex md:flex-col md:shrink-0 md:border-r md:border-border/60 md:bg-surface/70 md:backdrop-blur-md transition-all duration-200",
             sidebarCollapsed ? "md:w-16" : "md:w-64 lg:w-72",
           )}
         >
-          {renderSidebarHeaderAndNav(sidebarCollapsed)}
+          {renderSidebarBrandAndNav(sidebarCollapsed)}
+          <div className="flex items-center justify-between border-b border-border/50 px-3 py-2">
+            {!sidebarCollapsed && (
+              <div className="flex items-center gap-2 min-w-0">
+                <Layers className="h-3.5 w-3.5 shrink-0 text-primary" />
+                <span className="truncate text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                  Workflow ({activeStage.stepNumber}/{STAGES.length})
+                </span>
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={() => setSidebarCollapsed((v) => !v)}
+              className="rounded-lg p-1 text-muted-foreground hover:bg-muted hover:text-foreground mx-auto md:mx-0"
+              title={sidebarCollapsed ? "Expand navigation panel" : "Collapse navigation panel"}
+              aria-label={sidebarCollapsed ? "Expand navigation panel" : "Collapse navigation panel"}
+            >
+              {sidebarCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+            </button>
+          </div>
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
             {renderVerticalList(sidebarCollapsed)}
           </div>

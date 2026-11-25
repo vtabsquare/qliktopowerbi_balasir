@@ -169,13 +169,14 @@ function DemoWorkspace({ session, onLoggedOut }: { session?: unknown; onLoggedOu
   return (
     <TourProvider>
       <div className="flex h-screen w-screen flex-col overflow-hidden bg-background" id="vtab-demo-app" data-testid="vtab-demo-app">
+        {/* Full Standard Header with DEMO VERSION badge, Start Tour button, user badge, and logout */}
+        <div className="z-30 shrink-0"><AppHeader /></div>
+
         <div className="flex min-h-0 flex-1 flex-col md:flex-row overflow-hidden">
           <StageNav viewportDocked activeStepId={activeStepId} onStepSelect={(targetStage) => handleSelectStep(WORKFLOW_STEPS[targetStage.id])} />
 
           {/* Main Content Area */}
-          <div className="flex min-w-0 min-h-0 flex-1 flex-col overflow-hidden">
-            <div className="z-30 shrink-0"><AppHeader /></div>
-            <main className="min-w-0 min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 pb-20 sm:px-6 sm:py-5 lg:px-8">
+          <main className="min-w-0 min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 pb-20 sm:px-6 sm:py-5 sm:pb-20 lg:px-8">
             <div className="mx-auto w-full max-w-[1440px] space-y-5">
               {/* Demo Hero Banner (Shown on Step 0: Instructions; hidden on Step 1: Upload Qlik Files and subsequent steps) */}
               {activeStepId === 0 && (
@@ -225,7 +226,6 @@ function DemoWorkspace({ session, onLoggedOut }: { session?: unknown; onLoggedOu
               </div>
             </div>
           </main>
-          </div>
         </div>
 
         <StageBottomDock currentStepId={activeStepId} isDemo onProceedNext={openNextStage} onGoPrevious={() => { if (activeStepId > 0) handleSelectStep(WORKFLOW_STEPS[activeStepId - 1]); }} canProceed={readiness.canProceed} hasErrors={readiness.hasErrors} statusLabel={readiness.statusLabel} blockedReason={readiness.reason} />

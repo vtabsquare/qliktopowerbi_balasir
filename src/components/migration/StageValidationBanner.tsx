@@ -35,29 +35,11 @@ export function StageValidationBanner({ stepId, canProceed, blockedReason }: Sta
   const step = WORKFLOW_STEPS[stepId] || WORKFLOW_STEPS[0];
   const stepLabel = `Step ${step.stepNumber}: ${step.label}`;
 
+  // Requirement 4: Do not show blocking errors before file upload or validation.
+  const hasUploadedFiles = enterpriseFiles.length > 0;
+
   const issues = useMemo<StepIssueItem[]>(() => {
     const items: StepIssueItem[] = [];
-
-    // Do not display a blocking error banner on Step 2 (Upload) before any file has been uploaded.
-    if (stepId === 1 && enterpriseFiles.length === 0) {
-      return items;
-    }
-
-    if (stepId === 1 && enterpriseFiles.length > 0) {
-      const unreadable = enterpriseFiles.filter(
-        (f) => !f.parsedAsText && ![".qvw", ".xlsx", ".xls", ".parquet"].includes((f.extension || "").toLowerCase()),
-      );
-      for (const file of unreadable) {
-        items.push({
-          id: `upload-${file.path}`,
-          severity: "warning",
-          stepLabel,
-          target: file.name,
-          cause: `File "${file.name}" (${file.extension || "unknown"}) could not be parsed as text.`,
-          resolution: "Verify the file format or upload a supported Qlik script, QVW/PRJ, ZIP, or source data file.",
-        });
-      }
-    }
 
     if (stepId === 4 && enterpriseAnalysis) {
       for (const row of enterpriseAnalysis.sourceMappings || []) {
@@ -148,7 +130,7 @@ export function StageValidationBanner({ stepId, canProceed, blockedReason }: Sta
       }
     }
 
-    if (stepId > 1 && !canProceed && blockedReason && !items.some((i) => i.severity === "error")) {
+    if (!canProceed && blockedReason && stepId > 1 && hasUploadedFiles && !items.some((i) => i.severity === "error")) {
       items.unshift({
         id: `gate-${stepId}`,
         severity: "error",
@@ -160,7 +142,7 @@ export function StageValidationBanner({ stepId, canProceed, blockedReason }: Sta
     }
 
     return items;
-  }, [blockedReason, canProceed, enterpriseAnalysis, enterpriseFiles, powerBiModel, stepId, stepLabel]);
+  }, [blockedReason, canProceed, enterpriseAnalysis, hasUploadedFiles, powerBiModel, stepId, stepLabel]);
 
   const visibleIssues = issues.filter((item) => item.severity === "error" || !dismissedIds[item.id]);
   if (!visibleIssues.length) return null;

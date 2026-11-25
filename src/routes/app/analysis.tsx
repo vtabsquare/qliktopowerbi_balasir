@@ -90,15 +90,39 @@ export function AnalysisPage() {
 
   const handleApplyMapping = useCallback(async () => {
     setApplying(true);
-    const newUpdates = rowsToUpdates(enterpriseMappingRows.map(r => ({
-      original_ref: r.originalRef, mapped_ref: r.mappedRef,
-      connector_type: r.connectorType, status: r.status, notes: r.notes,
-      bypass_qvd: r.bypassQvd ? "true" : "false",
-    })));
-    setEnterpriseMappingUpdates(newUpdates);
-    await runAnalysis(newUpdates, enterpriseColumnTypeEdits);
-    setApplying(false);
-  }, [enterpriseMappingRows, enterpriseColumnTypeEdits, runAnalysis]);
+    try {
+      const missingSources = enterpriseMappingRows.filter((r) => {
+        if (r.bypassQvd || r.status === "Bypassed") return false;
+        if (["SQL Server", "PostgreSQL", "MySQL", "Database/SQL", "SharePoint", "Web/API"].includes(r.connectorType)) {
+          return !r.mappedRef.trim();
+        }
+        return !r.mappedRef.trim() || r.status !== "Mapped";
+      });
+      const newUpdates = rowsToUpdates(enterpriseMappingRows.map(r => ({
+        original_ref: r.originalRef, mapped_ref: r.mappedRef,
+        connector_type: r.connectorType, status: r.status, notes: r.notes,
+        bypass_qvd: r.bypassQvd ? "true" : "false",
+      })));
+      setEnterpriseMappingUpdates(newUpdates);
+      const updated = await runAnalysis(newUpdates, enterpriseColumnTypeEdits);
+      useMigration.getState().initializePowerBiModel();
+      if (updated) {
+        if (missingSources.length > 0) {
+          toast.warning(`Pipeline re-run with ${missingSources.length} unmapped source(s)`, {
+            description: missingSources.map((m) => m.table || m.originalRef).join(", "),
+          });
+        } else {
+          toast.success("Mappings applied and migration pipeline synchronized", {
+            description: `${updated.finalTables.length} final table(s) and ${Object.keys(updated.mQueries || {}).length} Power Query M script(s) refreshed.`,
+          });
+        }
+      }
+    } catch (e) {
+      toast.error("Failed to apply mappings", { description: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setApplying(false);
+    }
+  }, [enterpriseMappingRows, enterpriseColumnTypeEdits, runAnalysis, setEnterpriseMappingUpdates]);
 
   const analysis = enterpriseAnalysis;
 
