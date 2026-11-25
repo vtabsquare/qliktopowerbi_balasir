@@ -41,7 +41,7 @@ export function StageNav({ activeStepId, onStepSelect, viewportDocked = false }:
   const { withLoading } = useNavigationLoading();
 
   const [hydrated, setHydrated] = useState(false);
-  const [completedStepsState, setCompletedStepsState] = useState<number[]>([0]);
+  const [completedStepsState, setCompletedStepsState] = useState<number[]>([]);
 
   // Sync completed steps after hydration and when event fires
   useEffect(() => {
@@ -175,12 +175,12 @@ export function StageNav({ activeStepId, onStepSelect, viewportDocked = false }:
     const activeStage = STAGES[activeIndex] || STAGES[0];
 
     const renderVerticalList = (collapsed: boolean, onSelectClose?: () => void) => (
-      <div className="flex flex-col gap-1 p-2.5">
+      <div className="flex flex-col gap-1.5 p-2.5">
         {STAGES.map((stage, actualIdx) => {
           const isActive = actualIdx === activeIndex;
-          const isCompleted = hydrated ? isStepCompleted(actualIdx, isDemo) : actualIdx === 0;
-          const isLocked = hydrated ? !isStepUnlocked(actualIdx, isDemo) : actualIdx > 1;
-          const prereq = isLocked ? (hydrated ? getFirstIncompleteStep(actualIdx, isDemo) : WORKFLOW_STEPS[1]) : null;
+          const isCompleted = hydrated ? isStepCompleted(actualIdx, isDemo) : false;
+          const isLocked = hydrated ? !isStepUnlocked(actualIdx, isDemo) : actualIdx > 0;
+          const prereq = isLocked ? (hydrated ? getFirstIncompleteStep(actualIdx, isDemo) : WORKFLOW_STEPS[0]) : null;
           return (
             <button
               key={stage.id}
@@ -195,22 +195,22 @@ export function StageNav({ activeStepId, onStepSelect, viewportDocked = false }:
                   : `Step ${stage.stepNumber}: ${stage.label}`
               }
               className={cn(
-                "group flex w-full items-center gap-2.5 rounded-xl border px-2.5 py-2 text-left text-xs font-medium transition-all",
+                "group flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left text-xs font-medium transition-all",
                 collapsed && "justify-center px-1.5",
                 isLocked
-                  ? "border-border/40 bg-surface/20 opacity-65 hover:opacity-100 hover:border-amber-500/50 cursor-not-allowed"
+                  ? "border-border/50 bg-surface/35 opacity-75 hover:opacity-100 hover:border-amber-500/40 cursor-not-allowed"
                   : isActive
                   ? "border-primary/80 bg-primary/15 text-primary shadow-xs ring-1 ring-primary/20"
                   : isCompleted
                   ? "border-border/70 bg-surface/80 text-foreground hover:bg-surface hover:border-primary/40"
-                  : "border-transparent bg-transparent text-muted-foreground hover:bg-surface/60 hover:text-foreground",
+                  : "border-border/50 bg-surface/50 text-foreground hover:bg-surface/80 hover:border-primary/40",
               )}
             >
               <span
                 className={cn(
-                  "grid h-6 w-6 shrink-0 place-items-center rounded-lg text-[10px] font-bold transition-colors",
+                  "grid h-7 w-7 shrink-0 place-items-center rounded-full text-[11px] font-bold transition-colors",
                   isLocked
-                    ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                    ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20"
                     : isActive
                     ? "bg-primary text-primary-foreground"
                     : isCompleted
@@ -219,7 +219,7 @@ export function StageNav({ activeStepId, onStepSelect, viewportDocked = false }:
                 )}
               >
                 {isLocked ? (
-                  <Lock className="h-3 w-3" />
+                  <Lock className="h-3.5 w-3.5" />
                 ) : isCompleted ? (
                   <Check className="h-3.5 w-3.5" />
                 ) : (
@@ -228,15 +228,17 @@ export function StageNav({ activeStepId, onStepSelect, viewportDocked = false }:
               </span>
               {!collapsed && (
                 <div className="min-w-0 flex-1">
-                  <div className="truncate font-semibold">{stage.label}</div>
+                  <div className={cn("truncate font-semibold", isLocked ? "text-muted-foreground" : "text-foreground")}>
+                    {stage.label}
+                  </div>
                   {isLocked && prereq && (
-                    <div className="truncate text-[10px] text-amber-600/80 dark:text-amber-400/80">
+                    <div className="truncate text-[11px] font-medium text-amber-600/90 dark:text-amber-400/90">
                       Requires Step {prereq.stepNumber}
                     </div>
                   )}
                 </div>
               )}
-              {!collapsed && isActive && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />}
+              {!collapsed && isActive && !isLocked && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />}
             </button>
           );
         })}
