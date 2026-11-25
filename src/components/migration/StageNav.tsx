@@ -264,7 +264,7 @@ export function StageNav({ activeStepId, onStepSelect, viewportDocked = false }:
                 const isActive = actualIdx === activeIndex;
                 const isCompleted = hydrated ? isStepCompleted(actualIdx, isDemo) : actualIdx === 0;
                 const isLocked = hydrated ? !isStepUnlocked(actualIdx, isDemo) : actualIdx > 1;
-                const prereq = isLocked ? getFirstIncompleteStep(actualIdx, isDemo) : null;
+                const prereq = isLocked ? (hydrated ? getFirstIncompleteStep(actualIdx, isDemo) : WORKFLOW_STEPS[1]) : null;
                 return (
                   <button
                     key={stage.id}
