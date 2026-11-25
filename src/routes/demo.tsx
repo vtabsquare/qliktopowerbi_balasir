@@ -55,22 +55,21 @@ function DemoPageRoot() {
 // ─── Dedicated Demo Workspace & Step-by-Step Navigation ───────────────────
 function DemoWorkspace({ session, onLoggedOut }: { session?: unknown; onLoggedOut?: () => void } = {}) {
   const { withLoading } = useNavigationLoading();
-  const [activeStepId, setActiveStepId] = useState<number>(() => {
-    if (typeof window !== "undefined") {
-      const param = new URLSearchParams(window.location.search).get("step");
-      if (param) {
-        const found = WORKFLOW_STEPS.findIndex((s) => s.demoStepParam === param || String(s.id) === param);
-        if (found >= 0) return found;
-      }
-    }
-    return 0;
-  });
-  const [, setCompletedSteps] = useState<number[]>(() => getCompletedSteps(true));
+  const [activeStepId, setActiveStepId] = useState<number>(0);
+  const [, setCompletedSteps] = useState<number[]>([0]);
   const [modalStepId, setModalStepId] = useState<number | null>(null);
   const { enterpriseAnalysis } = useMigration();
 
-  // Sync completed steps and listen to active step changes
+  // Sync URL ?step= and completed steps after hydration
   useEffect(() => {
+    setCompletedSteps(getCompletedSteps(true));
+    const param = new URLSearchParams(window.location.search).get("step");
+    if (param) {
+      const found = WORKFLOW_STEPS.findIndex((s) => s.demoStepParam === param || String(s.id) === param);
+      if (found >= 0 && isStepUnlocked(found, true)) {
+        setActiveStepId(found);
+      }
+    }
     const handleSync = () => {
       setCompletedSteps(getCompletedSteps(true));
     };

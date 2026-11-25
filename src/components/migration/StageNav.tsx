@@ -40,10 +40,13 @@ export function StageNav({ activeStepId, onStepSelect, viewportDocked = false }:
   const isDemo = authIsDemo || isDemoRoute;
   const { withLoading } = useNavigationLoading();
 
-  const [completedStepsState, setCompletedStepsState] = useState<number[]>(() => getCompletedSteps(isDemo));
+  const [hydrated, setHydrated] = useState(false);
+  const [completedStepsState, setCompletedStepsState] = useState<number[]>([0]);
 
-  // Sync completed steps when event fires or store updates
+  // Sync completed steps after hydration and when event fires
   useEffect(() => {
+    setHydrated(true);
+    setCompletedStepsState(getCompletedSteps(isDemo));
     const handleSync = () => {
       setCompletedStepsState(getCompletedSteps(isDemo));
     };
@@ -259,8 +262,8 @@ export function StageNav({ activeStepId, onStepSelect, viewportDocked = false }:
               {STAGES.slice(phase.start, phase.end + 1).map((stage, idx) => {
                 const actualIdx = phase.start + idx;
                 const isActive = actualIdx === activeIndex;
-                const isCompleted = isStepCompleted(actualIdx, isDemo);
-                const isLocked = !isStepUnlocked(actualIdx, isDemo);
+                const isCompleted = hydrated ? isStepCompleted(actualIdx, isDemo) : actualIdx === 0;
+                const isLocked = hydrated ? !isStepUnlocked(actualIdx, isDemo) : actualIdx > 1;
                 const prereq = isLocked ? getFirstIncompleteStep(actualIdx, isDemo) : null;
                 return (
                   <button

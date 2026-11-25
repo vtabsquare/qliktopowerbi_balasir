@@ -1,4 +1,4 @@
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { MoreHorizontal, LogOut, Trash2, Lock, Compass } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
@@ -7,7 +7,9 @@ import { useAuth } from "@/contexts/AuthContext";
 
 export function AppHeader() {
   const navigate = useNavigate();
-  const { isDemo, isDemoEnv, signOut } = useAuth();
+  const currentPath = useRouterState({ select: (s) => s.location.pathname });
+  const { isDemo: authIsDemo, signOut } = useAuth();
+  const isDemo = authIsDemo || currentPath.startsWith("/demo");
   const [menuOpen, setMenuOpen] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
