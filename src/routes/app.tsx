@@ -160,7 +160,7 @@ function MigrationLayout() {
           <main className="min-w-0 min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 pb-20 sm:px-6 sm:py-5 sm:pb-20">
             <div className="w-full space-y-4">
               {isInstructions ? (
-                <Hero tableCount={tableCount} compact />
+                <Hero tableCount={tableCount} />
               ) : !isUploadStep && matchedStep ? (
                 <div className="flex items-center justify-between rounded-xl border border-border/60 bg-surface/60 px-4 py-2 text-xs shadow-xs">
                   <div className="flex items-center gap-2 font-medium text-muted-foreground">
@@ -195,8 +195,8 @@ function Hero({ tableCount, compact = false }: { tableCount: number; compact?: b
   return (
     <section
       className={cn(
-        "glass-card bg-gradient-to-br from-surface/90 via-surface/60 to-primary/5 border border-primary/20 shadow-lg transition-all duration-300 ease-in-out",
-        compact ? "mb-4 p-4 sm:p-5" : "mb-6 sm:mb-8 p-6 sm:p-8"
+        "glass-card rounded-2xl bg-gradient-to-br from-primary/10 via-surface/60 to-primary/5 border border-primary/20 shadow-lg transition-all duration-300 ease-in-out",
+        compact ? "mb-4 p-4 sm:p-5" : "mb-6 p-6 sm:p-8"
       )}
     >
       <div
