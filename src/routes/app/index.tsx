@@ -313,6 +313,14 @@ export function UploadPage() {
     } else {
       setQvwAnalysis(null);
     }
+
+    if (isDemo && autoAssigned.sources.length > 0 && autoAssigned.etls.length > 0) {
+      try {
+        await useMigration.getState().runAutoFix();
+      } catch (autoFixErr) {
+        console.warn("Demo auto-fix pass skipped:", autoFixErr);
+      }
+    }
   };
 
   const handleRunScriptAnalysis = async () => {
