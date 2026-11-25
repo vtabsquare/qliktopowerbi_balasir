@@ -2131,17 +2131,12 @@ export function TabDaxMeasures({ analysis, onValidationChange }: { analysis: Ent
       return;
     }
     const originalRaw = drafts[measure.key] ?? measure.dax;
-
-    // Pre-process: if the expression is a plain placeholder wrapper such as
-    //   VALUE(// Manual conversion required for Peek()\n"FieldName")
-    // extract the inner field string as a head-start for deterministic repair.
-    const markerMatch = originalRaw.match(/VALUE\s*\(\s*\/\/[^\r\n]*[\r\n]+"([^"]+)"\s*\)/i);
-    const original = markerMatch ? `MAX([${markerMatch[1].trim()}])` : originalRaw;
+    const original = originalRaw;
 
     let repaired = measure.modelMeasureId
       ? repairDaxDependencies(powerBiModel.tables.map((table) => ({
           ...table,
-          measures: table.measures.map((item) => item.id === measure.modelMeasureId ? { ...item, expression: original } : item),
+          measures: table.measures.map((item) => item.id === measure.modelMeasureId ? { ...item, expression: original, originalExpression: measure.qlikExpression } : item),
         })), analysis).tables.flatMap((table) => table.measures).find((item) => item.id === measure.modelMeasureId)?.expression
       : repairStandaloneDaxExpression({ expression: original, measureName: measure.measureName, homeTable: measure.table, tables: powerBiModel.tables, analysis }).expression;
     if (!repaired || repaired === originalRaw) {

@@ -44,23 +44,82 @@ function replaceBalancedCalls(expression: string, functionName: string, rewrite:
   return result;
 }
 
-function repairQlikFunctions(expression: string): string {
+function findCalendarDateColumn(tables: PowerBiTable[]): { table: PowerBiTable; column: PowerBiTable["columns"][number] } | null {
+  const rankedTables = [...tables].sort((a, b) => {
+    const score = (t: PowerBiTable) =>
+      /mastercalendar/i.test(t.name) ? 3 : /calendar|date/i.test(t.name) ? 2 : t.kind === "calendar" ? 2 : 0;
+    return score(b) - score(a);
+  });
+  for (const table of rankedTables) {
+    const dateCols = table.columns.filter((c) => c.dataType === "dateTime" || /date/i.test(c.name));
+    if (!dateCols.length) continue;
+    const preferred =
+      dateCols.find((c) => /^calendardate$|^date$/i.test(c.name)) ||
+      dateCols.find((c) => /date/i.test(c.name) && c.dataType === "dateTime") ||
+      dateCols[0];
+    if (preferred) return { table, column: preferred };
+  }
+  return null;
+}
+
+function resolvePeekBoundExpression(
+  field: string,
+  wrapNumeric: boolean,
+  tables: PowerBiTable[],
+): string | null {
+  const cleanField = field.trim();
+  const agg = /\bmin/i.test(cleanField) ? "MIN" : "MAX";
+  const formatTableRef = (tableName: string, columnName: string) => {
+    const quotedTable = /^[A-Za-z_][A-Za-z0-9_]*$/.test(tableName) ? tableName : `'${tableName.replace(/'/g, "''")}'`;
+    return `${quotedTable}[${columnName}]`;
+  };
+
+  // 1. Check if the field exists directly as a physical column in the model.
+  for (const table of tables) {
+    const col = table.columns.find((c) => nameKey(c.name) === nameKey(cleanField) || nameKey(c.sourceName) === nameKey(cleanField));
+    if (col) {
+      const ref = formatTableRef(table.name, col.name);
+      if (wrapNumeric && col.dataType === "dateTime") {
+        return `VALUE(FORMAT(${agg}(${ref}), "YYYYMMDD"))`;
+      }
+      return `${agg}(${ref})`;
+    }
+  }
+
+  // 2. For date-bound fields (e.g. MaxDate, MinDate from a dropped Qlik CalendarBounds table),
+  //    resolve to the model's calendar date column.
+  if (/date/i.test(cleanField)) {
+    const cal = findCalendarDateColumn(tables);
+    if (cal) {
+      const ref = formatTableRef(cal.table.name, cal.column.name);
+      return wrapNumeric ? `VALUE(FORMAT(${agg}(${ref}), "YYYYMMDD"))` : `${agg}(${ref})`;
+    }
+  }
+
+  return null;
+}
+
+function repairQlikFunctions(expression: string, tables: PowerBiTable[] = [], originalQlikExpression = ""): string {
   let result = rewriteQlikColourFunctions(expression);
 
-  // Strip untranslated placeholder markers emitted by DaxTranslator.
-  // Pattern 1: VALUE(// Manual conversion required for Peek()\n"FieldName") → MAX('Table'[FieldName])
-  //   The inner quoted string is extracted as the best-effort field name.
+  const peekFieldFromOriginal = originalQlikExpression.match(/\bPeek\s*\(\s*['"]([^'"]+)['"]/i)?.[1];
+  const isNumericQlik = /\bNum\s*\(/i.test(originalQlikExpression) || /^\s*VALUE\s*\(/i.test(result);
+
+  // Pattern 1: VALUE(// Manual conversion required for Peek()\n"FieldName") or VALUE("FieldName")
   result = result.replace(
-    /VALUE\s*\(\s*\/\/\s*Manual conversion required for Peek\(\)\s*[\r\n]+"([^"]+)"\s*\)/gi,
-    (_, field: string) => {
-      // Try to produce a sensible approximation. Peek is usually used to grab
-      // the last/first value of a field across rows. MAX is the safest DAX
-      // approximation; callers that need FIRST should override manually.
-      const cleanField = field.trim();
-      return `MAX([${cleanField}])`;
-    },
+    /VALUE\s*\(\s*(?:\/\/\s*Manual conversion required for Peek\(\)\s*[\r\n]+)?\s*"([^0-9.+-][^"]*)"\s*\)/gi,
+    (_, field: string) => resolvePeekBoundExpression(field, true, tables) || `MAX([${field.trim()}])`,
   );
-  // Pattern 2: bare comment markers (strip so the remaining expression can be re-validated)
+
+  // Pattern 2: MAX([MaxDate]) / MIN([MinDate]) from an earlier partial repair where the column isn't in the model
+  const unqualifiedAgg = result.match(/^\s*(MAX|MIN)\s*\(\s*\[([^\]]+)\]\s*\)\s*$/i);
+  if (unqualifiedAgg) {
+    const fieldName = unqualifiedAgg[2].trim();
+    const resolved = resolvePeekBoundExpression(peekFieldFromOriginal || fieldName, isNumericQlik, tables);
+    if (resolved) result = resolved;
+  }
+
+  // Pattern 3: bare comment markers (strip so the remaining expression can be re-validated)
   result = result.replace(/\/\/\s*Manual conversion required[^\r\n]*/gi, "").trim();
   result = result.replace(/\/\/\s*FUNCTION_NOT_MAPPED[^\r\n]*/gi, "").trim();
   result = result.replace(/\/\/\s*PLACEHOLDER[^\r\n]*/gi, "").trim();
@@ -326,7 +385,11 @@ export function repairDaxDependencies(
         continue;
       }
       const originalExpression = measure.expression;
-      let expression = repairQlikFunctions(closeSafeParentheses(measure.expression));
+      let expression = repairQlikFunctions(
+        closeSafeParentheses(measure.expression),
+        tables,
+        measure.originalExpression || "",
+      );
       const qualified = [...expression.matchAll(/(?:'((?:[^']|'')+)'|([A-Za-z_][A-Za-z0-9_ ]*))\s*\[([^\]]+)\]/g)];
       for (const match of qualified) {
         const requestedTableName = (match[1] || match[2] || "").replace(/''/g, "'").trim();

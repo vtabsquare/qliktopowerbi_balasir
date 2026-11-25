@@ -153,6 +153,7 @@ export function validateDaxMeasures(measures: DaxMeasureInput[], tables: PowerBi
     balancedDelimiters(expression, masked.text, issues);
     if (/(?:[+\-*/&=<>]|\b(?:AND|OR|IN|RETURN))\s*$/i.test(masked.text.trim())) addIssue(issues, expression, "DAX_INCOMPLETE_EXPRESSION", "error", "The expression ends with an incomplete operator or keyword.", "Complete the right-hand side of the DAX expression.", Math.max(0, expression.trimEnd().length - 1));
     if (/Manual conversion required|FUNCTION_NOT_MAPPED|\bPLACEHOLDER\b|The end of the input/i.test(expression)) addIssue(issues, expression, "INVALID_DAX_MARKER", "error", "The expression contains an unresolved translation marker.", "Replace the marker with reviewed DAX before continuing.");
+    if (/\bVALUE\s*\(\s*"[^0-9.+-][^"]*"\s*\)/i.test(expression)) addIssue(issues, expression, "DAX_INVALID_VALUE_LITERAL", "error", "VALUE() contains a non-numeric field-name literal instead of a valid column or numeric expression.", "Replace VALUE(\"...\") with a valid DAX aggregation or FORMAT() conversion.");
 
     for (const match of masked.text.matchAll(/\b([A-Za-z][A-Za-z0-9_.]*)\s*\(/g)) {
       const name = match[1].toUpperCase();

@@ -89,29 +89,51 @@ describe("Phase 2 DAX quality gate", () => {
     expect(validateStepCompletion(6, { hasCurrentDaxValidation: true, hasBlockingDaxErrors: false })).toEqual({ ok: true });
   });
 
-  it("strips Peek() placeholder markers and produces a valid MAX approximation", () => {
-    // This replicates the vMaxDate bug: DaxTranslator cannot translate Peek()
-    // and emits: VALUE(// Manual conversion required for Peek()\n"MaxDate")
+  it("strips Peek() placeholder markers and produces a valid VALUE(FORMAT(MAX/MIN(...), \"YYYYMMDD\")) measure", () => {
     const peekPlaceholder = `VALUE(// Manual conversion required for Peek()\n"MaxDate")`;
-    const brokenMeasure = {
-      ...measure("M-vMaxDate", "vMaxDate", peekPlaceholder),
+    const literalValueBroken = `VALUE("MinDate")`;
+    const vMaxMeasure = {
+      ...measure("M-vMaxDate", "vMaxDate", peekPlaceholder, "MasterCalendar"),
+      originalExpression: "Num(Peek('MaxDate', 0, 'CalendarBounds'))",
       approved: false,
       status: "needs-fix",
     };
-    const tables = [table("Calendar", ["CalendarDate", "MaxDate"], [brokenMeasure])];
+    const vMinMeasure = {
+      ...measure("M-vMinDate", "vMinDate", literalValueBroken, "MasterCalendar"),
+      originalExpression: "Num(Peek('MinDate', 0, 'CalendarBounds'))",
+      approved: false,
+      status: "needs-fix",
+    };
+    const calTable = table("MasterCalendar", ["CalendarDate", "Year", "Month"], [vMaxMeasure, vMinMeasure]);
+    calTable.kind = "calendar";
+    calTable.columns[0].dataType = "dateTime";
+    const tables = [calTable];
+
     const before = validateDaxMeasures(
-      [{ id: brokenMeasure.id, name: brokenMeasure.name, expression: peekPlaceholder, table: "Calendar" }],
+      [
+        { id: vMaxMeasure.id, name: vMaxMeasure.name, expression: peekPlaceholder, table: "MasterCalendar" },
+        { id: vMinMeasure.id, name: vMinMeasure.name, expression: literalValueBroken, table: "MasterCalendar" },
+      ],
       tables,
     );
-    // Placeholder must be flagged as invalid before repair.
     expect(before[0].status).not.toBe("valid");
+    expect(before[1].status).not.toBe("valid");
 
-    const repaired = repairDaxDependencies(tables).tables[0].measures[0];
-    // After repair the placeholder wrapper must be gone.
-    expect(repaired.expression).not.toContain("Manual conversion required");
-    expect(repaired.expression).not.toContain("VALUE(//");
-    // A sensible MAX approximation should be present.
-    expect(repaired.expression).toMatch(/MAX\(/i);
+    const repairedTables = repairDaxDependencies(tables).tables;
+    const repairedMax = repairedTables[0].measures[0];
+    const repairedMin = repairedTables[0].measures[1];
+    expect(repairedMax.expression).toBe(`VALUE(FORMAT(MAX(MasterCalendar[CalendarDate]), "YYYYMMDD"))`);
+    expect(repairedMin.expression).toBe(`VALUE(FORMAT(MIN(MasterCalendar[CalendarDate]), "YYYYMMDD"))`);
+
+    const after = validateDaxMeasures(
+      [
+        { id: repairedMax.id, name: repairedMax.name, expression: repairedMax.expression, table: "MasterCalendar" },
+        { id: repairedMin.id, name: repairedMin.name, expression: repairedMin.expression, table: "MasterCalendar" },
+      ],
+      repairedTables,
+    );
+    expect(after[0].status).toBe("valid");
+    expect(after[1].status).toBe("valid");
   });
 
   it("never overwrites a valid user-approved measure during dependency repair", () => {
