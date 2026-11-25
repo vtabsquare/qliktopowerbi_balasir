@@ -27,6 +27,9 @@ export function useStageReadiness(stepId: number) {
         (diagnostic.severity === "blocking-error" || diagnostic.severity === "error") &&
         !diagnostic.approved,
     ) ?? false);
+    const unresolvedSourceMappingsCount = (enterpriseAnalysis?.sourceMappings || []).filter(
+      (row) => !row.bypassQvd && row.status !== "Mapped",
+    ).length;
     const result = validateStepCompletion(stepId, {
       filesCount: enterpriseFiles.length,
       hasEnterpriseAnalysis: Boolean(enterpriseAnalysis),
@@ -43,6 +46,7 @@ export function useStageReadiness(stepId: number) {
       hasCurrentDaxValidation: Boolean(validatedModel),
       hasBlockingDaxErrors: daxBlocking,
       isQvsOnlyMode: enterpriseFiles.length > 0 && !enterpriseFiles.some((file) => file.extension.toLowerCase() === ".qvw"),
+      unresolvedSourceMappingsCount,
     });
 
     return {

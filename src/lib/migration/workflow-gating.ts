@@ -285,6 +285,7 @@ export interface WorkflowValidationContext {
   hasCurrentDaxValidation?: boolean;
   hasBlockingDaxErrors?: boolean;
   isQvsOnlyMode?: boolean;
+  unresolvedSourceMappingsCount?: number;
 }
 
 /**
@@ -327,6 +328,12 @@ export function validateStepCompletion(
         return {
           ok: false,
           reason: "Please run the enterprise ETL analysis engine to identify final tables and script lineage.",
+        };
+      }
+      if (ctx.unresolvedSourceMappingsCount && ctx.unresolvedSourceMappingsCount > 0) {
+        return {
+          ok: false,
+          reason: `${ctx.unresolvedSourceMappingsCount} file-based source mapping(s) require resolution. Select a folder with Browse Folder, run Auto Fill All Paths, and click Apply Mapping & Re-run Conversion.`,
         };
       }
       return { ok: true };

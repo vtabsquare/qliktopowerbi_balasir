@@ -657,6 +657,11 @@ export function TabSourceMapping({
     return sessionStorage.getItem(storageKey) || "";
   });
   const [bulkFolderError, setBulkFolderError] = useState<string | null>(null);
+  const [selectedFolderName, setSelectedFolderName] = useState<string | null>(null);
+  const [selectedFolderFiles, setSelectedFolderFiles] = useState<{ name: string; relativePath: string }[]>([]);
+  const [unmatchedFiles, setUnmatchedFiles] = useState<string[]>([]);
+  const [browsingFolder, setBrowsingFolder] = useState(false);
+  const folderInputRef = useRef<HTMLInputElement>(null);
   const [convertQvd, setConvertQvd] = useState(true);
   const editable = mappingRows.filter(m => !m.bypassQvd);
   const bypassed = mappingRows.filter(m => m.bypassQvd);
@@ -691,15 +696,18 @@ export function TabSourceMapping({
     return null;
   };
 
-  const handleAutoFillAllPaths = () => {
-    const validationError = validateFolderPath(bulkFolder);
+  const applyFolderAutoFill = (
+    baseFolderRaw: string,
+    detectedFiles: { name: string; relativePath: string }[] = selectedFolderFiles,
+  ) => {
+    const validationError = validateFolderPath(baseFolderRaw);
     if (validationError) {
       setBulkFolderError(validationError);
       toast.error("Invalid folder path", { description: validationError });
       return;
     }
     setBulkFolderError(null);
-    const trimmedBase = bulkFolder.trim().replace(/[/\\]+$/, "");
+    const trimmedBase = baseFolderRaw.trim().replace(/[/\\]+$/, "");
     if (typeof window !== "undefined") {
       sessionStorage.setItem(storageKey, trimmedBase);
     }
@@ -707,6 +715,7 @@ export function TabSourceMapping({
     const sep = trimmedBase.includes("\\") || /^[A-Za-z]:/.test(trimmedBase) ? "\\" : "/";
     const nonFileConnectors = new Set(["SQL Server", "PostgreSQL", "MySQL", "Database/SQL", "SharePoint", "Web/API"]);
     let updatedCount = 0;
+    const missing: string[] = [];
 
     const updated = mappingRows.map((r) => {
       if (r.bypassQvd || r.status === "Bypassed") return r;
@@ -726,7 +735,28 @@ export function TabSourceMapping({
       if (convertQvd && relative.toLowerCase().endsWith(".qvd")) {
         relative = relative.slice(0, -4) + ".csv";
       }
-      const normalizedRel = relative.split(/[/\\]+/).filter(Boolean).join(sep);
+
+      const relNorm = relative.replace(/\\/g, "/").toLowerCase();
+      const fileName = relNorm.split("/").pop() || relNorm;
+      const fileStem = fileName.replace(/\.[^.]+$/, "");
+
+      let matchedRelPath: string | null = null;
+      if (detectedFiles.length > 0) {
+        const exactRel = detectedFiles.find((f) => f.relativePath.replace(/\\/g, "/").toLowerCase() === relNorm);
+        const byName = detectedFiles.find((f) => f.name.toLowerCase() === fileName);
+        const byStem = convertQvd
+          ? detectedFiles.find((f) => f.name.replace(/\.[^.]+$/, "").toLowerCase() === fileStem)
+          : undefined;
+        const match = exactRel || byName || byStem;
+        if (match) {
+          matchedRelPath = match.relativePath;
+        } else {
+          missing.push(`${r.table || "Source"} (${fileName})`);
+          return r;
+        }
+      }
+
+      const normalizedRel = (matchedRelPath || relative).split(/[/\\]+/).filter(Boolean).join(sep);
       const mapped = `${trimmedBase}${sep}${normalizedRel}`;
       const ct = connector(mapped);
       updatedCount += 1;
@@ -738,6 +768,7 @@ export function TabSourceMapping({
       };
     });
 
+    setUnmatchedFiles(missing);
     onMappingChange(updated);
     useMigration.getState().setEnterpriseMappingUpdates(
       rowsToUpdates(
@@ -752,13 +783,81 @@ export function TabSourceMapping({
       ),
     );
 
-    if (updatedCount === 0) {
+    if (missing.length > 0) {
+      toast.warning(`Auto-filled ${updatedCount} path(s); ${missing.length} file(s) not found in selected folder`, {
+        description: `Missing: ${missing.slice(0, 4).join(", ")}${missing.length > 4 ? "…" : ""}`,
+      });
+    } else if (updatedCount === 0) {
       toast.info("No file-based source paths needed updating.");
     } else {
       toast.success(`Auto-filled ${updatedCount} source path(s)`, {
         description: `Applied base folder "${trimmedBase}". Click Apply Mapping & Re-run Conversion to refresh outputs.`,
       });
     }
+  };
+
+  const handleAutoFillAllPaths = () => applyFolderAutoFill(bulkFolder, selectedFolderFiles);
+
+  const collectDirectoryFiles = async (
+    dirHandle: any,
+    prefix = "",
+    depth = 0,
+  ): Promise<{ name: string; relativePath: string }[]> => {
+    if (depth > 6) return [];
+    const results: { name: string; relativePath: string }[] = [];
+    for await (const entry of dirHandle.values()) {
+      const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+      if (entry.kind === "file") {
+        results.push({ name: entry.name, relativePath: rel });
+      } else if (entry.kind === "directory") {
+        const nested = await collectDirectoryFiles(entry, rel, depth + 1);
+        results.push(...nested);
+      }
+    }
+    return results;
+  };
+
+  const handleBrowseFolder = async () => {
+    setBulkFolderError(null);
+    const picker = typeof window !== "undefined" ? (window as unknown as { showDirectoryPicker?: (opts?: { mode?: string }) => Promise<any> }).showDirectoryPicker : undefined;
+    if (picker) {
+      setBrowsingFolder(true);
+      try {
+        const dirHandle = await picker({ mode: "read" });
+        const files = await collectDirectoryFiles(dirHandle);
+        const folderPath = dirHandle.name;
+        setSelectedFolderName(dirHandle.name);
+        setSelectedFolderFiles(files);
+        setBulkFolder(folderPath);
+        applyFolderAutoFill(folderPath, files);
+        return;
+      } catch (err) {
+        if ((err as { name?: string })?.name === "AbortError") {
+          return;
+        }
+        // Fall through to webkitdirectory input fallback if permission/security error occurs
+      } finally {
+        setBrowsingFolder(false);
+      }
+    }
+    folderInputRef.current?.click();
+  };
+
+  const handleFallbackFolderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const fileList = e.target.files ? Array.from(e.target.files) : [];
+    e.target.value = "";
+    if (!fileList.length) return;
+    const firstRel = (fileList[0] as File & { webkitRelativePath?: string }).webkitRelativePath || fileList[0].name;
+    const rootName = firstRel.split("/")[0] || "SelectedFolder";
+    const files = fileList.map((f) => {
+      const rel = ((f as File & { webkitRelativePath?: string }).webkitRelativePath || f.name).replace(/^[^/]+\//, "");
+      return { name: f.name, relativePath: rel || f.name };
+    });
+    setSelectedFolderName(rootName);
+    setSelectedFolderFiles(files);
+    setBulkFolder(rootName);
+    setBulkFolderError(null);
+    applyFolderAutoFill(rootName, files);
   };
 
   return (
@@ -776,11 +875,29 @@ export function TabSourceMapping({
         </div>
       )}
 
-      <div className="surface-card p-4 space-y-2.5">
-        <SectionHeader title="Bulk Alternate Folder" sub="Enter a common base folder path to populate all file-based source paths while preserving relative filenames" />
+      <div className="surface-card p-4 space-y-3">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <SectionHeader title="Bulk Alternate Folder" sub="Select a folder using Browse Folder to detect source files and auto-populate file-based source paths" />
+          {selectedFolderName && (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 dark:text-emerald-400">
+              <FolderOpen className="h-3.5 w-3.5" />
+              {selectedFolderName} ({selectedFolderFiles.length} file{selectedFolderFiles.length === 1 ? "" : "s"})
+            </span>
+          )}
+        </div>
         <label htmlFor="bulk-alternate-folder-input" className="block text-xs font-semibold text-foreground">
-          Folder Path:
+          Selected Folder Path:
         </label>
+        <input
+          ref={folderInputRef}
+          type="file"
+          className="hidden"
+          // @ts-expect-error webkitdirectory is supported in modern browsers
+          webkitdirectory=""
+          directory=""
+          multiple
+          onChange={handleFallbackFolderChange}
+        />
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <input
             id="bulk-alternate-folder-input"
@@ -788,9 +905,12 @@ export function TabSourceMapping({
             value={bulkFolder}
             onChange={(e) => {
               setBulkFolder(e.target.value);
+              setSelectedFolderFiles([]);
+              setSelectedFolderName(null);
+              setUnmatchedFiles([]);
               if (bulkFolderError) setBulkFolderError(null);
             }}
-            placeholder="D:\Migration\SourceData\AlternateFolder"
+            placeholder="Use Browse Folder or enter path (e.g. D:\Migration\SourceData)"
             className={cn(
               "flex-1 rounded-lg border bg-surface px-3 py-2 font-mono text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40",
               bulkFolderError ? "border-destructive" : "border-border",
@@ -798,12 +918,28 @@ export function TabSourceMapping({
           />
           <button
             type="button"
+            onClick={handleBrowseFolder}
+            disabled={browsingFolder}
+            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-primary/40 bg-primary/10 px-4 py-2 text-sm font-semibold text-primary hover:bg-primary/20 disabled:opacity-50 cursor-pointer"
+          >
+            {browsingFolder ? <Loader2 className="h-4 w-4 animate-spin" /> : <FolderOpen className="h-4 w-4" />}
+            Browse Folder
+          </button>
+        </div>
+        <div className="flex justify-end">
+          <button
+            type="button"
             onClick={handleAutoFillAllPaths}
-            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
+            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 cursor-pointer"
           >
             Auto Fill All Paths
           </button>
         </div>
+        {unmatchedFiles.length > 0 && (
+          <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+            <strong>Missing / unmatched files in selected folder:</strong> {unmatchedFiles.join(", ")}
+          </div>
+        )}
         {bulkFolderError && (
           <p role="alert" className="text-xs font-medium text-destructive">
             {bulkFolderError}
@@ -866,17 +1002,17 @@ export function TabSourceMapping({
           </table>
         </div>
 
-        <div className="mt-4 flex items-center gap-3">
+        <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <span className="text-xs text-muted-foreground">Applying will re-run the full enterprise pipeline with updated source paths.</span>
           <button
             data-tour="apply-mapping"
             onClick={onApply}
             disabled={applying}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-medium disabled:opacity-50"
+            className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-medium disabled:opacity-50 sm:ml-auto shrink-0 cursor-pointer"
           >
             {applying ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
             Apply Mapping & Re-run Conversion
           </button>
-          <span className="text-xs text-muted-foreground">Applying will re-run the full enterprise pipeline with updated source paths.</span>
         </div>
       </div>
     </div>

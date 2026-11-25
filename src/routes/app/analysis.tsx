@@ -8,7 +8,7 @@ import { TabSourceMapping } from "@/components/migration/EnterpriseAnalysisPanel
 import { RepairFocusNotice } from "@/components/migration/RepairFocusNotice";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
-import { markStepCompleted, navigateWorkflow } from "@/lib/migration/workflow-gating";
+import { invalidateDownstreamSteps, markStepCompleted, navigateWorkflow, unmarkStepCompleted, validateStepCompletion } from "@/lib/migration/workflow-gating";
 import { useNavigationLoading } from "@/components/common/NavigationLoadingOverlay";
 
 export const Route = createFileRoute("/app/analysis")({
@@ -35,6 +35,17 @@ export function AnalysisPage() {
   const { withLoading } = useNavigationLoading();
 
   const handleProceedToPowerQuery = () => {
+    const unresolvedCount = (enterpriseAnalysis?.sourceMappings || []).filter(
+      (row) => !row.bypassQvd && row.status !== "Mapped",
+    ).length;
+    const validation = validateStepCompletion(4, {
+      hasEnterpriseAnalysis: Boolean(enterpriseAnalysis),
+      unresolvedSourceMappingsCount: unresolvedCount,
+    });
+    if (!validation.ok) {
+      toast.error("Complete ETL Analysis before proceeding", { description: validation.reason });
+      return;
+    }
     markStepCompleted(4, isDemo);
     toast.success("Step 5 (ETL Analysis) Completed! Step 6 (Power Query) is now unlocked.");
     withLoading(
@@ -106,8 +117,10 @@ export function AnalysisPage() {
       setEnterpriseMappingUpdates(newUpdates);
       const updated = await runAnalysis(newUpdates, enterpriseColumnTypeEdits);
       useMigration.getState().initializePowerBiModel();
+      invalidateDownstreamSteps(4, isDemo);
       if (updated) {
         if (missingSources.length > 0) {
+          unmarkStepCompleted(4, isDemo);
           toast.warning(`Pipeline re-run with ${missingSources.length} unmapped source(s)`, {
             description: missingSources.map((m) => m.table || m.originalRef).join(", "),
           });

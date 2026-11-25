@@ -152,11 +152,21 @@ describe("Step-by-Step Workflow Locking System", () => {
     const validUpload = validateStepCompletion(1, { filesCount: 2 });
     expect(validUpload.ok).toBe(true);
 
-    // Step 5 (ETL Analysis) requires enterpriseAnalysis
+    // Step 5 (ETL Analysis) requires enterpriseAnalysis and 0 unresolved source mappings
     const invalidAnalysis = validateStepCompletion(4, { hasEnterpriseAnalysis: false });
     expect(invalidAnalysis.ok).toBe(false);
 
-    const validAnalysis = validateStepCompletion(4, { hasEnterpriseAnalysis: true });
+    const unresolvedMappings = validateStepCompletion(4, {
+      hasEnterpriseAnalysis: true,
+      unresolvedSourceMappingsCount: 3,
+    });
+    expect(unresolvedMappings.ok).toBe(false);
+    expect(unresolvedMappings.reason).toContain("3 file-based source mapping(s) require resolution");
+
+    const validAnalysis = validateStepCompletion(4, {
+      hasEnterpriseAnalysis: true,
+      unresolvedSourceMappingsCount: 0,
+    });
     expect(validAnalysis.ok).toBe(true);
   });
 
