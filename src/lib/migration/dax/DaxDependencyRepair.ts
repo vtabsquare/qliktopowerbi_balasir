@@ -507,13 +507,14 @@ export function repairStandaloneDaxExpression(args: {
   homeTable?: string;
   tables: PowerBiTable[];
   analysis?: EnterpriseAnalysis | null;
+  originalExpression?: string;
 }): { expression: string; valid: boolean; issues: string[] } {
   const target = args.tables.find((table) => nameKey(table.name) === nameKey(args.homeTable || "")) ?? args.tables[0];
   if (!target) return { expression: args.expression, valid: false, issues: ["No semantic-model table is available for schema validation."] };
   const id = `standalone-${nameKey(args.measureName)}`;
   const tables = args.tables.map((table) => table.id === target.id ? {
     ...table,
-    measures: [...table.measures, { id, name: args.measureName, expression: args.expression, homeTable: target.name, hidden: false, approved: false, status: "needs-fix" }],
+    measures: [...table.measures, { id, name: args.measureName, expression: args.expression, originalExpression: args.originalExpression, homeTable: target.name, hidden: false, approved: false, status: "needs-fix" }],
   } : table);
   const repaired = repairDaxDependencies(tables, args.analysis);
   const expression = repaired.tables.flatMap((table) => table.measures).find((measure) => measure.id === id)?.expression ?? args.expression;

@@ -155,8 +155,16 @@ export function StageValidationBanner({ stepId, canProceed, blockedReason }: Sta
     try {
       const report = await runAutoFix();
       const fixed = report.actions.filter((a) => a.status === "fixed").length;
-      if (fixed > 0) {
-        toast.success(`Auto-Fix resolved ${fixed} issue(s)`);
+      if (report.afterBlocking === 0) {
+        toast.success(
+          fixed > 0
+            ? `Auto-Fix resolved ${fixed} issue(s) — all blocking errors cleared!`
+            : "All blocking errors cleared — ready to proceed to the next step.",
+        );
+      } else if (fixed > 0) {
+        toast.warning(`Auto-Fix resolved ${fixed} issue(s)`, {
+          description: `${report.afterBlocking} blocking item(s) still require review before proceeding.`,
+        });
       } else {
         toast.info("Auto-Fix checked all items", {
           description: "Remaining items require a manual decision or file selection.",

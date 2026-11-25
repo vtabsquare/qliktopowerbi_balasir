@@ -486,6 +486,7 @@ export const useMigration = create<MigrationStore>()(persist((set, get) => ({
             homeTable: measure.table,
             tables: powerBiModel!.tables,
             analysis: enterpriseAnalysis,
+            originalExpression: measure.qlikExpression,
           });
           if (repaired.expression !== measure.dax) actions.push({
             id: `dax-enterprise-${measure.measureName.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
