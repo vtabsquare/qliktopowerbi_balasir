@@ -21,6 +21,7 @@ import {
 } from "@/lib/migration/workflow-gating";
 import { StageBottomDock } from "@/components/migration/StageBottomDock";
 import { StageModalOverlay } from "@/components/migration/StageModalOverlay";
+import { StageValidationBanner } from "@/components/migration/StageValidationBanner";
 import { useStageReadiness } from "@/components/migration/use-stage-readiness";
 
 export const Route = createFileRoute("/app")({
@@ -154,24 +155,33 @@ function MigrationLayout() {
     <TourProvider>
       <div className="flex h-screen w-screen flex-col overflow-hidden bg-background" id="vtab-demo-app" data-testid="vtab-demo-app">
         <div className="z-30 shrink-0"><AppHeader /></div>
-        {matchedStep && <nav className="z-20 shrink-0 border-b border-border/50 bg-surface/70 px-3 backdrop-blur-md"><StageNav viewportDocked /></nav>}
+        <div className="flex min-h-0 flex-1 flex-col md:flex-row overflow-hidden">
+          {matchedStep && <StageNav viewportDocked />}
 
-        <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6 sm:py-5 lg:px-8">
-          <div className="mx-auto w-full max-w-[1440px] space-y-5">
-            {isInstructions ? (
-              <Hero tableCount={tableCount} compact />
-            ) : !isUploadStep && matchedStep ? (
-              <div className="flex items-center justify-between rounded-xl border border-border/60 bg-surface/60 px-4 py-2 text-xs shadow-xs">
-                <div className="flex items-center gap-2 font-medium text-muted-foreground">
-                  <span className="h-2 w-2 rounded-full bg-success animate-pulse" />
-                  <span>Workspace Active</span><span>•</span>
-                  <span className="font-semibold text-foreground">{tableCount ? `${tableCount} Final Tables` : "Pipeline Ready"}</span>
+          <main className="min-w-0 min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6 sm:py-5 lg:px-8">
+            <div className="mx-auto w-full max-w-[1440px] space-y-5">
+              {isInstructions ? (
+                <Hero tableCount={tableCount} compact />
+              ) : !isUploadStep && matchedStep ? (
+                <div className="flex items-center justify-between rounded-xl border border-border/60 bg-surface/60 px-4 py-2 text-xs shadow-xs">
+                  <div className="flex items-center gap-2 font-medium text-muted-foreground">
+                    <span className="h-2 w-2 rounded-full bg-success animate-pulse" />
+                    <span>Workspace Active</span><span>•</span>
+                    <span className="font-semibold text-foreground">{tableCount ? `${tableCount} Final Tables` : "Pipeline Ready"}</span>
+                  </div>
                 </div>
-              </div>
-            ) : null}
-            <Outlet />
-          </div>
-        </main>
+              ) : null}
+              {matchedStep && (
+                <StageValidationBanner
+                  stepId={currentStep.id}
+                  canProceed={readiness.canProceed}
+                  blockedReason={readiness.reason}
+                />
+              )}
+              <Outlet />
+            </div>
+          </main>
+        </div>
 
         {matchedStep && <StageBottomDock currentStepId={currentStep.id} isDemo={isDemo} onProceedNext={openNextStage} onGoPrevious={() => { const previous = WORKFLOW_STEPS[currentStep.id - 1]; if (previous) navigate({ to: previous.path }); }} canProceed={readiness.canProceed} hasErrors={readiness.hasErrors} statusLabel={readiness.statusLabel} blockedReason={readiness.reason} />}
 

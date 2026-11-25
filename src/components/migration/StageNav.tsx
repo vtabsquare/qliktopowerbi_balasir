@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { Check, Layers, Grid, Lock, Minimize2, Maximize2 } from "lucide-react";
+import { Check, Layers, Grid, Lock, Minimize2, Maximize2, PanelLeftClose, PanelLeftOpen, Menu, X } from "lucide-react";
 import { useMigration } from "@/lib/migration/store";
 import { cn } from "@/lib/utils";
 import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
@@ -87,6 +87,8 @@ export function StageNav({ activeStepId, onStepSelect, viewportDocked = false }:
 
   const [selectedPhase, setSelectedPhase] = useState<number>(activePhaseId);
   const [viewMode, setViewMode] = useState<NavViewMode>(viewportDocked ? "compact" : "default");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
 
   useEffect(() => {
     setSelectedPhase(activePhaseId);
@@ -167,22 +169,165 @@ export function StageNav({ activeStepId, onStepSelect, viewportDocked = false }:
   );
 
   if (viewportDocked) {
-    return (
-      <div id="migration-stage-menu" className="mx-auto flex w-full max-w-[1440px] items-center gap-2 overflow-x-auto px-1 py-1.5 no-scrollbar" aria-label="Migration stages">
-        {STAGES.map((stage, index) => (
-          <div key={stage.id} className="shrink-0">
-            <StagePill
-              stage={stage}
-              index={index}
-              isActive={index === activeIndex}
-              isCompleted={isStepCompleted(index, isDemo)}
-              isLocked={!isStepUnlocked(index, isDemo)}
-              onNavigate={() => handleStageNavigation(stage)}
-              size="compact"
-            />
+    const activeStage = STAGES[activeIndex] || STAGES[0];
+    const renderVerticalList = (collapsed: boolean, onSelectClose?: () => void) => (
+      <div className="flex flex-col gap-3 p-2.5">
+        {phases.map((phase) => (
+          <div key={phase.id} className="space-y-1">
+            {!collapsed && (
+              <div className="flex items-center justify-between px-2 pt-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                <span>Phase {phase.id}: {phase.name}</span>
+                {isDemo && phase.id === 3 && <Lock className="h-3 w-3 text-amber-500" />}
+              </div>
+            )}
+            <div className="space-y-1">
+              {STAGES.slice(phase.start, phase.end + 1).map((stage, idx) => {
+                const actualIdx = phase.start + idx;
+                const isActive = actualIdx === activeIndex;
+                const isCompleted = isStepCompleted(actualIdx, isDemo);
+                const isLocked = !isStepUnlocked(actualIdx, isDemo);
+                const prereq = isLocked ? getFirstIncompleteStep(actualIdx, isDemo) : null;
+                return (
+                  <button
+                    key={stage.id}
+                    type="button"
+                    onClick={() => {
+                      onSelectClose?.();
+                      handleStageNavigation(stage);
+                    }}
+                    title={
+                      isLocked && prereq
+                        ? `Locked: Complete Step ${prereq.stepNumber} (${prereq.label}) first`
+                        : `Step ${stage.stepNumber}: ${stage.label}`
+                    }
+                    className={cn(
+                      "group flex w-full items-center gap-2.5 rounded-xl border px-2.5 py-2 text-left text-xs font-medium transition-all",
+                      collapsed && "justify-center px-1.5",
+                      isLocked
+                        ? "border-border/40 bg-surface/20 opacity-65 hover:opacity-100 hover:border-amber-500/50"
+                        : isActive
+                        ? "border-primary/80 bg-primary/15 text-primary shadow-xs ring-1 ring-primary/20"
+                        : isCompleted
+                        ? "border-border/70 bg-surface/80 text-foreground hover:bg-surface hover:border-primary/40"
+                        : "border-transparent bg-transparent text-muted-foreground hover:bg-surface/60 hover:text-foreground",
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "grid h-6 w-6 shrink-0 place-items-center rounded-lg text-[10px] font-bold transition-colors",
+                        isLocked
+                          ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                          : isActive
+                          ? "bg-primary text-primary-foreground"
+                          : isCompleted
+                          ? "bg-success/20 text-success border border-success/30"
+                          : "bg-muted text-muted-foreground",
+                      )}
+                    >
+                      {isLocked ? (
+                        <Lock className="h-3 w-3" />
+                      ) : isCompleted ? (
+                        <Check className="h-3.5 w-3.5" />
+                      ) : (
+                        stage.stepNumber
+                      )}
+                    </span>
+                    {!collapsed && (
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate font-semibold">{stage.label}</div>
+                        {isLocked && prereq && (
+                          <div className="truncate text-[10px] text-amber-600/80 dark:text-amber-400/80">
+                            Requires Step {prereq.stepNumber}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {!collapsed && isActive && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         ))}
       </div>
+    );
+
+    return (
+      <>
+        {/* Mobile compact bar + slide-over drawer */}
+        <div className="flex items-center justify-between border-b border-border/50 bg-surface/80 px-3 py-2 md:hidden">
+          <button
+            type="button"
+            onClick={() => setMobileDrawerOpen(true)}
+            className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs font-semibold text-foreground"
+            aria-label="Open workflow steps menu"
+          >
+            <Menu className="h-4 w-4" />
+            <span>Step {activeStage.stepNumber} of {STAGES.length}: {activeStage.label}</span>
+          </button>
+          <span className="text-[11px] font-medium text-muted-foreground">
+            Phase {activeStage.phase}
+          </span>
+        </div>
+
+        {mobileDrawerOpen && (
+          <div className="fixed inset-0 z-50 flex md:hidden">
+            <div className="fixed inset-0 bg-background/80 backdrop-blur-xs" onClick={() => setMobileDrawerOpen(false)} />
+            <aside className="relative z-10 flex h-full w-72 max-w-[85vw] flex-col border-r border-border bg-surface shadow-2xl">
+              <div className="flex items-center justify-between border-b border-border/60 px-3 py-2.5">
+                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-primary">
+                  <Layers className="h-4 w-4" />
+                  <span>Migration Steps</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setMobileDrawerOpen(false)}
+                  className="rounded-lg p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                  aria-label="Close workflow steps menu"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto">
+                {renderVerticalList(false, () => setMobileDrawerOpen(false))}
+              </div>
+            </aside>
+          </div>
+        )}
+
+        {/* Desktop vertical left-side navigation panel */}
+        <aside
+          id="migration-stage-menu"
+          aria-label="Migration stages"
+          className={cn(
+            "hidden md:flex md:flex-col md:shrink-0 md:border-r md:border-border/60 md:bg-surface/70 md:backdrop-blur-md transition-all duration-200",
+            sidebarCollapsed ? "md:w-16" : "md:w-64 lg:w-72",
+          )}
+        >
+          <div className="flex items-center justify-between border-b border-border/50 px-3 py-2.5">
+            {!sidebarCollapsed && (
+              <div className="flex items-center gap-2 min-w-0">
+                <Layers className="h-4 w-4 shrink-0 text-primary" />
+                <span className="truncate text-[11px] font-bold uppercase tracking-wider text-foreground">
+                  Workflow ({activeStage.stepNumber}/{STAGES.length})
+                </span>
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={() => setSidebarCollapsed((v) => !v)}
+              className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground mx-auto md:mx-0"
+              title={sidebarCollapsed ? "Expand navigation panel" : "Collapse navigation panel"}
+              aria-label={sidebarCollapsed ? "Expand navigation panel" : "Collapse navigation panel"}
+            >
+              {sidebarCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+            </button>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+            {renderVerticalList(sidebarCollapsed)}
+          </div>
+        </aside>
+      </>
     );
   }
 

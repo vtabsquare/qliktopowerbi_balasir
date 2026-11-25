@@ -18,7 +18,8 @@ import { cn } from "@/lib/utils";
 import {
   Database, FileText, Table2, GitBranch, Layers, BarChart3,
   Network, ShieldCheck, Download, Braces, Loader2, AlertCircle,
-  Check, ChevronDown, ChevronRight, RefreshCw, Info, X, Sparkles, Package, Save, Copy, Pencil, Lightbulb, Lock
+  Check, ChevronDown, ChevronRight, RefreshCw, Info, X, Sparkles, Package, Save, Copy, Pencil, Lightbulb, Lock,
+  FolderOpen, Upload
 } from "lucide-react";
 import type { ExtractedFile } from "./MultiFileDropzone";
 import { useMigration } from "@/lib/migration/store";
@@ -514,18 +515,95 @@ function buildMappedRef(parts: Record<string, string>): string {
     .join(';');
 }
 
-function DynamicMappingInput({ connectorType, value, onChange }: { connectorType: string, value: string, onChange: (val: string) => void }) {
+const TEXT_SOURCE_EXTENSIONS = new Set([".csv", ".tsv", ".txt", ".json", ".xml"]);
+
+async function registerAlternateSourceFiles(fileList: File[]): Promise<ExtractedFile[]> {
+  const created: ExtractedFile[] = [];
+  for (const file of fileList) {
+    const ext = file.name.includes(".") ? `.${file.name.split(".").pop()!.toLowerCase()}` : "";
+    const isText = TEXT_SOURCE_EXTENSIONS.has(ext);
+    const text = isText ? await file.text() : null;
+    const relPath = (file as File & { webkitRelativePath?: string }).webkitRelativePath || `SourceData/${file.name}`;
+    created.push({
+      path: relPath,
+      name: file.name,
+      extension: ext,
+      sizeKb: Math.max(1, Math.round(file.size / 1024)),
+      text,
+      parsedAsText: isText && text !== null,
+    });
+  }
+  const state = useMigration.getState();
+  const byPath = new Map(state.enterpriseFiles.map((f) => [(f.path || f.name).toLowerCase(), f]));
+  for (const item of created) {
+    byPath.set((item.path || item.name).toLowerCase(), item);
+  }
+  state.setEnterpriseFiles(Array.from(byPath.values()));
+  return created;
+}
+
+function DynamicMappingInput({ connectorType, value, onChange, onFileSelected }: { connectorType: string; value: string; onChange: (val: string) => void; onFileSelected?: (file: ExtractedFile) => void }) {
   const parts = parseMappedRef(value);
-  
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   if (["CSV/Text", "Excel", "Parquet", "JSON", "XML", "Folder"].includes(connectorType)) {
-    const path = (!value.includes('=') ? value : parts['FilePath']) || '';
+    const isFolder = connectorType === "Folder";
+    const rawPath = (!value.includes("=") ? value : parts["FilePath"]) || "";
+    const displayName = rawPath.split(/[/\\]/).filter(Boolean).pop() || rawPath;
+    const acceptMap: Record<string, string> = {
+      "CSV/Text": ".csv,.tsv,.txt",
+      Excel: ".xlsx,.xls,.xlsm",
+      Parquet: ".parquet",
+      JSON: ".json",
+      XML: ".xml",
+    };
+
+    const handleBrowseChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const selected = Array.from(e.target.files || []);
+      e.target.value = "";
+      if (!selected.length) return;
+      const registered = await registerAlternateSourceFiles(selected);
+      if (isFolder) {
+        const folderName = (selected[0] as File & { webkitRelativePath?: string }).webkitRelativePath?.split("/")[0] || selected[0].name;
+        onChange(folderName);
+        toast.success(`Selected folder "${folderName}" (${registered.length} file(s) loaded)`);
+      } else if (registered[0]) {
+        onChange(registered[0].path);
+        onFileSelected?.(registered[0]);
+        toast.success(`Selected alternate file: ${registered[0].name}`);
+      }
+    };
+
     return (
-      <input
-        value={path}
-        onChange={e => onChange(e.target.value)}
-        placeholder="File Path"
-        className="w-full min-w-[200px] px-2 py-1 rounded border border-border bg-surface text-xs text-foreground font-mono"
-      />
+      <div className="flex min-w-[220px] items-center gap-2">
+        <input
+          ref={fileInputRef}
+          type="file"
+          className="hidden"
+          accept={isFolder ? undefined : acceptMap[connectorType]}
+          {...(isFolder ? ({ webkitdirectory: "", directory: "" } as Record<string, string>) : {})}
+          onChange={(e) => void handleBrowseChange(e)}
+        />
+        <span
+          className={cn(
+            "flex-1 truncate rounded border px-2 py-1 text-xs font-mono",
+            displayName
+              ? "border-border bg-surface text-foreground"
+              : "border-dashed border-amber-500/40 bg-amber-500/5 text-muted-foreground",
+          )}
+          title={rawPath || "No file selected"}
+        >
+          {displayName || (isFolder ? "No folder selected" : "No file selected")}
+        </span>
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          className="inline-flex shrink-0 items-center gap-1 rounded border border-primary/30 bg-primary/10 px-2.5 py-1 text-[11px] font-semibold text-primary hover:bg-primary/15"
+        >
+          {isFolder ? <FolderOpen className="h-3 w-3" /> : <Upload className="h-3 w-3" />}
+          {displayName ? "Replace" : "Browse"}
+        </button>
+      </div>
     );
   }
 
@@ -576,6 +654,7 @@ export function TabSourceMapping({
 }) {
   const [bulkFolder, setBulkFolder] = useState("");
   const [convertQvd, setConvertQvd] = useState(true);
+  const bulkFolderInputRef = useRef<HTMLInputElement>(null);
   const editable = mappingRows.filter(m => !m.bypassQvd);
   const bypassed = mappingRows.filter(m => m.bypassQvd);
   const unresolved = editable.filter(m => m.status !== "Mapped").length;
@@ -584,14 +663,27 @@ export function TabSourceMapping({
     const updated = mappingRows.map((r, i) => {
       if (i !== idx) return r;
       const newRow = { ...r, [field]: value };
-      if (field === "mappedRef") newRow.connectorType = connector(value) || newRow.connectorType;
+      if (field === "mappedRef") {
+        newRow.connectorType = connector(value) || newRow.connectorType;
+        if (value.trim() && !["Unknown", "QVD - map to supported source"].includes(newRow.connectorType)) {
+          newRow.status = "Mapped";
+        }
+      }
       return newRow;
     });
     onMappingChange(updated);
   };
 
-  const handleBulkFill = () => {
-    if (!bulkFolder.trim()) return;
+  const handleBulkFolderBrowse = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = Array.from(e.target.files || []);
+    e.target.value = "";
+    if (!selected.length) return;
+    const registered = await registerAlternateSourceFiles(selected);
+    const folderName = (selected[0] as File & { webkitRelativePath?: string }).webkitRelativePath?.split("/")[0] || "Selected Folder";
+    setBulkFolder(folderName);
+
+    const byBase = new Map(registered.map((f) => [f.name.toLowerCase(), f]));
+    let matchedCount = 0;
     const updated = mappingRows.map(r => {
       if (r.bypassQvd || r.status === "Bypassed") return r;
       const rawPath = r.originalRef.replace(/^\$\([^)]+\)/, "");
@@ -600,12 +692,16 @@ export function TabSourceMapping({
       if (convertQvd && basename.toLowerCase().endsWith(".qvd")) {
         basename = basename.substring(0, basename.length - 4) + ".csv";
       }
-      const sep = bulkFolder.includes("\\") || /^[A-Za-z]:/.test(bulkFolder) ? "\\" : "/";
-      const mapped = bulkFolder.replace(/[/\\]+$/, "") + sep + basename;
+      const matchedFile = byBase.get(basename.toLowerCase());
+      const mapped = matchedFile ? matchedFile.path : `${folderName}/${basename}`;
+      if (matchedFile) matchedCount += 1;
       const ct = connector(mapped);
       return { ...r, mappedRef: mapped, connectorType: ct, status: ["Unknown","QVD - map to supported source"].includes(ct) ? "Needs review" : "Mapped" };
     });
     onMappingChange(updated);
+    toast.success(`Loaded "${folderName}" (${registered.length} file(s))`, {
+      description: matchedCount ? `Matched ${matchedCount} source file(s) automatically.` : "Updated unresolved paths from the selected folder.",
+    });
   };
 
   return (
@@ -624,16 +720,26 @@ export function TabSourceMapping({
       )}
 
       <div className="surface-card p-4">
-        <SectionHeader title="Bulk Alternate Folder" sub="Auto-fill all unresolved file sources by replacing path prefix" />
-        <div className="flex gap-2">
+        <SectionHeader title="Bulk Alternate Folder" sub="Browse a local folder to auto-fill and ingest unresolved source files" />
+        <div className="flex flex-wrap items-center gap-3">
           <input
-            type="text"
-            value={bulkFolder}
-            onChange={e => setBulkFolder(e.target.value)}
-            placeholder="C:\MigrationSources\Data"
-            className="flex-1 px-3 py-2 rounded-lg border border-border bg-surface text-sm text-foreground"
+            ref={bulkFolderInputRef}
+            type="file"
+            className="hidden"
+            {...({ webkitdirectory: "", directory: "" } as Record<string, string>)}
+            onChange={(e) => void handleBulkFolderBrowse(e)}
           />
-          <button onClick={handleBulkFill} className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium">Auto-fill</button>
+          <button
+            type="button"
+            onClick={() => bulkFolderInputRef.current?.click()}
+            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
+          >
+            <FolderOpen className="h-4 w-4" />
+            {bulkFolder ? "Replace Folder" : "Browse Folder"}
+          </button>
+          <span className="text-xs font-mono text-muted-foreground">
+            {bulkFolder ? `Selected: ${bulkFolder}` : "No alternate folder selected"}
+          </span>
         </div>
       </div>
 
@@ -2394,50 +2500,82 @@ export function TabPbipExport({ analysis }: { analysis: EnterpriseAnalysis }) {
     return () => controller.abort();
   }, []);
 
+  const triggerBlobDownload = (blob: Blob, filename: string) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
+  const sanitizedBaseName = (name || "QLIK2PBI_Migration_Project")
+    .trim()
+    .replace(/[<>:"/\\|?*\x00-\x1F]+/g, "_") || "QLIK2PBI_Migration_Project";
+
   const handleDownloadPbipZip = async () => {
     try {
       setExporting(true);
-      const blob = await generatePbipZip(analysis, name, {
+      const blob = await generatePbipZip(analysis, sanitizedBaseName, {
         expressionInventory,
         powerBiModel,
         qvwAnalysis,
         pipelineLogs,
         requireMicrosoftTom,
       });
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = `${name}_Workspace.zip`;
-      a.click();
+      if (!blob || blob.size === 0) {
+        throw new Error("Generated PBIP archive is empty. Check validation errors before exporting.");
+      }
+      const filename = `${sanitizedBaseName}_Workspace.zip`;
+      triggerBlobDownload(blob, filename);
+      toast.success(`Downloaded ${filename}`, {
+        description: `Archive size: ${(blob.size / 1024).toFixed(1)} KB. Extract and open the .pbip file in Power BI Desktop.`,
+      });
     } catch (e) {
-      alert("Failed to generate PBIP zip: " + (e as Error).message);
+      toast.error("Failed to generate PBIP zip", {
+        description: e instanceof Error ? e.message : String(e),
+      });
     } finally {
       setExporting(false);
     }
   };
 
   const handleDownloadJson = () => {
-    const payload = {
-      model: analysis.semanticModel,
-      mQueries: analysis.mQueries,
-      daxMeasures: analysis.daxMeasures,
-      relationships: analysis.relationships,
-      validation: analysis.validation,
-      migrationReport: analysis.migrationReport,
-      expressionInventory,
-      powerBiModel,
-      qvwAnalysis,
-      pipelineLogs,
-    };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-    const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
-    a.download = `${name}_full_analysis.json`; a.click();
+    try {
+      const payload = {
+        model: analysis.semanticModel,
+        mQueries: analysis.mQueries,
+        daxMeasures: analysis.daxMeasures,
+        relationships: analysis.relationships,
+        validation: analysis.validation,
+        migrationReport: analysis.migrationReport,
+        expressionInventory,
+        powerBiModel,
+        qvwAnalysis,
+        pipelineLogs,
+      };
+      const json = JSON.stringify(payload, null, 2);
+      if (!json || json.length < 10) throw new Error("Analysis JSON payload is empty.");
+      const filename = `${sanitizedBaseName}_full_analysis.json`;
+      triggerBlobDownload(new Blob([json], { type: "application/json" }), filename);
+      toast.success(`Downloaded ${filename}`);
+    } catch (e) {
+      toast.error("Failed to export analysis JSON", { description: e instanceof Error ? e.message : String(e) });
+    }
   };
 
   const handleDownloadMQueries = () => {
-    const txt = combinedMQueriesText(analysis.mQueries);
-    const blob = new Blob([txt], { type: "text/plain" });
-    const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
-    a.download = `${name}_M_QUERIES.txt`; a.click();
+    try {
+      const txt = combinedMQueriesText(analysis.mQueries);
+      if (!txt.trim()) throw new Error("No Power Query M scripts are available to export.");
+      const filename = `${sanitizedBaseName}_M_QUERIES.txt`;
+      triggerBlobDownload(new Blob([txt], { type: "text/plain" }), filename);
+      toast.success(`Downloaded ${filename}`);
+    } catch (e) {
+      toast.error("Failed to export M queries", { description: e instanceof Error ? e.message : String(e) });
+    }
   };
 
   return (

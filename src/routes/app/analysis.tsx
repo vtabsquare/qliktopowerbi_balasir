@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useMigration } from "@/lib/migration/store";
 import { runEnterpriseAnalysis, rowsToUpdates } from "@/lib/migration/enterprise-parser";
 import type { EnterpriseAnalysis } from "@/lib/migration/enterprise-parser";
@@ -101,6 +101,12 @@ export function AnalysisPage() {
   }, [enterpriseMappingRows, enterpriseColumnTypeEdits, runAnalysis]);
 
   const analysis = enterpriseAnalysis;
+
+  useEffect(() => {
+    if (files.length > 0 && !analysis && !running && !error) {
+      void runAnalysis();
+    }
+  }, [analysis, error, files.length, runAnalysis, running]);
 
   if (!files.length) {
     return (

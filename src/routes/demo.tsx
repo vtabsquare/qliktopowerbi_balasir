@@ -19,6 +19,7 @@ import { AppHeader } from "@/components/migration/AppHeader";
 import { StageNav } from "@/components/migration/StageNav";
 import { StageBottomDock } from "@/components/migration/StageBottomDock";
 import { StageModalOverlay } from "@/components/migration/StageModalOverlay";
+import { StageValidationBanner } from "@/components/migration/StageValidationBanner";
 import { useStageReadiness } from "@/components/migration/use-stage-readiness";
 
 // Step Component Views
@@ -171,55 +172,61 @@ function DemoWorkspace({ session, onLoggedOut }: { session?: unknown; onLoggedOu
         {/* Full Standard Header with DEMO VERSION badge, Start Tour button, user badge, and logout */}
         <div className="z-30 shrink-0"><AppHeader /></div>
 
-        <nav className="z-20 shrink-0 border-b border-border/50 bg-surface/70 px-3 backdrop-blur-md">
+        <div className="flex min-h-0 flex-1 flex-col md:flex-row overflow-hidden">
           <StageNav viewportDocked activeStepId={activeStepId} onStepSelect={(targetStage) => handleSelectStep(WORKFLOW_STEPS[targetStage.id])} />
-        </nav>
 
-        {/* Main Content Area */}
-        <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6 sm:py-5 lg:px-8">
-          <div className="mx-auto w-full max-w-[1440px]">
-          {/* Demo Hero Banner (Shown on Step 0: Instructions; hidden on Step 1: Upload Qlik Files and subsequent steps) */}
-          {activeStepId === 0 && (
-            <section className="mb-6 glass-card p-6 sm:p-8 bg-gradient-to-br from-amber-500/10 via-surface/60 to-primary/10 border border-amber-500/30 shadow-lg rounded-2xl">
-              <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
-                <div>
-                  <span className="chip mb-4 text-amber-600 dark:text-amber-400 bg-amber-500/10 border-amber-500/20">
-                    <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
-                    DEMO VERSION • GUIDED WORKFLOW
-                  </span>
-                  <h1 className="font-display font-black text-[clamp(2.25rem,5vw,3.75rem)] tracking-tight leading-[1.05] mb-3 break-words">
-                    <span className="text-foreground">Qlik</span>
-                    <span className="mx-2 text-muted-foreground font-light">→</span>
-                    <span className="gradient-text">Power BI</span>
-                  </h1>
-                  <p className="text-muted-foreground text-sm max-w-xl leading-relaxed">
-                    Interactive Live Demo Environment. Complete each migration stage sequentially to unlock the next phase, from QlikView visualization extraction to Power Query M and DAX synthesis.
-                  </p>
-                </div>
+          {/* Main Content Area */}
+          <main className="min-w-0 min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6 sm:py-5 lg:px-8">
+            <div className="mx-auto w-full max-w-[1440px] space-y-5">
+              {/* Demo Hero Banner (Shown on Step 0: Instructions; hidden on Step 1: Upload Qlik Files and subsequent steps) */}
+              {activeStepId === 0 && (
+                <section className="mb-6 glass-card p-6 sm:p-8 bg-gradient-to-br from-amber-500/10 via-surface/60 to-primary/10 border border-amber-500/30 shadow-lg rounded-2xl">
+                  <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+                    <div>
+                      <span className="chip mb-4 text-amber-600 dark:text-amber-400 bg-amber-500/10 border-amber-500/20">
+                        <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+                        DEMO VERSION • GUIDED WORKFLOW
+                      </span>
+                      <h1 className="font-display font-black text-[clamp(2.25rem,5vw,3.75rem)] tracking-tight leading-[1.05] mb-3 break-words">
+                        <span className="text-foreground">Qlik</span>
+                        <span className="mx-2 text-muted-foreground font-light">→</span>
+                        <span className="gradient-text">Power BI</span>
+                      </h1>
+                      <p className="text-muted-foreground text-sm max-w-xl leading-relaxed">
+                        Interactive Live Demo Environment. Complete each migration stage sequentially to unlock the next phase, from QlikView visualization extraction to Power Query M and DAX synthesis.
+                      </p>
+                    </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full lg:w-auto">
-                  <Metric icon="◎" value="100%" label="Conversion accuracy" />
-                  <Metric icon="⚡" value="10x" label="Faster than manual" />
-                  <Metric icon="❒" value={tableCount ? `${tableCount}` : "137"} label={tableCount ? "Final tables" : "Demo files"} />
-                </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full lg:w-auto">
+                      <Metric icon="◎" value="100%" label="Conversion accuracy" />
+                      <Metric icon="⚡" value="10x" label="Faster than manual" />
+                      <Metric icon="❒" value={tableCount ? `${tableCount}` : "137"} label={tableCount ? "Final tables" : "Demo files"} />
+                    </div>
+                  </div>
+                </section>
+              )}
+
+              <StageValidationBanner
+                stepId={activeStepId}
+                canProceed={readiness.canProceed}
+                blockedReason={readiness.reason}
+              />
+
+              {/* Active Step Content Container (Without redundant nested surface card) */}
+              <div className="w-full">
+                {activeStepId === 0 && <InstructionsPage />}
+                {activeStepId === 1 && <UploadPage />}
+                {activeStepId === 2 && <QvwAnalysisPage />}
+                {activeStepId === 3 && <ExpressionConversionPage />}
+                {activeStepId === 4 && <AnalysisPage />}
+                {activeStepId === 5 && <PowerQueryPage />}
+                {activeStepId === 6 && <DaxMeasuresPage />}
+                {activeStepId === 7 && <SemanticModelPage />}
+                {activeStepId >= 8 && <SemanticModelPage />}
               </div>
-            </section>
-          )}
-
-          {/* Active Step Content Container (Without redundant nested surface card) */}
-          <div className="w-full">
-            {activeStepId === 0 && <InstructionsPage />}
-            {activeStepId === 1 && <UploadPage />}
-            {activeStepId === 2 && <QvwAnalysisPage />}
-            {activeStepId === 3 && <ExpressionConversionPage />}
-            {activeStepId === 4 && <AnalysisPage />}
-            {activeStepId === 5 && <PowerQueryPage />}
-            {activeStepId === 6 && <DaxMeasuresPage />}
-            {activeStepId === 7 && <SemanticModelPage />}
-            {activeStepId >= 8 && <SemanticModelPage />}
-          </div>
-          </div>
-        </main>
+            </div>
+          </main>
+        </div>
 
         <StageBottomDock currentStepId={activeStepId} isDemo onProceedNext={openNextStage} onGoPrevious={() => { if (activeStepId > 0) handleSelectStep(WORKFLOW_STEPS[activeStepId - 1]); }} canProceed={readiness.canProceed} hasErrors={readiness.hasErrors} statusLabel={readiness.statusLabel} blockedReason={readiness.reason} />
 
