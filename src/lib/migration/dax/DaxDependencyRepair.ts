@@ -1,7 +1,7 @@
 import type { EnterpriseAnalysis } from "../enterprise-parser";
 import type { PowerBiTable } from "../model/PowerBiModelTypes";
 import { rewriteQlikColourFunctions } from "./DaxSafety";
-import { validateDaxMeasures } from "./DaxValidation";
+import { modelDaxInputs, validateDaxMeasures } from "./DaxValidation";
 
 export interface DaxDependencyRepair {
   table: string;
@@ -17,6 +17,58 @@ export interface DaxDependencyRepairResult {
   tables: PowerBiTable[];
   repairs: DaxDependencyRepair[];
   unresolved: DaxDependencyRepair[];
+}
+
+function replaceBalancedCalls(expression: string, functionName: string, rewrite: (argument: string) => string): string {
+  const pattern = new RegExp(`\\b${functionName}\\s*\\(`, "ig");
+  let result = expression;
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(result))) {
+    const open = (match.index ?? 0) + match[0].lastIndexOf("(");
+    let depth = 1;
+    let quote = false;
+    let close = -1;
+    for (let index = open + 1; index < result.length; index += 1) {
+      const ch = result[index];
+      if (ch === '"') {
+        if (quote && result[index + 1] === '"') { index += 1; continue; }
+        quote = !quote;
+      } else if (!quote && ch === "(") depth += 1;
+      else if (!quote && ch === ")" && --depth === 0) { close = index; break; }
+    }
+    if (close < 0) break;
+    const replacement = rewrite(result.slice(open + 1, close).trim());
+    result = `${result.slice(0, match.index)}${replacement}${result.slice(close + 1)}`;
+    pattern.lastIndex = (match.index ?? 0) + replacement.length;
+  }
+  return result;
+}
+
+function repairQlikFunctions(expression: string): string {
+  let result = rewriteQlikColourFunctions(expression);
+  result = replaceBalancedCalls(result, "MonthStart", (arg) => `DATE(YEAR(${arg}), MONTH(${arg}), 1)`);
+  result = replaceBalancedCalls(result, "MonthEnd", (arg) => `EOMONTH(${arg}, 0)`);
+  result = replaceBalancedCalls(result, "YearStart", (arg) => `DATE(YEAR(${arg}), 1, 1)`);
+  result = replaceBalancedCalls(result, "YearEnd", (arg) => `DATE(YEAR(${arg}), 12, 31)`);
+  result = replaceBalancedCalls(result, "Num", (arg) => `VALUE(${arg.split(",")[0]?.trim() || arg})`);
+  return result;
+}
+
+function closeSafeParentheses(expression: string): string {
+  let depth = 0;
+  let quote = false;
+  for (let index = 0; index < expression.length; index += 1) {
+    const ch = expression[index];
+    if (ch === '"') {
+      if (quote && expression[index + 1] === '"') { index += 1; continue; }
+      quote = !quote;
+    } else if (!quote && ch === "(") depth += 1;
+    else if (!quote && ch === ")") {
+      if (!depth) return expression;
+      depth -= 1;
+    }
+  }
+  return !quote && depth > 0 ? `${expression}${")".repeat(depth)}` : expression;
 }
 
 function nameKey(value: string): string {
@@ -254,7 +306,8 @@ export function repairDaxDependencies(
       ) {
         continue;
       }
-      let expression = rewriteQlikColourFunctions(measure.expression);
+      const originalExpression = measure.expression;
+      let expression = repairQlikFunctions(closeSafeParentheses(measure.expression));
       const qualified = [...expression.matchAll(/(?:'((?:[^']|'')+)'|([A-Za-z_][A-Za-z0-9_ ]*))\s*\[([^\]]+)\]/g)];
       for (const match of qualified) {
         const requestedTableName = (match[1] || match[2] || "").replace(/''/g, "'").trim();
@@ -344,18 +397,48 @@ export function repairDaxDependencies(
       }
       measure.expression = expression;
       const measureUnresolved = unresolved.filter((item) => item.measure === measure.name && item.table);
-      if (measureUnresolved.length) {
+      const validation = validateDaxMeasures(modelDaxInputs(tables).map((item) => item.id === measure.id ? { ...item, expression } : item), tables)
+        .find((item) => item.measureId === measure.id);
+      const hasValidationErrors = validation?.issues.some((issue) => issue.severity === "error") ?? false;
+      if (measureUnresolved.length || hasValidationErrors) {
         measure.approved = false;
-        measure.status = "missing-dependency";
-        const note = `Unresolved DAX dependencies: ${measureUnresolved.map((item) => `${item.table}[${item.requestedColumn}]`).join(", ")}.`;
+        measure.status = measureUnresolved.length ? "missing-dependency" : "needs-fix";
+        const detail = measureUnresolved.length
+          ? measureUnresolved.map((item) => `${item.table}[${item.requestedColumn}]`).join(", ")
+          : validation?.issues.filter((issue) => issue.severity === "error").map((issue) => issue.message).join("; ");
+        const note = `Unresolved DAX validation: ${detail}.`;
         measure.description = [measure.description, note].filter(Boolean).join(" ");
-      } else if (measure.status === "missing-dependency") {
+      } else if (expression !== originalExpression || ["missing-dependency", "needs-fix"].includes(measure.status)) {
         measure.status = "converted";
         measure.approved = true;
-        measure.description = String(measure.description || "").replace(/\s*Unresolved DAX dependencies:[^.]*\./g, "").trim();
+        measure.description = String(measure.description || "").replace(/\s*Unresolved DAX (?:dependencies|validation):[^.]*\./g, "").trim();
       }
     }
   }
 
   return { tables, repairs, unresolved };
+}
+
+export function repairStandaloneDaxExpression(args: {
+  expression: string;
+  measureName: string;
+  homeTable?: string;
+  tables: PowerBiTable[];
+  analysis?: EnterpriseAnalysis | null;
+}): { expression: string; valid: boolean; issues: string[] } {
+  const target = args.tables.find((table) => nameKey(table.name) === nameKey(args.homeTable || "")) ?? args.tables[0];
+  if (!target) return { expression: args.expression, valid: false, issues: ["No semantic-model table is available for schema validation."] };
+  const id = `standalone-${nameKey(args.measureName)}`;
+  const tables = args.tables.map((table) => table.id === target.id ? {
+    ...table,
+    measures: [...table.measures, { id, name: args.measureName, expression: args.expression, homeTable: target.name, hidden: false, approved: false, status: "needs-fix" }],
+  } : table);
+  const repaired = repairDaxDependencies(tables, args.analysis);
+  const expression = repaired.tables.flatMap((table) => table.measures).find((measure) => measure.id === id)?.expression ?? args.expression;
+  const validation = validateDaxMeasures(
+    [...modelDaxInputs(args.tables), { id, name: args.measureName, expression, table: target.name }],
+    args.tables,
+  ).find((result) => result.measureId === id);
+  const issues = validation?.issues.filter((issue) => issue.severity === "error").map((issue) => issue.message) ?? [];
+  return { expression, valid: issues.length === 0, issues };
 }

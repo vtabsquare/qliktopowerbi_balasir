@@ -14,6 +14,18 @@ import { expressionDepth } from "../core/ExpressionParser";
 
 const PARSER_VERSION = "2.0.0";
 
+const NON_MEASURE_VARIABLES = new Set([
+  "decimalsep", "thousandsep", "moneydecimalsep", "moneythousandsep",
+  "moneyformat", "timeformat", "dateformat", "timestampformat",
+  "firstweekday", "brokenweeks", "brokendays", "referenceday", "firstmonthofyear",
+  "collationlocale", "monthnames", "longmonthnames", "daynames", "longdaynames",
+  "nullinterpret", "hideprefix", "hidesuffix", "errormode", "scripterrorcount", "scripterrorlist",
+]);
+
+export function isQlikEnvironmentVariable(name: string): boolean {
+  return NON_MEASURE_VARIABLES.has(name.toLowerCase().replace(/[^a-z0-9]/g, ""));
+}
+
 function normalizeExpression(value: string): string {
   return value.replace(/^\s*=\s*/, "").replace(/\s+/g, " ").trim();
 }
@@ -96,6 +108,14 @@ function statusToMigration(status: ExpressionConversionStatus) {
 function buildFieldMap(enterprise?: EnterpriseAnalysis | null): Record<string, string> {
   const map: Record<string, string> = {};
   if (!enterprise) return map;
+  // Reconstructed/generated profiles represent the schema that will actually
+  // be exported, so they must win over raw source profiles and stale aliases.
+  for (const profile of Object.values(enterprise.profiles ?? {}).filter((item) => item.status === "generated")) {
+    for (const field of profile.fields ?? []) {
+      map[field] ??= profile.table;
+      map[field.toLowerCase().replace(/[^a-z0-9]/g, "")] ??= profile.table;
+    }
+  }
   const tables = enterprise.semanticModel?.tables ?? [];
   for (const table of tables as Array<{ name?: string; columns?: Array<{ name?: string }> }>) {
     if (!table.name) continue;
@@ -105,7 +125,19 @@ function buildFieldMap(enterprise?: EnterpriseAnalysis | null): Record<string, s
       map[column.name.toLowerCase().replace(/[^a-z0-9]/g, "")] ??= table.name;
     }
   }
-  for (const profile of Object.values(enterprise.profiles ?? {})) {
+  for (const table of enterprise.finalTables ?? []) {
+    for (const field of table.fields ?? []) {
+      map[field] ??= table.table;
+      map[field.toLowerCase().replace(/[^a-z0-9]/g, "")] ??= table.table;
+    }
+  }
+  for (const [tableName, columns] of Object.entries(enterprise.columnTypes ?? {})) {
+    for (const field of Object.keys(columns)) {
+      map[field] ??= tableName;
+      map[field.toLowerCase().replace(/[^a-z0-9]/g, "")] ??= tableName;
+    }
+  }
+  for (const profile of Object.values(enterprise.profiles ?? {}).filter((item) => item.status !== "generated")) {
     for (const field of profile.fields ?? []) {
       map[field] ??= profile.table;
       map[field.toLowerCase().replace(/[^a-z0-9]/g, "")] ??= profile.table;
@@ -179,6 +211,10 @@ function addVariableArtifacts(
   const vars = variableContext(qvw.variables);
 
   for (const variable of qvw.variables) {
+    // These are Qlik locale/environment settings, not business calculations.
+    // Exporting them as measures creates meaningless DAX such as a literal
+    // '#,##0.00' measure and pollutes dependency validation.
+    if (isQlikEnvironmentVariable(variable.name)) continue;
     const rawDefinition = variable.definition?.trim() || "";
     const isExpression = Boolean(
       variable.isCalculated ||
@@ -211,8 +247,10 @@ function addVariableArtifacts(
       }];
       explanation = ["A placeholder DAX measure was created so the variable remains visible and traceable."];
     } else if (isExpression) {
+      const detectedFields = Array.from(rawDefinition.matchAll(/\[([^\]]+)\]/g), (match) => match[1]);
+      const inferredHomeTable = homeTableFor({ fields: detectedFields } as QvwExpression, enterprise);
       result = translator.translate(rawDefinition, {
-        homeTable: "Qlik Variables",
+        homeTable: inferredHomeTable,
         fieldToTable: fieldMap,
         variables: vars,
       });
@@ -260,7 +298,9 @@ function addVariableArtifacts(
       nestedDepth: ast ? expressionDepth(ast) : 0,
       artifactType: "measure",
       generatedDax,
-      homeTable: "Qlik Variables",
+      homeTable: isExpression
+        ? homeTableFor({ fields: referencedFields } as QvwExpression, enterprise)
+        : "Qlik Variables",
       displayFolder: `Qlik Variables\\${!rawDefinition ? "Missing Definition" : isExpression ? "Calculated" : "Static"}`,
       formatString,
       description: `Converted from Qlik variable ${variable.name}. Original definition: ${rawDefinition || "not supplied"}.`,
@@ -409,6 +449,18 @@ export function mergeExpressionInventory(generated: ExpressionInventory, previou
   const artifacts = generated.artifacts.map((item) => {
     const old = prior.get(item.id);
     if (!old) return item;
+    if (!old.userEdited) {
+      // A parser/model rerun is authoritative for untouched artifacts. Keeping
+      // the old generatedDax/homeTable/status here was the source of stale DAX
+      // reappearing after a successful repair.
+      return {
+        ...item,
+        name: old.name,
+        displayFolder: old.displayFolder || item.displayFolder,
+        description: old.description || item.description,
+        excludedReason: old.excludedReason,
+      };
+    }
     return {
       ...item,
       name: old.name,

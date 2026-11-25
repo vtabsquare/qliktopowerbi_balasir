@@ -47,6 +47,7 @@ import {
   type RepairFocus,
   type RepairIssue,
 } from "./autofix";
+import { modelDaxInputs, repairStandaloneDaxExpression, validateDaxMeasures } from "./dax";
 
 interface MappingRow {
   originalRef: string;
@@ -472,6 +473,48 @@ export const useMigration = create<MigrationStore>()(persist((set, get) => ({
         expressionInventory = synchronizeInventoryDaxFromModel(expressionInventory, powerBiModel);
       }
 
+      // Some enterprise-parser measures intentionally have no model artifact
+      // yet. They still participate in readiness and must not be skipped by a
+      // bulk repair merely because model construction could not attach them.
+      if (enterpriseAnalysis && powerBiModel) {
+        const attached = new Set(powerBiModel.tables.flatMap((table) => table.measures.map((measure) => `${table.name.toLowerCase()}::${measure.name.toLowerCase()}`)));
+        const daxMeasures = enterpriseAnalysis.daxMeasures.map((measure) => {
+          if (attached.has(`${measure.table.toLowerCase()}::${measure.measureName.toLowerCase()}`)) return measure;
+          const repaired = repairStandaloneDaxExpression({
+            expression: measure.dax,
+            measureName: measure.measureName,
+            homeTable: measure.table,
+            tables: powerBiModel!.tables,
+            analysis: enterpriseAnalysis,
+          });
+          if (repaired.expression !== measure.dax) actions.push({
+            id: `dax-enterprise-${measure.measureName.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+            area: "dax",
+            objectName: measure.measureName,
+            action: "Repaired unattached enterprise DAX",
+            status: repaired.valid ? "fixed" : "review",
+            confidence: repaired.valid ? 95 : 60,
+            detail: repaired.valid ? "The expression was deterministically repaired and passed schema validation." : repaired.issues.join("; "),
+          });
+          else if (!repaired.valid) actions.push({
+            id: `dax-enterprise-review-${measure.measureName.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+            area: "dax",
+            objectName: measure.measureName,
+            action: "Unattached enterprise DAX requires review",
+            status: "review",
+            confidence: 0,
+            detail: repaired.issues.join("; "),
+          });
+          return {
+            ...measure,
+            dax: repaired.expression,
+            warning: repaired.valid ? "" : repaired.issues.join("; "),
+            notes: `${measure.notes || ""} ${repaired.valid ? "Deterministically repaired and revalidated." : "Automatic repair was not safe; manual review retained."}`.trim(),
+          };
+        });
+        enterpriseAnalysis = revalidateEnterpriseAnalysis({ ...enterpriseAnalysis, daxMeasures });
+      }
+
       const afterIssues = collectRepairIssues(enterpriseAnalysis, powerBiModel);
       const report: AutoFixReport = {
         runAt: new Date().toISOString(),
@@ -778,10 +821,17 @@ export const useMigration = create<MigrationStore>()(persist((set, get) => ({
     const beforeIssues = before.validationState.status === "stale"
       ? collectRepairIssues(before.enterpriseAnalysis, before.powerBiModel)
       : before.validationState.issues;
+    const candidateTables = before.powerBiModel?.tables.map((table) => ({
+      ...table,
+      measures: table.measures.map((measure) => table.id === tableId && measure.id === measureId ? { ...measure, expression } : measure),
+    })) ?? [];
+    const candidateValidation = validateDaxMeasures(modelDaxInputs(candidateTables), candidateTables)
+      .find((result) => result.measureId === measureId);
+    const candidateIsValid = candidateValidation?.status === "valid";
     get().updateModelMeasure(tableId, measureId, {
       expression,
-      approved: true,
-      status: "approved",
+      approved: candidateIsValid,
+      status: candidateIsValid ? "approved" : "needs-fix",
     });
     const updated = get();
     const validatedModel = updated.powerBiModel ? validatePowerBiModel(updated.powerBiModel) : null;
@@ -791,37 +841,19 @@ export const useMigration = create<MigrationStore>()(persist((set, get) => ({
     const belongsToMeasure = (issue: RepairIssue) => issue.target.objectId === measureId
       || Boolean(measureName && issue.objectName.toLowerCase() === measureName.toLowerCase());
     const measureIssues = issues.filter(belongsToMeasure);
-    const isValid = !measureIssues.some((issue) => issue.severity === "blocking-error" || issue.severity === "error");
-    const syncedModel = validatedModel
-      ? validatePowerBiModel({
-          ...validatedModel,
-          tables: validatedModel.tables.map((table) =>
-            table.id === tableId
-              ? {
-                  ...table,
-                  measures: table.measures.map((measure) =>
-                    measure.id === measureId
-                      ? { ...measure, approved: isValid, status: isValid ? "approved" : "needs-fix" }
-                      : measure,
-                  ),
-                }
-              : table,
-          ),
-        })
-      : null;
     const beforeIds = issueIds(beforeIssues.filter(belongsToMeasure));
     const afterIds = issueIds(measureIssues);
     const resolvedCount = [...beforeIds].filter((id) => !afterIds.has(id)).length;
     const nextValidation = validatedState(
       enterpriseAnalysis,
-      syncedModel,
+      validatedModel,
       updated.validationState.workspaceRevision,
       updated.validationState.validationRevision + 1,
     );
     set((state) => ({
       enterpriseAnalysis,
-      powerBiModel: syncedModel,
-      expressionInventory: synchronizeInventoryDaxFromModel(state.expressionInventory, syncedModel),
+      powerBiModel: validatedModel,
+      expressionInventory: synchronizeInventoryDaxFromModel(state.expressionInventory, validatedModel),
       validationState: nextValidation,
       autoFixReport: null,
       repairFocus: null,
@@ -835,7 +867,7 @@ export const useMigration = create<MigrationStore>()(persist((set, get) => ({
     return {
       resolvedCount,
       remainingCount: measureIssues.length,
-      isValid,
+      isValid: !measureIssues.some((issue) => issue.severity === "blocking-error" || issue.severity === "error"),
       issues: measureIssues,
     };
   },

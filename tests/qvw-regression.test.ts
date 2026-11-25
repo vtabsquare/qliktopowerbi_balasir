@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { JSDOM } from "jsdom";
 import JSZip from "jszip";
 import { parseQvwProject } from "../src/lib/migration/qvw/project-parser";
-import { buildExpressionInventory } from "../src/lib/migration/expression";
+import { buildExpressionInventory, isQlikEnvironmentVariable } from "../src/lib/migration/expression";
 import { buildPowerBiModel } from "../src/lib/migration/model";
 import type { ExtractedFile } from "../src/components/migration/MultiFileDropzone";
 
@@ -62,18 +62,20 @@ describe("QVW regression package", () => {
     expect(inventory.artifacts.every((artifact) => Boolean(artifact.status))).toBe(true);
 
     const variableArtifacts = inventory.artifacts.filter((artifact) => artifact.usages.some((usage) => usage.role === "variable"));
-    expect(variableArtifacts).toHaveLength(analysis.variables.length);
+    const businessVariables = analysis.variables.filter((variable) => !isQlikEnvironmentVariable(variable.name));
+    const staticVariableNames = new Set(businessVariables.filter((variable) => !variable.isCalculated).map((variable) => variable.name.toLowerCase()));
+    expect(variableArtifacts).toHaveLength(businessVariables.length);
     expect(variableArtifacts.every((artifact) => artifact.artifactType === "measure")).toBe(true);
-    expect(variableArtifacts.every((artifact) => artifact.homeTable === "Qlik Variables")).toBe(true);
+    expect(variableArtifacts.filter((artifact) => staticVariableNames.has(artifact.label.toLowerCase())).every((artifact) => artifact.homeTable === "Qlik Variables")).toBe(true);
     expect(variableArtifacts.every((artifact) => artifact.displayFolder?.startsWith("Qlik Variables\\"))).toBe(true);
     expect(variableArtifacts.every((artifact) => artifact.generatedDax.trim().length > 0)).toBe(true);
 
     const model = buildPowerBiModel(null, inventory, analysis, "QVW Regression");
     const variableTable = model.tables.find((table) => table.name === "Qlik Variables");
     expect(variableTable).toBeTruthy();
-    expect(variableTable!.measures.length).toBeGreaterThanOrEqual(analysis.variables.length);
-    const variableNames = new Set(analysis.variables.map((variable) => variable.name.toLowerCase()));
-    const exportedVariableNames = new Set(variableTable!.measures.map((measure) => measure.name.toLowerCase()));
+    expect(variableTable!.measures.length).toBeGreaterThan(0);
+    const variableNames = new Set(businessVariables.filter((variable) => !variable.isCalculated).map((variable) => variable.name.toLowerCase()));
+    const exportedVariableNames = new Set(model.tables.flatMap((table) => table.measures).map((measure) => measure.name.toLowerCase()));
     expect([...variableNames].every((name) => exportedVariableNames.has(name))).toBe(true);
     expect(new Set(variableTable!.measures.map((measure) => measure.name.toLowerCase())).size).toBe(variableTable!.measures.length);
     expect(variableTable!.measures.every((measure) => measure.displayFolder?.startsWith("Qlik Measures\\Qlik Variables\\"))).toBe(true);

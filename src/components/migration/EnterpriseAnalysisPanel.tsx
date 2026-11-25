@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { toast } from "sonner";
 import {
   runEnterpriseAnalysis,
@@ -29,8 +29,10 @@ import { AutoFixCenter } from "./AutoFixCenter";
 import { repairDomId } from "@/lib/migration/autofix";
 import { DaxCodeEditor } from "./DaxCodeEditor";
 import { buildDaxCompletionCatalog } from "@/lib/migration/dax/DaxAutocomplete";
-import { repairDaxDependencies } from "@/lib/migration/dax/DaxDependencyRepair";
+import { repairDaxDependencies, repairStandaloneDaxExpression } from "@/lib/migration/dax/DaxDependencyRepair";
 import { validateDaxMeasures, type DaxValidationResult } from "@/lib/migration/dax/DaxValidation";
+import { requestAiDaxRepair } from "@/lib/migration/dax/DaxAiRepair";
+import { isQlikEnvironmentVariable } from "@/lib/migration/expression";
 
 import { generatePbipZip } from "@/lib/migration/pbip-generator";
 // ────────────────────────────────────────────────────────────────
@@ -1774,6 +1776,7 @@ export function TabDaxMeasures({ analysis, onValidationChange }: { analysis: Ent
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [savedKey, setSavedKey] = useState<string | null>(null);
   const [repairHistory, setRepairHistory] = useState<Record<string, { original: string; repaired: string }>>({});
+  const lastSyncedDaxRef = useRef<Record<string, string>>({});
 
   const catalog = useMemo(
     () => buildDaxCompletionCatalog(analysis, powerBiModel),
@@ -1798,6 +1801,7 @@ export function TabDaxMeasures({ analysis, onValidationChange }: { analysis: Ent
     const usedModelIds = new Set<string>();
 
     for (const measure of analysis.daxMeasures || []) {
+      if (isQlikEnvironmentVariable(measure.measureName)) continue;
       const modelMatch = powerBiModel?.tables
         .flatMap((table) => table.measures.map((item) => ({ item, table })))
         .find(({ item, table }) =>
@@ -1822,6 +1826,7 @@ export function TabDaxMeasures({ analysis, onValidationChange }: { analysis: Ent
 
     for (const table of powerBiModel?.tables || []) {
       for (const measure of table.measures) {
+        if (isQlikEnvironmentVariable(measure.name)) continue;
         if (usedModelIds.has(measure.id)) continue;
         rows.push({
           key: measure.id,
@@ -1844,10 +1849,15 @@ export function TabDaxMeasures({ analysis, onValidationChange }: { analysis: Ent
 
   useEffect(() => {
     setDrafts((current) => {
-      const next = { ...current };
+      const next: Record<string, string> = {};
       for (const measure of measures) {
-        if (!(measure.key in next)) next[measure.key] = measure.dax;
+        const previousServerValue = lastSyncedDaxRef.current[measure.key];
+        const hasLocalEdit = measure.key in current
+          && previousServerValue !== undefined
+          && current[measure.key] !== previousServerValue;
+        next[measure.key] = hasLocalEdit ? current[measure.key] : measure.dax;
       }
+      lastSyncedDaxRef.current = Object.fromEntries(measures.map((measure) => [measure.key, measure.dax]));
       return next;
     });
   }, [measures]);
@@ -1935,28 +1945,77 @@ export function TabDaxMeasures({ analysis, onValidationChange }: { analysis: Ent
     window.setTimeout(() => setSavedKey(null), 2200);
   };
 
-  const aiFixMeasure = (measure: (typeof measures)[number]) => {
-    if (!powerBiModel || !measure.modelMeasureId || !measure.modelTableId) {
-      toast.warning("Manual review is required", { description: "This measure is not yet attached to the semantic model, so the repair engine cannot verify its schema and dependencies." });
+  const aiFixMeasure = async (measure: (typeof measures)[number]) => {
+    if (!powerBiModel) {
+      toast.warning("Manual review is required", { description: "A semantic model is required before dependencies can be safely repaired and verified." });
       return;
     }
     const original = drafts[measure.key] ?? measure.dax;
-    const candidateTables = powerBiModel.tables.map((table) => ({
-      ...table,
-      measures: table.measures.map((item) => item.id === measure.modelMeasureId ? { ...item, expression: original } : item),
-    }));
-    const repaired = repairDaxDependencies(candidateTables, analysis).tables
-      .flatMap((table) => table.measures)
-      .find((item) => item.id === measure.modelMeasureId)?.expression;
+    let repaired = measure.modelMeasureId
+      ? repairDaxDependencies(powerBiModel.tables.map((table) => ({
+          ...table,
+          measures: table.measures.map((item) => item.id === measure.modelMeasureId ? { ...item, expression: original } : item),
+        })), analysis).tables.flatMap((table) => table.measures).find((item) => item.id === measure.modelMeasureId)?.expression
+      : repairStandaloneDaxExpression({ expression: original, measureName: measure.measureName, homeTable: measure.table, tables: powerBiModel.tables, analysis }).expression;
     if (!repaired || repaired === original) {
-      toast.warning("AI Fix could not make a safe repair", { description: "No unique, high-confidence schema mapping was found. The error remains blocking and needs manual review." });
-      return;
+      const validationErrors = validationByKey.get(measure.key)?.issues.filter((issue) => issue.severity === "error").map((issue) => issue.message) ?? [];
+      const aiCandidate = await requestAiDaxRepair({ analysis, measureName: measure.measureName, table: measure.table, expression: original, validationErrors });
+      if (aiCandidate) {
+        const verified = repairStandaloneDaxExpression({ expression: aiCandidate, measureName: measure.measureName, homeTable: measure.table, tables: powerBiModel.tables, analysis });
+        if (verified.valid) repaired = aiCandidate;
+      }
+      if (!repaired || repaired === original) {
+        toast.warning("Automatic repair could not make a safe change", { description: "Deterministic and AI-assisted repair found no candidate that passed schema validation. The original remains blocking." });
+        return;
+      }
     }
     setDrafts((current) => ({ ...current, [measure.key]: repaired }));
     setRepairHistory((current) => ({ ...current, [measure.key]: { original, repaired } }));
-    const result = saveAndValidateMeasure(measure.modelTableId, measure.modelMeasureId, repaired);
-    if (result.isValid) toast.success(`${measure.measureName} repaired and revalidated`);
-    else toast.warning("Repair applied, but validation still blocks progress", { description: "The repaired expression is shown for review; unresolved issues were retained." });
+    if (measure.modelTableId && measure.modelMeasureId) {
+      const result = saveAndValidateMeasure(measure.modelTableId, measure.modelMeasureId, repaired);
+      if (result.isValid) toast.success(`${measure.measureName} repaired and revalidated`);
+      else toast.warning("Repair applied, but validation still blocks progress", { description: "The repaired expression is shown for review; unresolved issues were retained." });
+    } else {
+      const result = repairStandaloneDaxExpression({ expression: repaired, measureName: measure.measureName, homeTable: measure.table, tables: powerBiModel.tables, analysis });
+      if (!result.valid) {
+        toast.warning("Repair did not pass validation", { description: result.issues.join("; ") });
+        return;
+      }
+      setEnterpriseAnalysis({
+        ...analysis,
+        daxMeasures: analysis.daxMeasures.map((item) => item.measureName.toLowerCase() === measure.measureName.toLowerCase() && item.table.toLowerCase() === measure.table.toLowerCase() ? { ...item, dax: repaired, warning: "", notes: `${item.notes || ""} Repaired and revalidated.`.trim() } : item),
+      });
+      toast.success(`${measure.measureName} repaired and revalidated`);
+    }
+  };
+
+  const runBulkDaxRepair = async () => {
+    const before = new Map(measures.map((measure) => [measure.key, drafts[measure.key] ?? measure.dax]));
+    try {
+      const report = await runAutoFix();
+      const daxFixed = report.actions.filter((action) => action.area === "dax" && action.status === "fixed").length;
+      const daxReview = report.actions.filter((action) => action.area === "dax" && action.status === "review").length;
+      const latest = useMigration.getState();
+      const nextHistory: Record<string, { original: string; repaired: string }> = {};
+      for (const measure of measures) {
+        const repaired = measure.modelMeasureId
+          ? latest.powerBiModel?.tables.flatMap((table) => table.measures).find((item) => item.id === measure.modelMeasureId)?.expression
+          : latest.enterpriseAnalysis?.daxMeasures.find((item) => item.measureName.toLowerCase() === measure.measureName.toLowerCase() && item.table.toLowerCase() === measure.table.toLowerCase())?.dax;
+        const original = before.get(measure.key);
+        if (original && repaired && original !== repaired) nextHistory[measure.key] = { original, repaired };
+      }
+      setRepairHistory((current) => ({ ...current, ...nextHistory }));
+      if (daxReview) {
+        const first = report.actions.find((action) => action.area === "dax" && action.status === "review");
+        const row = measures.find((measure) => measure.measureName.toLowerCase() === first?.objectName.toLowerCase());
+        if (row) setEditingKey(row.key);
+        toast.warning(`Repair completed: ${daxFixed} fixed, ${daxReview} need review`, { description: "Every changed expression was revalidated. Unsafe or ambiguous cases remain blocking." });
+      } else {
+        toast.success(`Repair completed: ${daxFixed} DAX issue(s) fixed`, { description: "Expressions, inventory, semantic model, and readiness were synchronized and revalidated." });
+      }
+    } catch (error) {
+      toast.error("Bulk repair failed safely", { description: error instanceof Error ? error.message : "No partial result was reported as successful." });
+    }
   };
 
   return (
@@ -1977,7 +2036,7 @@ export function TabDaxMeasures({ analysis, onValidationChange }: { analysis: Ent
             <div className="mt-1 text-xs text-muted-foreground">Validated against the latest editor text and current model schema. {warningCount} non-blocking warning(s).</div>
           </div>
           {blockingMeasureCount > 0 && (
-            <button type="button" onClick={() => void runAutoFix()} disabled={autoFixRunning} className="inline-flex items-center justify-center gap-2 rounded-xl border border-primary/30 bg-primary/5 px-4 py-2 text-xs font-semibold text-primary disabled:opacity-50">
+            <button type="button" onClick={() => void runBulkDaxRepair()} disabled={autoFixRunning} className="inline-flex items-center justify-center gap-2 rounded-xl border border-primary/30 bg-primary/5 px-4 py-2 text-xs font-semibold text-primary disabled:opacity-50">
               {autoFixRunning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
               {autoFixRunning ? "Fixing and revalidating…" : "Fix all fixable issues"}
             </button>
@@ -2057,7 +2116,7 @@ export function TabDaxMeasures({ analysis, onValidationChange }: { analysis: Ent
                           </div>
                         ))}
                         {validation.issues.some((issue) => issue.severity === "error") && (
-                          <button type="button" onClick={() => aiFixMeasure(measure)} className="inline-flex items-center gap-2 rounded-xl border border-primary/30 bg-primary/5 px-4 py-2 text-xs font-semibold text-primary">
+                          <button type="button" onClick={() => void aiFixMeasure(measure)} className="inline-flex items-center gap-2 rounded-xl border border-primary/30 bg-primary/5 px-4 py-2 text-xs font-semibold text-primary">
                             <Sparkles className="h-3.5 w-3.5" /> AI Fix
                           </button>
                         )}

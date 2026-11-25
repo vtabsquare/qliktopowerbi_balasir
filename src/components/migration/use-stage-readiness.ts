@@ -1,8 +1,8 @@
 import { useMemo } from "react";
 import { useMigration } from "@/lib/migration/store";
 import { validatePowerBiModel } from "@/lib/migration/model";
-import { validateDaxMeasures } from "@/lib/migration/dax";
 import { validateStepCompletion } from "@/lib/migration/workflow-gating";
+import { modelDaxInputs, validateDaxMeasures } from "@/lib/migration/dax";
 
 export function useStageReadiness(stepId: number) {
   const {
@@ -15,29 +15,18 @@ export function useStageReadiness(stepId: number) {
 
   return useMemo(() => {
     const validatedModel = powerBiModel ? validatePowerBiModel(powerBiModel) : null;
-    const modelDaxBlocking = validatedModel?.diagnostics.some(
+    const modelInputs = validatedModel ? modelDaxInputs(validatedModel.tables) : [];
+    const known = new Set(modelInputs.map((measure) => `${measure.table.toLowerCase()}::${measure.name.toLowerCase()}`));
+    const enterpriseInputs = (enterpriseAnalysis?.daxMeasures ?? [])
+      .filter((measure) => !known.has(`${measure.table.toLowerCase()}::${measure.measureName.toLowerCase()}`))
+      .map((measure, index) => ({ id: `enterprise:${index}:${measure.measureName}`, name: measure.measureName, expression: measure.dax, table: measure.table }));
+    const daxValidation = validatedModel ? validateDaxMeasures([...modelInputs, ...enterpriseInputs], validatedModel.tables) : [];
+    const daxBlocking = daxValidation.some((result) => result.status !== "valid") || (validatedModel?.diagnostics.some(
       (diagnostic) =>
         diagnostic.area === "measure" &&
         (diagnostic.severity === "blocking-error" || diagnostic.severity === "error") &&
         !diagnostic.approved,
-    ) ?? false;
-
-    const enterpriseDaxBlocking =
-      stepId === 6 && enterpriseAnalysis
-        ? validateDaxMeasures(
-            (enterpriseAnalysis.daxMeasures || []).map((measure, idx) => ({
-              id: `enterprise:${idx}:${measure.table}:${measure.measureName}`,
-              name: measure.measureName,
-              expression: measure.dax,
-              table: measure.table,
-            })),
-            powerBiModel?.tables ?? [],
-          ).some((result) => result.status !== "valid")
-        : false;
-
-    const daxBlocking = modelDaxBlocking || enterpriseDaxBlocking;
-    const hasCurrentDaxValidation = Boolean(validatedModel || enterpriseAnalysis);
-
+    ) ?? false);
     const result = validateStepCompletion(stepId, {
       filesCount: enterpriseFiles.length,
       hasEnterpriseAnalysis: Boolean(enterpriseAnalysis),
@@ -51,7 +40,7 @@ export function useStageReadiness(stepId: number) {
         validatedModel &&
         validatedModel.blockingErrorCount === 0,
       ),
-      hasCurrentDaxValidation,
+      hasCurrentDaxValidation: Boolean(validatedModel),
       hasBlockingDaxErrors: daxBlocking,
       isQvsOnlyMode: enterpriseFiles.length > 0 && !enterpriseFiles.some((file) => file.extension.toLowerCase() === ".qvw"),
     });

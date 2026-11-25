@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { validateDaxMeasures } from "../src/lib/migration/dax/DaxValidation";
 import { repairDaxDependencies } from "../src/lib/migration/dax/DaxDependencyRepair";
+import { isQlikEnvironmentVariable } from "../src/lib/migration/expression";
 import { validateStepCompletion } from "../src/lib/migration/workflow-gating";
 import type { PowerBiTable } from "../src/lib/migration/model";
 
@@ -64,6 +65,22 @@ describe("Phase 2 DAX quality gate", () => {
 
     expect(repairedMeasure.expression).toBe("SUM('Sales'[Amount])");
     expect(after[0].status).toBe("valid");
+  });
+
+  it("repairs supported Qlik date functions and a safely missing closing parenthesis", () => {
+    const broken = measure("M-Period", "Period start", "MonthStart(MAX('Sales'[OrderDate])");
+    const repaired = repairDaxDependencies([table("Sales", ["OrderDate"], [broken])]).tables[0].measures[0];
+
+    expect(repaired.expression).toBe("DATE(YEAR(MAX('Sales'[OrderDate])), MONTH(MAX('Sales'[OrderDate])), 1)");
+    const result = validateDaxMeasures([{ id: repaired.id, name: repaired.name, expression: repaired.expression, table: "Sales" }], [table("Sales", ["OrderDate"], [repaired])]);
+    expect(result[0].status).toBe("valid");
+    expect(repaired.approved).toBe(true);
+  });
+
+  it("keeps Qlik locale and formatting settings out of the measure inventory", () => {
+    expect(isQlikEnvironmentVariable("MoneyFormat")).toBe(true);
+    expect(isQlikEnvironmentVariable("DecimalSep")).toBe(true);
+    expect(isQlikEnvironmentVariable("vRevenueTarget")).toBe(false);
   });
 
   it("requires a current passing result before workflow completion", () => {
