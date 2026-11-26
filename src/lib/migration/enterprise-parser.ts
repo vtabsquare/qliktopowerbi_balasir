@@ -25,6 +25,7 @@ export interface ProjectFile {
   size: number;
   isText: boolean;
   content: string;
+  binaryBase64?: string;
   note: string;
 }
 
@@ -1988,7 +1989,7 @@ function sharepointSourceExpression(mappedRef: string): string {
 
 
 const MAX_EMBEDDED_TEXT_SOURCE_BYTES = 25 * 1024 * 1024;
-const EMBEDDABLE_SOURCE_EXTENSIONS = new Set([".csv", ".tsv", ".txt", ".json", ".xml"]);
+const EMBEDDABLE_SOURCE_EXTENSIONS = new Set([".csv", ".tsv", ".txt", ".json", ".xml", ".xlsx", ".xls"]);
 
 function utf8Base64(value: string): string {
   const bytes = new TextEncoder().encode(value);
@@ -2024,7 +2025,7 @@ function findUploadedSourceFile(
   ].filter(Boolean);
   const exactKeys = new Set(referenceValues.map(canonicalRef).filter(Boolean));
   const looseKeys = new Set(referenceValues.flatMap((value) => [...sourceReferenceKeys(value)]));
-  const candidates = files.filter((file) => file.isText && EMBEDDABLE_SOURCE_EXTENSIONS.has(String(file.ext || "").toLowerCase()) && Boolean(file.content));
+  const candidates = files.filter((file) => EMBEDDABLE_SOURCE_EXTENSIONS.has(String(file.ext || "").toLowerCase()) && ((file.isText && Boolean(file.content)) || Boolean(file.binaryBase64)));
   const exact = candidates.find((file) => exactKeys.has(canonicalRef(file.path)));
   if (exact) return exact;
   const byName = candidates.find((file) => [...sourceReferenceKeys(file.path)].some((key) => looseKeys.has(key)));
@@ -2033,16 +2034,26 @@ function findUploadedSourceFile(
   return candidates.find((file) => normalizeSampleKey(file.path) === tableStem) || null;
 }
 
-function embeddedProjectFileSourceExpression(file: ProjectFile, connectorType: string): string | null {
+function embeddedProjectFileSourceExpression(file: ProjectFile, connectorType: string, tableHint = ""): string | null {
   const ext = String(file.ext || "").toLowerCase();
-  if (!file.isText || !EMBEDDABLE_SOURCE_EXTENSIONS.has(ext) || !file.content) return null;
-  if (file.size > MAX_EMBEDDED_TEXT_SOURCE_BYTES || file.content.length > MAX_EMBEDDED_TEXT_SOURCE_BYTES) return null;
-  const rawB64 = utf8Base64(file.content);
+  if (!EMBEDDABLE_SOURCE_EXTENSIONS.has(ext)) return null;
+  const isExcel = ext === ".xlsx" || ext === ".xls";
+  if (!isExcel && (!file.isText || !file.content)) return null;
+  if (isExcel && !file.binaryBase64 && !file.content) return null;
+  const rawPayloadLen = isExcel && file.binaryBase64 ? file.binaryBase64.length : file.content.length;
+  if (file.size > MAX_EMBEDDED_TEXT_SOURCE_BYTES || rawPayloadLen > MAX_EMBEDDED_TEXT_SOURCE_BYTES * 2) return null;
+  const rawB64 = isExcel && file.binaryBase64 ? file.binaryBase64 : utf8Base64(file.content);
   const encodedExpr =
     rawB64.length <= 16000
       ? esc(rawB64)
       : `Text.Combine({${(rawB64.match(/.{1,16000}/g) || []).map((chunk) => esc(chunk)).join(", ")}})`;
   const binary = `Binary.FromText(${encodedExpr}, BinaryEncoding.Base64)`;
+  if (isExcel && file.binaryBase64) {
+    const sheetFilter = tableHint
+      ? `Table.SelectRows(_book, each Text.Lower(Text.From([Item])) = Text.Lower(${esc(tableHint)}))`
+      : "Table.SelectRows(_book, each false)";
+    return `let\n            _binary = ${binary},\n            _book = Excel.Workbook(_binary, null, true),\n            _named = ${sheetFilter},\n            _candidates = if Table.RowCount(_named) > 0 then _named else Table.SelectRows(_book, each [Kind] = "Table" or [Kind] = "Sheet"),\n            _data = if Table.RowCount(_candidates) = 0 then error Error.Record("QLIK2PBI.SourceShape", "The Excel source contains no table or sheet.", [Source=${esc(file.path)}]) else _candidates{0}[Data]\n        in\n            Table.PromoteHeaders(_data, [PromoteAllScalars=true])`;
+  }
   if (ext === ".json" || connectorType === "JSON") {
     return `let\n            _binary = ${binary},\n            _json = Json.Document(_binary),\n            _table = if Value.Is(_json, type list) then Table.FromRecords(_json) else if Value.Is(_json, type record) then Record.ToTable(_json) else error Error.Record("QLIK2PBI.SourceShape", "Uploaded JSON must contain a record or list of records.", [Source=${esc(file.path)}])\n        in\n            _table`;
   }
@@ -2055,7 +2066,7 @@ function embeddedProjectFileSourceExpression(file: ProjectFile, connectorType: s
 
 function sourceExpression(m: SourceMap | null, table: string, uploadedFile: ProjectFile | null = null): string | { dbExpr: string; navExpr: (dbStep: string) => string } {
   const isDb = m?.connectorType && ['Database/SQL', 'SQL Server', 'PostgreSQL', 'MySQL'].includes(m.connectorType);
-  const embedded = (!isDb && uploadedFile) ? embeddedProjectFileSourceExpression(uploadedFile, m?.connectorType || connector(uploadedFile.path)) : null;
+  const embedded = (!isDb && uploadedFile) ? embeddedProjectFileSourceExpression(uploadedFile, m?.connectorType || connector(uploadedFile.path), table) : null;
   if (embedded) return embedded;
   if (!m || m.status !== 'Mapped') {
     return `error Error.Record("QLIK2PBI.SourceMapping", "No executable source mapping is available for table ${table}.", [Table=${esc(table)}, Source=${esc(m?.originalRef || "unmapped")}])`;

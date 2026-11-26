@@ -152,7 +152,7 @@ export async function extractFilesFromRawList(
               const buf = await zipEntry.async("arraybuffer");
               text = await parseExcelToCsvText(buf);
             }
-            const binaryBase64 = entryExt === ".qvw" ? await zipEntry.async("base64") : undefined;
+            const binaryBase64 = (entryExt === ".qvw" || entryExt === ".xlsx" || entryExt === ".xls") ? await zipEntry.async("base64") : undefined;
             const entry: ExtractedFile = {
               path,
               name: entryName,
@@ -184,7 +184,7 @@ export async function extractFilesFromRawList(
       } else if ([".xlsx", ".xls"].includes(ext)) {
         text = await parseExcelToCsvText(file);
       }
-      const binaryBase64 = ext === ".qvw" ? await blobToBase64(file) : undefined;
+      const binaryBase64 = (ext === ".qvw" || ext === ".xlsx" || ext === ".xls") ? await blobToBase64(file) : undefined;
       const filePath = (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name;
       result.push({
         path: filePath,

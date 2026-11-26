@@ -302,6 +302,7 @@ function toEnterpriseProjectFiles(files: ExtractedFile[]) {
       size: Math.round((file.sizeKb || 0) * 1024),
       isText: true,
       content: file.text || "",
+      binaryBase64: file.binaryBase64,
       note: "",
     }));
 }

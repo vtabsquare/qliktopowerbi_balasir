@@ -214,4 +214,30 @@ FROM [../SourceData/OperationalTargets.xlsx] (ooxml, embedded labels, table is F
       expect(block.m).not.toContain("QLIK2PBI.UnsupportedExpression");
     }
   });
+
+  it("embeds Excel (.xlsx) sources from Retail_OmniChannel_Sales_Fixture.zip without relative File.Contents paths", async () => {
+    const zipPath = "C:/Users/moham/.gemini/antigravity/brain/9043524f-8d86-4047-9934-518cf33477fe/.user_uploaded/media_1795690416289_1387b799.zip";
+    if (!fs.existsSync(zipPath)) return;
+    const buf = fs.readFileSync(zipPath);
+    const zip = await JSZip.loadAsync(buf);
+    const files: ProjectFile[] = [];
+    for (const [path, entry] of Object.entries(zip.files)) {
+      if (entry.dir) continue;
+      const ext = "." + (path.split(".").pop() || "").toLowerCase();
+      const isText = [".txt", ".qvs", ".csv", ".xml", ".json", ".md"].includes(ext);
+      const isExcel = ext === ".xlsx" || ext === ".xls";
+      const content = isText ? await entry.async("string") : "";
+      const binaryBase64 = isExcel ? await entry.async("base64") : undefined;
+      files.push({ path, ext, size: content.length || binaryBase64?.length || 0, isText, content, binaryBase64, note: "" });
+    }
+    const analysis = runEnterpriseAnalysis(files);
+    const model = buildPowerBiModel(analysis, null, null, "RetailOmniChannel");
+    const pbipBlob = await generatePbipZip(analysis, "RetailOmniChannel", { powerBiModel: model });
+    const pbipZip = await JSZip.loadAsync(await pbipBlob.arrayBuffer());
+    const exprEntry = Object.keys(pbipZip.files).find((k) => k.endsWith("expressions.tmdl"))!;
+    const exprTmdl = await pbipZip.files[exprEntry].async("string");
+    expect(exprTmdl).toContain("Excel.Workbook(_binary, null, true)");
+    expect(exprTmdl).not.toContain('File.Contents("SourceData/OperationalTargets.xlsx")');
+    expect(exprTmdl).not.toContain('File.Contents("../SourceData/OperationalTargets.xlsx")');
+  });
 });
