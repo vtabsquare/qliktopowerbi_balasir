@@ -1,8 +1,11 @@
+import fs from "fs";
 import { describe, expect, it } from "vitest";
 import JSZip from "jszip";
 import { extractFilesFromRawList } from "@/components/migration/MultiFileDropzone";
-import { runEnterpriseAnalysis, tableRole, type TableProfile } from "@/lib/migration/enterprise-parser";
+import { runEnterpriseAnalysis, tableRole, type ProjectFile, type TableProfile } from "@/lib/migration/enterprise-parser";
 import { buildPowerBiModel } from "@/lib/migration/model/PowerBiModelBuilder";
+import { deepValidatePowerQueries } from "@/lib/migration/power-query/MQueryDeepValidator";
+import { generatePbipZip } from "@/lib/migration/pbip-generator";
 
 describe("Universal File Analysis & Multi-Fact Migration Engine", () => {
   it("recursively extracts files from nested ZIP archives", async () => {
@@ -149,5 +152,62 @@ FROM [../SourceData/OperationalTargets.xlsx] (ooxml, embedded labels, table is F
     expect(byName.get("Carriers")?.kind).toBe("dimension");
     expect(byName.get("Warehouses")?.kind).toBe("dimension");
     expect(byName.get("Routes")?.kind).toBe("dimension");
+  });
+
+  it("parses all generated M queries from Vignesh_2_.zip without M Engine Invalid literal errors", async () => {
+    const zipPath = "C:/Users/moham/.gemini/antigravity/brain/9043524f-8d86-4047-9934-518cf33477fe/.user_uploaded/media_1795680526526_c86fdf53.zip";
+    if (!fs.existsSync(zipPath)) return;
+    const buf = fs.readFileSync(zipPath);
+    const zip = await JSZip.loadAsync(buf);
+    const files: ProjectFile[] = [];
+    for (const [path, entry] of Object.entries(zip.files)) {
+      if (entry.dir) continue;
+      const ext = "." + (path.split(".").pop() || "").toLowerCase();
+      const isText = [".txt", ".qvs", ".csv", ".xml", ".json", ".md"].includes(ext);
+      const content = isText ? await entry.async("string") : "";
+      files.push({ path, ext, size: content.length, isText, content, note: "" });
+    }
+    const analysis = runEnterpriseAnalysis(files);
+    const deepResult = await deepValidatePowerQueries(analysis.mQueries, analysis.stagingQueries || {}, analysis.columnTypes, analysis.tablePreviews);
+    const blockers = Object.values(deepResult.queries).flatMap((q) => q.issues).filter((i) => i.severity === "blocking-error");
+    if (blockers.length) {
+      console.error("M PARSE BLOCKERS:", JSON.stringify(blockers, null, 2));
+      for (const b of blockers) {
+        const code = analysis.mQueries[b.queryName] || analysis.stagingQueries?.[b.queryName] || "";
+        console.error(`--- ${b.queryName} ---\n${code}`);
+      }
+    }
+    expect(blockers).toEqual([]);
+
+    const model = buildPowerBiModel(analysis, null, null, "SupplyChainControlTower");
+    const pbipBlob = await generatePbipZip(analysis, "SupplyChainControlTower", { powerBiModel: model });
+    const pbipBuf = await pbipBlob.arrayBuffer();
+    const pbipZip = await JSZip.loadAsync(pbipBuf);
+    const { DefaultSettings, TaskUtils } = await import("@microsoft/powerquery-parser");
+    const tmdlMBlocks: Array<{ file: string; m: string }> = [];
+    for (const [p, entry] of Object.entries(pbipZip.files)) {
+      if (entry.dir || !p.endsWith(".tmdl")) continue;
+      const txt = await entry.async("string");
+      const matches = txt.matchAll(/```([\s\S]*?)```/g);
+      for (const m of matches) {
+        tmdlMBlocks.push({ file: p, m: m[1].replace(/^\r?\n/, "") });
+      }
+    }
+    const pqErrors: Array<{ file: string; error: string; m: string }> = [];
+    for (const block of tmdlMBlocks) {
+      const res = await TaskUtils.tryLexParse(DefaultSettings, block.m);
+      if (!TaskUtils.isOk(res)) {
+        pqErrors.push({ file: block.file, error: String((res as any).error?.message || JSON.stringify((res as any).error)), m: block.m.slice(0, 600) });
+      }
+    }
+    if (pqErrors.length) {
+      console.error("PQ PARSER ERRORS:", JSON.stringify(pqErrors, null, 2));
+    }
+    expect(pqErrors).toEqual([]);
+    // Ensure no single M string literal exceeds Power BI Desktop's literal length limit
+    for (const block of tmdlMBlocks) {
+      const longLiterals = (block.m.match(/"(?:[^"]|""){20001,}"/g) || []);
+      expect(longLiterals).toEqual([]);
+    }
   });
 });

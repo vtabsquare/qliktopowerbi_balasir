@@ -1898,7 +1898,9 @@ export function buildColumnTypes(profiles: Record<string, TableProfile>, operati
 const KEY_RE_M = /(id$|_id$|key$|_key$|code$|number$|no$|guid$)/i;
 const UNSAFE_M_RE = /\b(LOAD|RESIDENT|ApplyMap|IntervalMatch|CrossTable|Generic Load|Peek|Previous|Autonumber)\b/i;
 
-function esc(s: string): string { return '"' + (s || '').replace(/"/g, '""') + '"'; }
+function esc(s: string): string {
+  return '"' + (s || '').replace(/"/g, '""').replace(/\r\n/g, '#(cr)#(lf)').replace(/\r/g, '#(cr)').replace(/\n/g, '#(lf)') + '"';
+}
 function qname(n: string): string { return '#"' + String(n).replace(/"/g, '""') + '"'; }
 function lit(v: string): string {
   const value = String(v || '').trim();
@@ -2026,8 +2028,12 @@ function embeddedProjectFileSourceExpression(file: ProjectFile, connectorType: s
   const ext = String(file.ext || "").toLowerCase();
   if (!file.isText || !EMBEDDABLE_SOURCE_EXTENSIONS.has(ext) || !file.content) return null;
   if (file.size > MAX_EMBEDDED_TEXT_SOURCE_BYTES || file.content.length > MAX_EMBEDDED_TEXT_SOURCE_BYTES) return null;
-  const encoded = esc(utf8Base64(file.content));
-  const binary = `Binary.FromText(${encoded}, BinaryEncoding.Base64)`;
+  const rawB64 = utf8Base64(file.content);
+  const encodedExpr =
+    rawB64.length <= 16000
+      ? esc(rawB64)
+      : `Text.Combine({${(rawB64.match(/.{1,16000}/g) || []).map((chunk) => esc(chunk)).join(", ")}})`;
+  const binary = `Binary.FromText(${encodedExpr}, BinaryEncoding.Base64)`;
   if (ext === ".json" || connectorType === "JSON") {
     return `let\n            _binary = ${binary},\n            _json = Json.Document(_binary),\n            _table = if Value.Is(_json, type list) then Table.FromRecords(_json) else if Value.Is(_json, type record) then Record.ToTable(_json) else error Error.Record("QLIK2PBI.SourceShape", "Uploaded JSON must contain a record or list of records.", [Source=${esc(file.path)}])\n        in\n            _table`;
   }
