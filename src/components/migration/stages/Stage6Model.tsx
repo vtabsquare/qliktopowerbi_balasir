@@ -14,6 +14,13 @@ import {
   ZoomOut,
   Maximize2,
   Settings,
+  ChevronUp,
+  ChevronDown,
+  RefreshCw,
+  X,
+  CheckCircle2,
+  AlertTriangle,
+  Database,
 } from "lucide-react";
 import type { FinalTable } from "@/lib/migration/types";
 import type { EnterpriseAnalysis } from "@/lib/migration/enterprise-parser";
@@ -282,7 +289,7 @@ export function Stage6Model({ onNext, analysis }: { onNext?: () => void, analysi
       </div>
 
       <div className="grid grid-cols-1 gap-6">
-        <ModelPanel title="Qlik Data Model Viewer (Associative)" tables={finalTables} relationships={qlikAssociations} variant="qlik" />
+        <QlikDataModelDesigner tables={finalTables} relationships={qlikAssociations} />
         <InteractivePowerBiModelPanel title="Power BI Model View (Tabular Star Schema)" tables={allTables} relationships={pbiRelationships} />
       </div>
     </div>
@@ -787,6 +794,783 @@ function computeInitialPositions(tables: PbiTableWithMeasures[], rels: any[]): R
   }
 
   return positions;
+}
+
+const QLIK_CARD_W = 248;
+const QLIK_HEADER_H = 38;
+const QLIK_ROW_H = 26;
+
+function QlikDataModelDesigner({
+  tables,
+  relationships,
+}: {
+  tables: PbiTableWithMeasures[];
+  relationships: any[];
+}) {
+  const [search, setSearch] = useState("");
+  const [zoom, setZoom] = useState(0.92);
+  const [expandedTables, setExpandedTables] = useState<Record<string, boolean>>({});
+  const [selectedTableName, setSelectedTableName] = useState<string>("");
+  const [selectedRelId, setSelectedRelId] = useState<string>("");
+  const [propertiesOpen, setPropertiesOpen] = useState(true);
+  const [propertiesTab, setPropertiesTab] = useState<"columns" | "relationships">("columns");
+  const [detailsOpen, setDetailsOpen] = useState(true);
+  const [nodePositions, setNodePositions] = useState<Record<string, NodePos>>({});
+  const dragRef = useRef<{ name: string; startX: number; startY: number; origX: number; origY: number } | null>(null);
+  const canvasViewportRef = useRef<HTMLDivElement>(null);
+
+  const totalColumns = useMemo(
+    () => tables.reduce((acc, t) => acc + (t.columns?.length || 0), 0),
+    [tables],
+  );
+
+  // Classify columns into PK / FK / connected / unconnected based on actual table keys & relationships
+  const { pkSet, fkSet, connectedColsSet } = useMemo(() => {
+    const pk = new Set<string>();
+    const fk = new Set<string>();
+    const conn = new Set<string>();
+
+    tables.forEach((t) => {
+      const explicitKeys = t.keys || [];
+      explicitKeys.forEach((k) => {
+        const lower = String(k).toLowerCase();
+        const tableCore = t.name.toLowerCase().replace(/s$/, "").replace(/^(dim|fact|tbl)/, "");
+        if (lower === `${tableCore}id` || lower === `${t.name.toLowerCase()}id` || lower === "date" || lower === "calendardate") {
+          pk.add(`${t.name}.${k}`);
+        } else if (t.type === "Fact" && lower.endsWith("id")) {
+          // On a fact table, the table's own ID (e.g. SaleID on Sales) is PK; other *IDs are FK
+          if (lower === `${tableCore}id` || lower === `${t.name.toLowerCase()}id`) {
+            pk.add(`${t.name}.${k}`);
+          } else {
+            fk.add(`${t.name}.${k}`);
+          }
+        } else {
+          pk.add(`${t.name}.${k}`);
+        }
+      });
+    });
+
+    relationships.forEach((r) => {
+      if (r.fromTable && r.fromColumn) conn.add(`${r.fromTable}.${r.fromColumn}`);
+      if (r.toTable && r.toColumn) conn.add(`${r.toTable}.${r.toColumn}`);
+      if (r.fromTable && r.fromColumn && !pk.has(`${r.fromTable}.${r.fromColumn}`)) {
+        fk.add(`${r.fromTable}.${r.fromColumn}`);
+      }
+      if (r.toTable && r.toColumn && !fk.has(`${r.toTable}.${r.toColumn}`)) {
+        pk.add(`${r.toTable}.${r.toColumn}`);
+      }
+    });
+
+    return { pkSet: pk, fkSet: fk, connectedColsSet: conn };
+  }, [tables, relationships]);
+
+  const normalizedRels = useMemo(() => {
+    return relationships.map((r) => {
+      const fromTbl = tables.find((t) => t.name.toLowerCase() === String(r.fromTable || "").toLowerCase());
+      const toTbl = tables.find((t) => t.name.toLowerCase() === String(r.toTable || "").toLowerCase());
+      const fromColExists = fromTbl?.columns.some((c) => c.name.toLowerCase() === String(r.fromColumn || "").toLowerCase());
+      const toColExists = toTbl?.columns.some((c) => c.name.toLowerCase() === String(r.toColumn || "").toLowerCase());
+
+      let status: "Valid" | "Review" | "Invalid" = "Valid";
+      let issueDescription = "";
+      let recommendedFix = "";
+
+      if (!fromTbl || !toTbl || !fromColExists || !toColExists) {
+        status = "Invalid";
+        issueDescription = "Source or target column does not exist in the parsed Qlik table metadata.";
+        recommendedFix = "Verify the field name in Qlik script / Source Mapping and re-run ETL Analysis.";
+      } else if (fromTbl.name === toTbl.name) {
+        status = "Review";
+        issueDescription = "Self-referencing association detected on the same table.";
+        recommendedFix = "Confirm if this self-join is intentional or should be split into a role-playing dimension.";
+      }
+
+      const rawCard = String(r.cardinality || "").toLowerCase();
+      const cardinalityLabel =
+        rawCard.includes("1:1") || rawCard.includes("one-to-one") || rawCard.includes("onetone")
+          ? "One to One"
+          : rawCard.includes("n:n") || rawCard.includes("many-to-many")
+          ? "Many to Many"
+          : "One to Many";
+      const badgeLabel =
+        cardinalityLabel === "One to One" ? "1—1" : cardinalityLabel === "Many to Many" ? "N—N" : "1—<N";
+
+      return {
+        ...r,
+        fromTable: fromTbl?.name || r.fromTable,
+        toTable: toTbl?.name || r.toTable,
+        relationshipType: r.active === false ? "Inactive" : "Active",
+        cardinalityLabel,
+        badgeLabel,
+        filterDirection: r.filterDirection === "single" ? "Single" : "Both",
+        status,
+        issueDescription,
+        recommendedFix,
+      };
+    });
+  }, [relationships, tables]);
+
+  const isExpanded = (name: string) => Boolean(expandedTables[name]);
+
+  const getVisibleColumns = (t: PbiTableWithMeasures) => {
+    const cols = t.columns || [];
+    if (isExpanded(t.name)) return cols;
+    return cols.slice(0, 6);
+  };
+
+  const getCardHeight = (t: PbiTableWithMeasures) => {
+    const visible = getVisibleColumns(t).length;
+    const hasMore = !isExpanded(t.name) && (t.columns?.length || 0) > 6;
+    return QLIK_HEADER_H + visible * QLIK_ROW_H + (hasMore ? 26 : 6);
+  };
+
+  const computeAutoLayout = () => {
+    setNodePositions(computeInitialPositions(tables, relationships));
+  };
+
+  useEffect(() => {
+    computeAutoLayout();
+  }, [tables, relationships]);
+
+  useEffect(() => {
+    if (!tables.length) return;
+    if (selectedTableName && tables.some((t) => t.name === selectedTableName)) return;
+    const fact = tables.find((t) => t.type === "Fact") || tables[0];
+    if (fact) setSelectedTableName(fact.name);
+  }, [tables, selectedTableName]);
+
+  const canvasBounds = useMemo(() => {
+    const vals = Object.entries(nodePositions);
+    if (!vals.length) return { width: 920, height: 500 };
+    let maxX = 820;
+    let maxY = 460;
+    for (const [name, pos] of vals) {
+      const tbl = tables.find((t) => t.name === name);
+      const h = tbl ? getCardHeight(tbl) : 210;
+      maxX = Math.max(maxX, pos.x + QLIK_CARD_W + 40);
+      maxY = Math.max(maxY, pos.y + h + 40);
+    }
+    return { width: maxX, height: maxY };
+  }, [nodePositions, tables, expandedTables]);
+
+  const fitToScreen = () => {
+    const el = canvasViewportRef.current;
+    if (!el) {
+      setZoom(0.9);
+      return;
+    }
+    const availW = Math.max(320, el.clientWidth - 28);
+    const availH = Math.max(320, el.clientHeight - 28);
+    const ratio = Math.min(1.05, availW / canvasBounds.width, availH / canvasBounds.height);
+    setZoom(Math.max(0.45, +ratio.toFixed(2)));
+  };
+
+  useEffect(() => {
+    const timer = setTimeout(fitToScreen, 60);
+    return () => clearTimeout(timer);
+  }, [canvasBounds.width, canvasBounds.height]);
+
+  const onNodeMouseDown = (e: React.MouseEvent, name: string) => {
+    e.stopPropagation();
+    setSelectedTableName(name);
+    setPropertiesOpen(true);
+    const pos = nodePositions[name] || { x: 24, y: 24 };
+    dragRef.current = { name, startX: e.clientX, startY: e.clientY, origX: pos.x, origY: pos.y };
+
+    const handleMove = (ev: MouseEvent) => {
+      if (!dragRef.current) return;
+      const dx = (ev.clientX - dragRef.current.startX) / zoom;
+      const dy = (ev.clientY - dragRef.current.startY) / zoom;
+      const nx = Math.max(12, Math.round(dragRef.current.origX + dx));
+      const ny = Math.max(12, Math.round(dragRef.current.origY + dy));
+      const target = dragRef.current.name;
+      setNodePositions((prev) => ({ ...prev, [target]: { x: nx, y: ny } }));
+    };
+
+    const handleUp = () => {
+      dragRef.current = null;
+      window.removeEventListener("mousemove", handleMove);
+      window.removeEventListener("mouseup", handleUp);
+    };
+
+    window.addEventListener("mousemove", handleMove);
+    window.addEventListener("mouseup", handleUp);
+  };
+
+  const expandAll = () => {
+    const next: Record<string, boolean> = {};
+    tables.forEach((t) => {
+      next[t.name] = true;
+    });
+    setExpandedTables(next);
+  };
+
+  const collapseAll = () => {
+    setExpandedTables({});
+  };
+
+  const handleRefresh = () => {
+    computeAutoLayout();
+    setTimeout(fitToScreen, 40);
+    toast.success("Qlik Data Model refreshed");
+  };
+
+  const q = search.trim().toLowerCase();
+  const tableMatches = (t: PbiTableWithMeasures) => {
+    if (!q) return true;
+    if (t.name.toLowerCase().includes(q)) return true;
+    return (t.columns || []).some((c) => c.name.toLowerCase().includes(q));
+  };
+
+  const selectedTable = useMemo(
+    () => tables.find((t) => t.name === selectedTableName) || tables[0] || null,
+    [tables, selectedTableName],
+  );
+
+  const selectedTableRels = useMemo(() => {
+    if (!selectedTable) return [];
+    return normalizedRels.filter(
+      (r) => r.fromTable === selectedTable.name || r.toTable === selectedTable.name,
+    );
+  }, [normalizedRels, selectedTable]);
+
+  const selectedRel = useMemo(
+    () => normalizedRels.find((r) => r.id === selectedRelId) || null,
+    [normalizedRels, selectedRelId],
+  );
+
+  const getColumnAnchorY = (tableName: string, colName: string): number => {
+    const pos = nodePositions[tableName] || { x: 24, y: 24 };
+    const tbl = tables.find((t) => t.name === tableName);
+    if (!tbl) return pos.y + QLIK_HEADER_H + 14;
+    const vis = getVisibleColumns(tbl);
+    const idx = vis.findIndex((c) => c.name.toLowerCase() === String(colName).toLowerCase());
+    if (idx >= 0) {
+      return pos.y + QLIK_HEADER_H + idx * QLIK_ROW_H + QLIK_ROW_H / 2;
+    }
+    return pos.y + QLIK_HEADER_H + Math.max(0, vis.length - 1) * QLIK_ROW_H + QLIK_ROW_H / 2;
+  };
+
+  return (
+    <div className="surface-card overflow-hidden flex flex-col">
+      {/* 1. Header & Stats & Search */}
+      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-b border-border bg-surface-elevated">
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="flex items-center gap-2">
+            <div className="grid h-8 w-8 place-items-center rounded-lg bg-primary/10 text-primary">
+              <Database className="h-4 w-4" />
+            </div>
+            <div>
+              <h4 className="font-display font-bold text-sm text-foreground leading-tight">Qlik Data Model</h4>
+              <p className="text-[11px] text-muted-foreground">Associative table &amp; field relationship designer</p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 py-1 text-xs">
+              <Table2 className="h-3.5 w-3.5 text-primary" />
+              <span className="text-muted-foreground">Total Tables</span>
+              <strong className="text-foreground">{tables.length}</strong>
+            </div>
+            <div className="flex items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 py-1 text-xs">
+              <Layers className="h-3.5 w-3.5 text-primary" />
+              <span className="text-muted-foreground">Total Columns</span>
+              <strong className="text-foreground">{totalColumns}</strong>
+            </div>
+            <div className="flex items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 py-1 text-xs">
+              <Link2 className="h-3.5 w-3.5 text-emerald-600" />
+              <span className="text-muted-foreground">Total Relationships</span>
+              <strong className="text-foreground">{normalizedRels.length}</strong>
+            </div>
+          </div>
+        </div>
+
+        <div className="relative w-full sm:w-64">
+          <Search className="h-3.5 w-3.5 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search Tables / Columns..."
+            className="w-full rounded-lg border border-border bg-background pl-8 pr-3 py-1.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+          />
+        </div>
+      </div>
+
+      {/* Toolbar */}
+      <div className="flex flex-wrap items-center gap-1.5 px-4 py-2 border-b border-border bg-surface/60 text-xs">
+        <button
+          type="button"
+          onClick={() => setZoom((z) => Math.min(1.3, +(z + 0.1).toFixed(2)))}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 py-1 font-medium hover:bg-muted cursor-pointer"
+        >
+          <ZoomIn className="h-3.5 w-3.5 text-primary" /> Zoom In
+        </button>
+        <button
+          type="button"
+          onClick={() => setZoom((z) => Math.max(0.45, +(z - 0.1).toFixed(2)))}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 py-1 font-medium hover:bg-muted cursor-pointer"
+        >
+          <ZoomOut className="h-3.5 w-3.5 text-primary" /> Zoom Out
+        </button>
+        <button
+          type="button"
+          onClick={fitToScreen}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 py-1 font-medium hover:bg-muted cursor-pointer"
+        >
+          <Maximize2 className="h-3.5 w-3.5 text-primary" /> Fit to Screen
+        </button>
+        <button
+          type="button"
+          onClick={computeAutoLayout}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 py-1 font-medium hover:bg-muted cursor-pointer"
+        >
+          <GitBranch className="h-3.5 w-3.5 text-primary" /> Auto Arrange
+        </button>
+        <button
+          type="button"
+          onClick={expandAll}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 py-1 font-medium hover:bg-muted cursor-pointer"
+        >
+          <ChevronDown className="h-3.5 w-3.5 text-primary" /> Expand All
+        </button>
+        <button
+          type="button"
+          onClick={collapseAll}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 py-1 font-medium hover:bg-muted cursor-pointer"
+        >
+          <ChevronUp className="h-3.5 w-3.5 text-primary" /> Collapse All
+        </button>
+        <button
+          type="button"
+          onClick={handleRefresh}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 py-1 font-medium hover:bg-muted cursor-pointer"
+        >
+          <RefreshCw className="h-3.5 w-3.5 text-primary" /> Refresh Model
+        </button>
+        <span className="ml-auto text-[11px] text-muted-foreground hidden md:inline">
+          Zoom: {Math.round(zoom * 100)}% · Drag cards to reposition
+        </span>
+      </div>
+
+      {/* 2. Canvas + Right Table Properties Drawer */}
+      <div className={`grid grid-cols-1 ${propertiesOpen && selectedTable ? "lg:grid-cols-[1fr_280px]" : ""}`}>
+        {/* Interactive Canvas */}
+        <div
+          ref={canvasViewportRef}
+          className="relative min-h-[460px] max-h-[620px] overflow-auto bg-[radial-gradient(#e2e8f0_1px,transparent_1px)] dark:bg-[radial-gradient(#334155_1px,transparent_1px)] [background-size:20px_20px]"
+        >
+          {tables.length > 0 ? (
+            <div style={{ width: canvasBounds.width * zoom, height: canvasBounds.height * zoom }}>
+              <div
+                className="relative"
+                style={{
+                  width: canvasBounds.width,
+                  height: canvasBounds.height,
+                  transform: `scale(${zoom})`,
+                  transformOrigin: "top left",
+                }}
+              >
+                {/* Green Stepped Relationship Connectors */}
+                <svg className="absolute inset-0 pointer-events-none" width={canvasBounds.width} height={canvasBounds.height}>
+                  {normalizedRels.map((r) => {
+                    const p1 = nodePositions[r.fromTable];
+                    const p2 = nodePositions[r.toTable];
+                    if (!p1 || !p2) return null;
+
+                    const y1 = getColumnAnchorY(r.fromTable, r.fromColumn);
+                    const y2 = getColumnAnchorY(r.toTable, r.toColumn);
+                    const p1Right = p1.x + QLIK_CARD_W;
+                    const p2Right = p2.x + QLIK_CARD_W;
+                    const leftToRight = p1.x + QLIK_CARD_W / 2 <= p2.x + QLIK_CARD_W / 2;
+
+                    const x1 = leftToRight ? p1Right : p1.x;
+                    const x2 = leftToRight ? p2.x : p2Right;
+                    const midX = (x1 + x2) / 2;
+                    const midY = (y1 + y2) / 2;
+                    const pathD = `M ${x1} ${y1} L ${midX} ${y1} L ${midX} ${y2} L ${x2} ${y2}`;
+
+                    const isSelected = selectedRelId === r.id;
+                    const isTableActive =
+                      r.fromTable === selectedTableName || r.toTable === selectedTableName;
+                    const strokeColor =
+                      r.status === "Invalid"
+                        ? "#ef4444"
+                        : isSelected
+                        ? "#15803d"
+                        : isTableActive
+                        ? "#16a34a"
+                        : "#22c55e";
+
+                    return (
+                      <g
+                        key={r.id}
+                        className="pointer-events-auto cursor-pointer"
+                        onClick={() => {
+                          setSelectedRelId(r.id);
+                          if (r.fromTable) setSelectedTableName(r.fromTable);
+                          setDetailsOpen(true);
+                        }}
+                      >
+                        <path d={pathD} fill="none" stroke="transparent" strokeWidth={12} />
+                        <path
+                          d={pathD}
+                          fill="none"
+                          stroke={strokeColor}
+                          strokeWidth={isSelected ? 2.6 : 1.75}
+                          strokeDasharray={r.status === "Invalid" ? "5 4" : undefined}
+                          opacity={isSelected || isTableActive ? 1 : 0.72}
+                        />
+                        <circle cx={x1} cy={y1} r={3.5} fill={strokeColor} />
+                        <circle cx={x2} cy={y2} r={3.5} fill={strokeColor} />
+                        <g transform={`translate(${midX}, ${midY})`}>
+                          <rect
+                            x={-22}
+                            y={-10}
+                            width={44}
+                            height={20}
+                            rx={5}
+                            fill="#ffffff"
+                            stroke={strokeColor}
+                            strokeWidth={1.2}
+                          />
+                          <text
+                            x={0}
+                            y={3.5}
+                            textAnchor="middle"
+                            fontSize="9.5"
+                            fontWeight="bold"
+                            fill="#166534"
+                          >
+                            {r.badgeLabel}
+                          </text>
+                        </g>
+                      </g>
+                    );
+                  })}
+                </svg>
+
+                {/* Qlik Table Cards */}
+                {tables.map((t) => {
+                  const pos = nodePositions[t.name] || { x: 24, y: 24 };
+                  const expanded = isExpanded(t.name);
+                  const visibleCols = getVisibleColumns(t);
+                  const hiddenCount = Math.max(0, (t.columns?.length || 0) - visibleCols.length);
+                  const matches = tableMatches(t);
+                  const isSelected = selectedTableName === t.name;
+
+                  return (
+                    <div
+                      key={t.name}
+                      onMouseDown={(e) => onNodeMouseDown(e, t.name)}
+                      style={{ left: pos.x, top: pos.y, width: QLIK_CARD_W }}
+                      className={`absolute rounded-xl border bg-background shadow-sm select-none cursor-grab active:cursor-grabbing overflow-hidden transition-all ${
+                        isSelected ? "ring-2 ring-blue-500 border-blue-500 shadow-md" : "border-border hover:border-blue-400"
+                      } ${!matches ? "opacity-35" : "opacity-100"}`}
+                    >
+                      <div className="flex items-center justify-between gap-2 px-3 py-2 bg-gradient-to-r from-blue-600 to-blue-500 text-white text-xs font-bold">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <Table2 className="h-3.5 w-3.5 shrink-0" />
+                          <span className="truncate" title={t.name}>{t.name}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onMouseDown={(e) => e.stopPropagation()}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setExpandedTables((prev) => ({ ...prev, [t.name]: !expanded }));
+                          }}
+                          className="p-0.5 rounded hover:bg-white/20 cursor-pointer"
+                          title={expanded ? "Collapse columns" : "Expand all columns"}
+                        >
+                          {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                        </button>
+                      </div>
+
+                      <div className="divide-y divide-border/40 text-[11px] bg-background">
+                        {visibleCols.map((c, idx) => {
+                          const isPk = pkSet.has(`${t.name}.${c.name}`);
+                          const isFk = fkSet.has(`${t.name}.${c.name}`);
+                          const isConnected = connectedColsSet.has(`${t.name}.${c.name}`);
+                          const colHighlight = q && c.name.toLowerCase().includes(q);
+
+                          return (
+                            <div
+                              key={`${c.name}-${idx}`}
+                              style={{ height: QLIK_ROW_H }}
+                              className={`flex items-center justify-between gap-2 px-2.5 ${
+                                colHighlight ? "bg-amber-500/15 font-semibold" : ""
+                              }`}
+                            >
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                {isPk ? (
+                                  <KeyRound className="h-3 w-3 text-amber-500 shrink-0" />
+                                ) : isFk || isConnected ? (
+                                  <Link2 className="h-3 w-3 text-blue-500 shrink-0" />
+                                ) : (
+                                  <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/35 mx-0.5 shrink-0" />
+                                )}
+                                <span className={`truncate ${isPk || isFk ? "font-semibold text-foreground" : "text-foreground/85"}`}>
+                                  {c.name}
+                                </span>
+                              </div>
+                              <span className="text-[10px] text-muted-foreground shrink-0">
+                                {c.dataType || "Text"}
+                              </span>
+                            </div>
+                          );
+                        })}
+                        {hiddenCount > 0 && (
+                          <button
+                            type="button"
+                            onMouseDown={(e) => e.stopPropagation()}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setExpandedTables((prev) => ({ ...prev, [t.name]: true }));
+                            }}
+                            className="w-full py-1 px-2.5 text-[10px] font-medium text-primary hover:bg-muted/40 text-left cursor-pointer"
+                          >
+                            + {hiddenCount} more fields...
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            <div className="p-8 text-center text-xs text-muted-foreground">No Qlik tables detected.</div>
+          )}
+        </div>
+
+        {/* Right Table Properties Panel */}
+        {propertiesOpen && selectedTable && (
+          <aside className="border-t lg:border-t-0 lg:border-l border-border bg-surface/60 flex flex-col">
+            <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-border bg-surface-elevated">
+              <span className="text-xs font-bold text-foreground">Table Properties</span>
+              <button
+                type="button"
+                onClick={() => setPropertiesOpen(false)}
+                className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground cursor-pointer"
+                title="Close properties"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+
+            <div className="p-3.5 border-b border-border flex items-center gap-2.5">
+              <div className="grid h-9 w-9 place-items-center rounded-lg bg-primary/10 text-primary shrink-0">
+                <Table2 className="h-4 w-4" />
+              </div>
+              <div className="min-w-0">
+                <div className="font-semibold text-sm text-foreground truncate">{selectedTable.name}</div>
+                <div className="text-[11px] text-muted-foreground">{selectedTable.type} Table</div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 border-b border-border text-xs font-semibold">
+              <button
+                type="button"
+                onClick={() => setPropertiesTab("columns")}
+                className={`py-2 text-center border-b-2 transition-colors cursor-pointer ${
+                  propertiesTab === "columns" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Columns
+              </button>
+              <button
+                type="button"
+                onClick={() => setPropertiesTab("relationships")}
+                className={`py-2 text-center border-b-2 transition-colors cursor-pointer ${
+                  propertiesTab === "relationships" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Relationships ({selectedTableRels.length})
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto max-h-[300px] p-3 space-y-1.5 text-xs">
+              {propertiesTab === "columns" ? (
+                selectedTable.columns.map((c, idx) => {
+                  const isPk = pkSet.has(`${selectedTable.name}.${c.name}`);
+                  const isFk = fkSet.has(`${selectedTable.name}.${c.name}`);
+                  return (
+                    <div key={`${c.name}-${idx}`} className="flex items-center justify-between gap-2 py-1 border-b border-border/30 last:border-0">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        {isPk ? (
+                          <KeyRound className="h-3 w-3 text-amber-500 shrink-0" />
+                        ) : isFk ? (
+                          <Link2 className="h-3 w-3 text-blue-500 shrink-0" />
+                        ) : (
+                          <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40 mx-0.5 shrink-0" />
+                        )}
+                        <span className="truncate text-foreground">{c.name}</span>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <span className="text-[10px] text-muted-foreground">{c.dataType || "Text"}</span>
+                        {isPk && (
+                          <span className="rounded bg-amber-500/15 text-amber-700 dark:text-amber-300 px-1 py-0.5 text-[9px] font-bold">
+                            PK
+                          </span>
+                        )}
+                        {!isPk && isFk && (
+                          <span className="rounded bg-blue-500/15 text-blue-700 dark:text-blue-300 px-1 py-0.5 text-[9px] font-bold">
+                            FK
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              ) : selectedTableRels.length === 0 ? (
+                <div className="text-xs text-muted-foreground py-4 text-center">No associations for this table.</div>
+              ) : (
+                selectedTableRels.map((r) => (
+                  <button
+                    key={r.id}
+                    type="button"
+                    onClick={() => setSelectedRelId(r.id)}
+                    className={`w-full text-left rounded-lg border p-2 text-[11px] transition-colors cursor-pointer ${
+                      selectedRelId === r.id ? "border-emerald-500 bg-emerald-500/10" : "border-border bg-background hover:bg-muted/50"
+                    }`}
+                  >
+                    <div className="font-semibold text-foreground">
+                      {r.fromTable}.{r.fromColumn}
+                    </div>
+                    <div className="text-muted-foreground">
+                      → {r.toTable}.{r.toColumn} ({r.badgeLabel})
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
+
+            <div className="p-3 border-t border-border bg-surface-elevated/60 text-xs space-y-1">
+              <div className="font-bold text-foreground mb-1">Table Summary</div>
+              <div className="flex justify-between text-muted-foreground">
+                <span>Total Columns</span>
+                <strong className="text-foreground">{selectedTable.columns.length}</strong>
+              </div>
+              <div className="flex justify-between text-muted-foreground">
+                <span>Primary Keys</span>
+                <strong className="text-foreground">
+                  {selectedTable.columns.filter((c) => pkSet.has(`${selectedTable.name}.${c.name}`)).length}
+                </strong>
+              </div>
+              <div className="flex justify-between text-muted-foreground">
+                <span>Foreign Keys</span>
+                <strong className="text-foreground">
+                  {selectedTable.columns.filter((c) => fkSet.has(`${selectedTable.name}.${c.name}`)).length}
+                </strong>
+              </div>
+            </div>
+          </aside>
+        )}
+      </div>
+
+      {/* 5. Expandable Relationship Details Panel */}
+      <div className="border-t border-border bg-surface-elevated">
+        <button
+          type="button"
+          onClick={() => setDetailsOpen((v) => !v)}
+          className="w-full flex items-center justify-between px-4 py-2.5 text-left hover:bg-muted/40 transition-colors cursor-pointer"
+        >
+          <div className="flex items-center gap-2">
+            <Link2 className="h-4 w-4 text-primary" />
+            <span className="font-semibold text-xs sm:text-sm text-foreground">
+              Relationship Details ({normalizedRels.length})
+            </span>
+          </div>
+          {detailsOpen ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+        </button>
+
+        {detailsOpen && (
+          <div className="border-t border-border bg-background">
+            {selectedRel && selectedRel.issueDescription && (
+              <div className="m-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-300 flex items-start gap-2">
+                <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                <div>
+                  <div className="font-semibold">
+                    {selectedRel.fromTable}.{selectedRel.fromColumn} → {selectedRel.toTable}.{selectedRel.toColumn}: {selectedRel.issueDescription}
+                  </div>
+                  <div className="mt-0.5 text-[11px]">
+                    <strong>Recommended Fix:</strong> {selectedRel.recommendedFix}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {normalizedRels.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead className="bg-surface-elevated border-b border-border text-muted-foreground">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-semibold">Source Table</th>
+                      <th className="px-3 py-2 text-left font-semibold">Source Column</th>
+                      <th className="px-3 py-2 text-left font-semibold">Target Table</th>
+                      <th className="px-3 py-2 text-left font-semibold">Target Column</th>
+                      <th className="px-3 py-2 text-left font-semibold">Relationship Type</th>
+                      <th className="px-3 py-2 text-left font-semibold">Cardinality</th>
+                      <th className="px-3 py-2 text-left font-semibold">Filter Direction</th>
+                      <th className="px-3 py-2 text-left font-semibold">Status</th>
+                      <th className="px-3 py-2 text-right font-semibold">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/50">
+                    {normalizedRels.map((r) => (
+                      <tr
+                        key={r.id}
+                        className={`hover:bg-muted/30 transition-colors ${
+                          selectedRelId === r.id ? "bg-emerald-500/5" : ""
+                        }`}
+                      >
+                        <td className="px-3 py-2 font-medium text-foreground">{r.fromTable}</td>
+                        <td className="px-3 py-2 font-mono text-foreground/85">{r.fromColumn}</td>
+                        <td className="px-3 py-2 font-medium text-foreground">{r.toTable}</td>
+                        <td className="px-3 py-2 font-mono text-foreground/85">{r.toColumn}</td>
+                        <td className="px-3 py-2">
+                          <span className="text-emerald-600 dark:text-emerald-400 font-medium">{r.relationshipType}</span>
+                        </td>
+                        <td className="px-3 py-2">{r.cardinalityLabel}</td>
+                        <td className="px-3 py-2">{r.filterDirection}</td>
+                        <td className="px-3 py-2">
+                          {r.status === "Valid" ? (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 px-2 py-0.5 text-[10px] font-semibold">
+                              <CheckCircle2 className="h-3 w-3" /> Valid
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-300 px-2 py-0.5 text-[10px] font-semibold">
+                              <AlertTriangle className="h-3 w-3" /> {r.status}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedRelId(r.id);
+                              if (r.fromTable) setSelectedTableName(r.fromTable);
+                              setPropertiesOpen(true);
+                            }}
+                            className="rounded-lg border border-border bg-background px-2.5 py-1 text-[11px] font-medium hover:bg-muted cursor-pointer"
+                          >
+                            View
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="p-4 text-xs text-muted-foreground italic">No natural associations detected.</div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 function InteractivePowerBiModelPanel({
