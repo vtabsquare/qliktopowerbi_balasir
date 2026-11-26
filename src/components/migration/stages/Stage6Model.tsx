@@ -16,6 +16,7 @@ import {
   Settings,
   ChevronUp,
   ChevronDown,
+  ChevronRight,
   RefreshCw,
   X,
   CheckCircle2,
@@ -1573,6 +1574,91 @@ function QlikDataModelDesigner({
   );
 }
 
+type StarValidationItem = {
+  id: string;
+  severity: "error" | "warning" | "info";
+  workflowStep: string;
+  tableOrComponent: string;
+  column?: string;
+  issue: string;
+  reason: string;
+  suggestedFix: string;
+  status: "Open" | "Valid";
+  relId?: string;
+};
+
+function computeStarSchemaPositions(
+  tables: PbiTableWithMeasures[],
+  relationships: any[],
+): Record<string, NodePos> {
+  const positions: Record<string, NodePos> = {};
+  if (!tables.length) return positions;
+
+  const degree = new Map<string, number>();
+  const connectedTo = new Map<string, Set<string>>();
+  tables.forEach((t) => {
+    degree.set(t.name, 0);
+    connectedTo.set(t.name, new Set());
+  });
+
+  relationships.forEach((r) => {
+    if (degree.has(r.fromTable) && degree.has(r.toTable) && r.fromTable !== r.toTable) {
+      degree.set(r.fromTable, (degree.get(r.fromTable) || 0) + 1);
+      degree.set(r.toTable, (degree.get(r.toTable) || 0) + 1);
+      connectedTo.get(r.fromTable)!.add(r.toTable);
+      connectedTo.get(r.toTable)!.add(r.fromTable);
+    }
+  });
+
+  const factTables = tables
+    .filter((t) => t.type === "Fact")
+    .sort((a, b) => (degree.get(b.name) || 0) - (degree.get(a.name) || 0));
+  const primaryFact =
+    factTables[0] ||
+    [...tables].sort((a, b) => (degree.get(b.name) || 0) - (degree.get(a.name) || 0))[0];
+
+  const connectedDims = tables.filter(
+    (t) => t.name !== primaryFact?.name && (connectedTo.get(t.name)?.size || 0) > 0,
+  );
+  const supportingTables = tables.filter(
+    (t) => t.name !== primaryFact?.name && (connectedTo.get(t.name)?.size || 0) === 0,
+  );
+
+  const leftDims = connectedDims.filter((_, i) => i % 2 === 0);
+  const rightDims = connectedDims.filter((_, i) => i % 2 === 1);
+  const maxSideRows = Math.max(leftDims.length, rightDims.length, 1);
+
+  const leftX = 36;
+  const centerX = leftDims.length > 0 ? 370 : 120;
+  const rightX = 704;
+  const rowStepY = 232;
+
+  leftDims.forEach((t, i) => {
+    positions[t.name] = { x: leftX, y: 32 + i * rowStepY };
+  });
+
+  if (primaryFact) {
+    const centerY = Math.max(40, Math.round(((maxSideRows - 1) * rowStepY) / 2) + 20);
+    positions[primaryFact.name] = { x: centerX, y: centerY };
+  }
+
+  rightDims.forEach((t, i) => {
+    positions[t.name] = { x: rightX, y: 32 + i * rowStepY };
+  });
+
+  const bottomY = 32 + maxSideRows * rowStepY + 24;
+  supportingTables.forEach((t, i) => {
+    const col = i % 3;
+    const row = Math.floor(i / 3);
+    positions[t.name] = {
+      x: leftX + col * (PBI_CARD_W + 96),
+      y: bottomY + row * rowStepY,
+    };
+  });
+
+  return positions;
+}
+
 function InteractivePowerBiModelPanel({
   title,
   tables,
@@ -1582,30 +1668,36 @@ function InteractivePowerBiModelPanel({
   tables: PbiTableWithMeasures[];
   relationships: any[];
 }) {
+  const store = useMigration();
   const [activeTab, setActiveTab] = useState<PbiRelTab>("diagram");
   const [tableSearch, setTableSearch] = useState("");
   const [selectedTableName, setSelectedTableName] = useState<string>("");
   const [selectedRelId, setSelectedRelId] = useState<string>("");
-  const [zoom, setZoom] = useState(0.85);
+  const [expandedCards, setExpandedCards] = useState<Record<string, boolean>>({});
+  const [explorerExpanded, setExplorerExpanded] = useState<Record<string, boolean>>({});
+  const [showExplorer, setShowExplorer] = useState(true);
+  const [showInspector, setShowInspector] = useState(true);
+  const [showValidation, setShowValidation] = useState(true);
+  const [validationFilter, setValidationFilter] = useState<"all" | "error" | "warning" | "info">("all");
+  const [zoom, setZoom] = useState(0.88);
   const [nodePositions, setNodePositions] = useState<Record<string, NodePos>>({});
   const dragRef = useRef<{ name: string; startX: number; startY: number; origX: number; origY: number } | null>(null);
   const canvasViewportRef = useRef<HTMLDivElement>(null);
 
+  const autoArrange = () => {
+    setNodePositions(computeStarSchemaPositions(tables, relationships));
+  };
+
   useEffect(() => {
-    setNodePositions(computeInitialPositions(tables, relationships));
+    autoArrange();
   }, [tables, relationships]);
 
   useEffect(() => {
     if (!tables.length) return;
     if (selectedTableName && tables.some((t) => t.name === selectedTableName)) return;
-    const counts: Record<string, number> = {};
-    relationships.forEach((r) => {
-      counts[r.fromTable] = (counts[r.fromTable] || 0) + 2;
-      counts[r.toTable] = (counts[r.toTable] || 0) + 1;
-    });
-    const best = [...tables].sort((a, b) => (counts[b.name] || 0) - (counts[a.name] || 0))[0];
-    if (best) setSelectedTableName(best.name);
-  }, [tables, relationships, selectedTableName]);
+    const fact = tables.find((t) => t.type === "Fact") || tables[0];
+    if (fact) setSelectedTableName(fact.name);
+  }, [tables, selectedTableName]);
 
   const selectTable = (name: string) => {
     setSelectedTableName(name);
@@ -1613,13 +1705,35 @@ function InteractivePowerBiModelPanel({
     setSelectedRelId(matching ? matching.id : "");
   };
 
+  const getTableRoleLabel = (t: PbiTableWithMeasures): "Fact Table" | "Dimension" | "Date" | "Supporting" => {
+    if (t.type === "Fact") return "Fact Table";
+    if (t.type === "Calendar" || /calendar|date/i.test(t.name)) return "Date";
+    const isConnected = relationships.some((r) => r.fromTable === t.name || r.toTable === t.name);
+    if (!isConnected) return "Supporting";
+    return "Dimension";
+  };
+
+  const getCardHeight = (t: PbiTableWithMeasures) => {
+    const isExp = Boolean(expandedCards[t.name]);
+    const colCount = isExp ? t.columns.length : Math.min(5, t.columns.length);
+    const measureCount = isExp ? (t.measures?.length || 0) : Math.min(2, t.measures?.length || 0);
+    const hasMore = !isExp && (t.columns.length > 5 || (t.measures?.length || 0) > 2);
+    return 40 + (colCount + measureCount) * 24 + (hasMore ? 24 : 8);
+  };
+
   const canvasBounds = useMemo(() => {
-    const vals = Object.values(nodePositions);
-    if (!vals.length) return { width: 900, height: 520 };
-    const maxX = Math.max(...vals.map((p) => p.x)) + PBI_CARD_W + 40;
-    const maxY = Math.max(...vals.map((p) => p.y)) + PBI_CARD_H + 40;
-    return { width: Math.max(760, maxX), height: Math.max(460, maxY) };
-  }, [nodePositions]);
+    const vals = Object.entries(nodePositions);
+    if (!vals.length) return { width: 960, height: 540 };
+    let maxX = 940;
+    let maxY = 500;
+    for (const [name, pos] of vals) {
+      const tbl = tables.find((t) => t.name === name);
+      const h = tbl ? getCardHeight(tbl) : PBI_CARD_H;
+      maxX = Math.max(maxX, pos.x + PBI_CARD_W + 48);
+      maxY = Math.max(maxY, pos.y + h + 48);
+    }
+    return { width: maxX, height: maxY };
+  }, [nodePositions, tables, expandedCards]);
 
   const fitToView = () => {
     const el = canvasViewportRef.current;
@@ -1627,9 +1741,9 @@ function InteractivePowerBiModelPanel({
       setZoom(0.85);
       return;
     }
-    const availW = Math.max(320, el.clientWidth - 24);
-    const availH = Math.max(320, el.clientHeight - 24);
-    const ratio = Math.min(1, availW / canvasBounds.width, availH / canvasBounds.height);
+    const availW = Math.max(320, el.clientWidth - 28);
+    const availH = Math.max(320, el.clientHeight - 28);
+    const ratio = Math.min(1.02, availW / canvasBounds.width, availH / canvasBounds.height);
     setZoom(Math.max(0.45, +ratio.toFixed(2)));
   };
 
@@ -1666,154 +1780,387 @@ function InteractivePowerBiModelPanel({
     window.addEventListener("mouseup", handleUp);
   };
 
+  const q = tableSearch.trim().toLowerCase();
   const filteredTables = useMemo(() => {
-    const q = tableSearch.trim().toLowerCase();
     if (!q) return tables;
-    return tables.filter((t) => t.name.toLowerCase().includes(q));
-  }, [tables, tableSearch]);
+    return tables.filter(
+      (t) =>
+        t.name.toLowerCase().includes(q) ||
+        t.columns.some((c) => c.name.toLowerCase().includes(q)),
+    );
+  }, [tables, q]);
 
-  const keyColsSet = useMemo(() => {
-    const s = new Set<string>();
+  const { pkSet, fkSet, relColSet } = useMemo(() => {
+    const pk = new Set<string>();
+    const fk = new Set<string>();
+    const rel = new Set<string>();
     tables.forEach((t) => {
-      (t.keys || []).forEach((k) => s.add(`${t.name}.${k}`));
+      (t.keys || []).forEach((k) => pk.add(`${t.name}.${k}`));
     });
     relationships.forEach((r) => {
-      if (r.fromTable && r.fromColumn) s.add(`${r.fromTable}.${r.fromColumn}`);
-      if (r.toTable && r.toColumn) s.add(`${r.toTable}.${r.toColumn}`);
+      if (r.fromTable && r.fromColumn) {
+        rel.add(`${r.fromTable}.${r.fromColumn}`);
+        if (!pk.has(`${r.fromTable}.${r.fromColumn}`)) fk.add(`${r.fromTable}.${r.fromColumn}`);
+      }
+      if (r.toTable && r.toColumn) {
+        rel.add(`${r.toTable}.${r.toColumn}`);
+        pk.add(`${r.toTable}.${r.toColumn}`);
+      }
     });
-    return s;
+    return { pkSet: pk, fkSet: fk, relColSet: rel };
   }, [tables, relationships]);
 
-  const factTablesSet = useMemo(() => {
-    const s = new Set<string>();
-    tables.forEach((t) => {
-      if (t.type === "Fact") s.add(t.name);
-    });
+  // Build real validation results from tables, keys, relationships, and store diagnostics
+  const validationItems = useMemo<StarValidationItem[]>(() => {
+    const items: StarValidationItem[] = [];
+    const mainFact = tables.find((t) => t.type === "Fact");
+
+    // 1. Relationship checks (valid, unmatched columns, self/circular)
+    const pairCounts = new Map<string, number>();
     relationships.forEach((r) => {
-      if (r.fromTable) s.add(r.fromTable);
+      const pairKey = [r.fromTable, r.toTable].sort().join("::");
+      pairCounts.set(pairKey, (pairCounts.get(pairKey) || 0) + 1);
     });
-    return s;
+
+    relationships.forEach((r) => {
+      const ft = tables.find((t) => t.name === r.fromTable);
+      const tt = tables.find((t) => t.name === r.toTable);
+      const fcExists = ft?.columns.some((c) => c.name === r.fromColumn);
+      const tcExists = tt?.columns.some((c) => c.name === r.toColumn);
+      const pairKey = [r.fromTable, r.toTable].sort().join("::");
+      const isAmbiguous = (pairCounts.get(pairKey) || 0) > 1 && r.active !== false;
+
+      if (!ft || !tt || !fcExists || !tcExists) {
+        items.push({
+          id: `rel-invalid-${r.id}`,
+          severity: "error",
+          workflowStep: "Star Schema",
+          tableOrComponent: `${r.fromTable}.${r.fromColumn} → ${r.toTable}.${r.toColumn}`,
+          column: r.fromColumn,
+          issue: "Unmatched relationship column",
+          reason: "The source or target column does not exist in the Power BI model table.",
+          suggestedFix: "Update the relationship column mapping in Relationships or re-run ETL Analysis.",
+          status: "Open",
+          relId: r.id,
+        });
+      } else if (r.fromTable === r.toTable) {
+        items.push({
+          id: `rel-circular-${r.id}`,
+          severity: "warning",
+          workflowStep: "Star Schema",
+          tableOrComponent: r.fromTable,
+          column: r.fromColumn,
+          issue: "Circular / self-referencing relationship",
+          reason: "A table cannot have an active relationship to itself in Power BI.",
+          suggestedFix: "Create a role-playing dimension or mark the relationship inactive.",
+          status: "Open",
+          relId: r.id,
+        });
+      } else if (isAmbiguous) {
+        items.push({
+          id: `rel-ambig-${r.id}`,
+          severity: "warning",
+          workflowStep: "Star Schema",
+          tableOrComponent: `${r.fromTable} ↔ ${r.toTable}`,
+          column: r.fromColumn,
+          issue: "Ambiguous active relationship path",
+          reason: "Multiple active relationships exist between the same pair of tables.",
+          suggestedFix: "Keep one primary relationship active and set secondary paths inactive for USERELATIONSHIP().",
+          status: "Open",
+          relId: r.id,
+        });
+      }
+    });
+
+    // 2. Missing / duplicate keys & supporting disconnected tables
+    tables.forEach((t) => {
+      const role = getTableRoleLabel(t);
+      const colNames = t.columns.map((c) => c.name.toLowerCase());
+      const hasDuplicates = new Set(colNames).size !== colNames.length;
+      if (hasDuplicates) {
+        items.push({
+          id: `tbl-dup-${t.name}`,
+          severity: "error",
+          workflowStep: "Star Schema",
+          tableOrComponent: t.name,
+          issue: "Duplicate column names detected",
+          reason: `Table '${t.name}' contains duplicate column names which Power BI Semantic Model rejects.`,
+          suggestedFix: "Rename or deduplicate the affected columns in ETL Analysis or Power Query.",
+          status: "Open",
+        });
+      }
+      if ((role === "Dimension" || role === "Date") && (t.keys || []).length === 0) {
+        items.push({
+          id: `tbl-nokey-${t.name}`,
+          severity: "warning",
+          workflowStep: "Star Schema",
+          tableOrComponent: t.name,
+          issue: "No row identifier designated",
+          reason: `Lookup-side table '${t.name}' has no primary key column marked for 1-side relationships.`,
+          suggestedFix: "Select the unique key column in Tables & Keys or verify its key column.",
+          status: "Open",
+        });
+      }
+      if (role === "Supporting" && !/qlik variables/i.test(t.name)) {
+        items.push({
+          id: `tbl-disc-${t.name}`,
+          severity: "warning",
+          workflowStep: "Star Schema",
+          tableOrComponent: t.name,
+          issue: mainFact ? `No direct relationship with ${mainFact.name}` : "Disconnected supporting table",
+          reason: `${t.name} table is not connected to the main fact table.`,
+          suggestedFix: "Check if this table is required or create a proper relationship.",
+          status: "Open",
+        });
+      }
+    });
+
+    if (items.length === 0) {
+      items.push({
+        id: "star-valid-summary",
+        severity: "info",
+        workflowStep: "Star Schema",
+        tableOrComponent: "All Tables & Relationships",
+        issue: `${relationships.length} valid relationship(s) verified`,
+        reason: "All star-schema tables, keys, and single-direction relationships passed validation.",
+        suggestedFix: "No action required — ready for PBIP export.",
+        status: "Valid",
+      });
+    }
+
+    return items;
   }, [tables, relationships]);
+
+  const filteredValidationItems = useMemo(() => {
+    if (validationFilter === "all") return validationItems;
+    return validationItems.filter((item) => item.severity === validationFilter);
+  }, [validationItems, validationFilter]);
+
+  const errCount = validationItems.filter((i) => i.severity === "error").length;
+  const warnCount = validationItems.filter((i) => i.severity === "warning").length;
+  const infoCount = validationItems.filter((i) => i.severity === "info").length;
+  const validRelCount = relationships.filter((r) => {
+    const ft = tables.find((t) => t.name === r.fromTable);
+    const tt = tables.find((t) => t.name === r.toTable);
+    return ft?.columns.some((c) => c.name === r.fromColumn) && tt?.columns.some((c) => c.name === r.toColumn);
+  }).length;
+
+  const selectedRel = useMemo(
+    () => relationships.find((r) => r.id === selectedRelId) || null,
+    [relationships, selectedRelId],
+  );
+
+  const selectedStoreRel = useMemo(
+    () => store.powerBiModel?.relationships.find((r) => r.id === selectedRelId) || null,
+    [store.powerBiModel, selectedRelId],
+  );
+
+  const handleApproveRelationship = (relId: string) => {
+    const res = store.updateRelationship(relId, { userApproved: true, active: true });
+    if (res.ok) {
+      toast.success("Relationship approved and active in Power BI model");
+    } else {
+      toast.warning("Relationship review required", { description: res.messages.join("; ") });
+    }
+  };
+
+  const handleRefreshModel = () => {
+    store.initializePowerBiModel();
+    autoArrange();
+    setTimeout(fitToView, 50);
+    toast.success("Power BI Star Schema model refreshed");
+  };
 
   return (
     <div className="surface-card overflow-hidden flex flex-col">
-      {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3 border-b border-border bg-surface-elevated">
-        <div className="flex items-center gap-2">
-          <Layers className="h-4 w-4 text-primary" />
-          <span className="font-semibold text-sm">{title}</span>
-        </div>
-        <span className="chip text-[10px]">{tables.length} Active Tables</span>
-      </div>
-
-      {/* Tabs Row */}
-      <div className="flex flex-wrap items-center gap-2 px-4 py-2.5 border-b border-border bg-surface/60">
-        <button
-          type="button"
-          onClick={() => setActiveTab("diagram")}
-          className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors cursor-pointer ${
-            activeTab === "diagram" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-          }`}
-        >
-          <GitBranch className="h-3.5 w-3.5" />
-          <span>Model Diagram</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab("list")}
-          className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors cursor-pointer ${
-            activeTab === "list" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-          }`}
-        >
-          <Link2 className="h-3.5 w-3.5" />
-          <span>Relationships ({relationships.length})</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab("tables")}
-          className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors cursor-pointer ${
-            activeTab === "tables" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-          }`}
-        >
-          <Table2 className="h-3.5 w-3.5" />
-          <span>Tables &amp; Columns</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab("properties")}
-          className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors cursor-pointer ${
-            activeTab === "properties" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-          }`}
-        >
-          <Settings className="h-3.5 w-3.5" />
-          <span>Model Properties</span>
-        </button>
-      </div>
-
-      {/* TAB 1: MODEL DIAGRAM */}
-      {activeTab === "diagram" && (
-        <div className="grid grid-cols-1 lg:grid-cols-[220px_1fr] min-h-[540px]">
-          {/* Left Tables Sidebar */}
-          <div className="border-b lg:border-b-0 lg:border-r border-border bg-surface/50 p-3 flex flex-col gap-2.5">
-            <div className="text-xs font-bold text-foreground">Tables ({tables.length})</div>
-            <div className="relative">
-              <Search className="h-3.5 w-3.5 text-muted-foreground absolute left-2.5 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                value={tableSearch}
-                onChange={(e) => setTableSearch(e.target.value)}
-                placeholder="Search tables..."
-                className="w-full rounded-lg border border-border bg-background pl-8 pr-2.5 py-1.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
-              />
+      {/* Header + KPI Stats */}
+      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-b border-border bg-surface-elevated">
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="flex items-center gap-2.5">
+            <div className="grid h-8 w-8 place-items-center rounded-lg bg-primary/10 text-primary">
+              <GitBranch className="h-4 w-4" />
             </div>
-            <div className="flex-1 overflow-y-auto space-y-1 max-h-[440px]">
-              {filteredTables.map((t) => {
-                const isSelected = selectedTableName === t.name;
-                return (
-                  <button
-                    key={t.name}
-                    type="button"
-                    onClick={() => selectTable(t.name)}
-                    className={`w-full flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs font-medium transition-colors cursor-pointer ${
-                      isSelected
-                        ? "bg-primary/10 text-primary border border-primary/30 font-semibold"
-                        : "text-foreground/80 hover:bg-muted/60 border border-transparent"
-                    }`}
-                  >
-                    <Table2 className="h-3.5 w-3.5 text-primary shrink-0" />
-                    <span className="truncate" title={t.name}>{t.name}</span>
-                  </button>
-                );
-              })}
+            <div>
+              <h4 className="font-display font-bold text-sm text-foreground leading-tight">{title}</h4>
+              <p className="text-[11px] text-muted-foreground">Interactive Star Schema view of your Power BI data model</p>
             </div>
           </div>
 
-          {/* Center Interactive Canvas */}
-          <div className="flex flex-col min-w-0">
-            <div className="relative flex-1 min-h-[480px] overflow-auto bg-[radial-gradient(#e2e8f0_1px,transparent_1px)] dark:bg-[radial-gradient(#334155_1px,transparent_1px)] [background-size:20px_20px]" ref={canvasViewportRef}>
-              {/* Top-Right Controls */}
-              <div className="sticky top-3 float-right mr-3 z-20 flex flex-col gap-1 rounded-xl border border-border bg-background/95 p-1 shadow-sm backdrop-blur-xs">
-                <button type="button" onClick={fitToView} title="Fit all tables to view" className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground cursor-pointer">
-                  <Maximize2 className="h-3.5 w-3.5" />
-                </button>
-                <button type="button" onClick={() => setZoom((z) => Math.min(1.25, +(z + 0.1).toFixed(2)))} title="Zoom in" className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground cursor-pointer">
-                  <ZoomIn className="h-3.5 w-3.5" />
-                </button>
-                <button type="button" onClick={() => setZoom((z) => Math.max(0.4, +(z - 0.1).toFixed(2)))} title="Zoom out" className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground cursor-pointer">
-                  <ZoomOut className="h-3.5 w-3.5" />
-                </button>
-                <button type="button" onClick={() => setNodePositions(computeInitialPositions(tables, relationships))} title="Reset layout" className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground cursor-pointer">
-                  <RotateCcw className="h-3.5 w-3.5" />
-                </button>
-              </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 py-1 text-xs">
+              <Table2 className="h-3.5 w-3.5 text-primary" />
+              <span className="text-muted-foreground">Total Tables</span>
+              <strong className="text-foreground">{tables.length}</strong>
+            </div>
+            <div className="flex items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 py-1 text-xs">
+              <Link2 className="h-3.5 w-3.5 text-primary" />
+              <span className="text-muted-foreground">Total Relationships</span>
+              <strong className="text-foreground">{relationships.length}</strong>
+            </div>
+            <div className="flex items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 py-1 text-xs">
+              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+              <span className="text-muted-foreground">Valid Relationships</span>
+              <strong className="text-foreground">{validRelCount}</strong>
+            </div>
+          </div>
+        </div>
 
+        {/* Tabs */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          {(
+            [
+              { id: "diagram", label: "Star Schema", icon: GitBranch },
+              { id: "list", label: `Relationships (${relationships.length})`, icon: Link2 },
+              { id: "tables", label: "Tables & Columns", icon: Table2 },
+              { id: "properties", label: "Model Properties", icon: Settings },
+            ] as const
+          ).map((tab) => {
+            const Icon = tab.icon;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id)}
+                className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors cursor-pointer ${
+                  activeTab === tab.id
+                    ? "bg-primary text-primary-foreground shadow-xs"
+                    : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                }`}
+              >
+                <Icon className="h-3.5 w-3.5" />
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Top Toolbar (Search + Canvas Actions) */}
+      {activeTab === "diagram" && (
+        <div className="flex flex-wrap items-center gap-2 px-4 py-2 border-b border-border bg-surface/60 text-xs">
+          <div className="relative w-full sm:w-56">
+            <Search className="h-3.5 w-3.5 text-muted-foreground absolute left-2.5 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={tableSearch}
+              onChange={(e) => setTableSearch(e.target.value)}
+              placeholder="Search Tables / Columns..."
+              className="w-full rounded-lg border border-border bg-background pl-8 pr-2.5 py-1 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+            />
+          </div>
+          <button type="button" onClick={autoArrange} className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 py-1 font-medium hover:bg-muted cursor-pointer">
+            <GitBranch className="h-3.5 w-3.5 text-primary" /> Auto Arrange
+          </button>
+          <button type="button" onClick={() => setZoom((z) => Math.min(1.25, +(z + 0.1).toFixed(2)))} className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 py-1 font-medium hover:bg-muted cursor-pointer">
+            <ZoomIn className="h-3.5 w-3.5 text-primary" /> Zoom In
+          </button>
+          <button type="button" onClick={() => setZoom((z) => Math.max(0.45, +(z - 0.1).toFixed(2)))} className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 py-1 font-medium hover:bg-muted cursor-pointer">
+            <ZoomOut className="h-3.5 w-3.5 text-primary" /> Zoom Out
+          </button>
+          <button type="button" onClick={fitToView} className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 py-1 font-medium hover:bg-muted cursor-pointer">
+            <Maximize2 className="h-3.5 w-3.5 text-primary" /> Fit to Screen
+          </button>
+          <button type="button" onClick={autoArrange} className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 py-1 font-medium hover:bg-muted cursor-pointer">
+            <RotateCcw className="h-3.5 w-3.5 text-primary" /> Reset Layout
+          </button>
+          <button type="button" onClick={handleRefreshModel} className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 py-1 font-medium hover:bg-muted cursor-pointer">
+            <RefreshCw className="h-3.5 w-3.5 text-primary" /> Refresh Model
+          </button>
+          <div className="ml-auto flex items-center gap-1.5">
+            <button type="button" onClick={() => setShowExplorer((v) => !v)} className="rounded-lg border border-border bg-background px-2 py-1 text-[11px] font-medium hover:bg-muted cursor-pointer">
+              {showExplorer ? "Hide Explorer" : "Show Explorer"}
+            </button>
+            <button type="button" onClick={() => setShowInspector((v) => !v)} className="rounded-lg border border-border bg-background px-2 py-1 text-[11px] font-medium hover:bg-muted cursor-pointer">
+              {showInspector ? "Hide Inspector" : "Show Inspector"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 1: STAR SCHEMA DIAGRAM */}
+      {activeTab === "diagram" && (
+        <div
+          className={`grid grid-cols-1 min-h-[520px] ${
+            showExplorer && showInspector
+              ? "lg:grid-cols-[230px_1fr_270px]"
+              : showExplorer
+              ? "lg:grid-cols-[230px_1fr]"
+              : showInspector
+              ? "lg:grid-cols-[1fr_270px]"
+              : ""
+          }`}
+        >
+          {/* Left Table Explorer */}
+          {showExplorer && (
+            <aside className="border-b lg:border-b-0 lg:border-r border-border bg-surface/50 p-3 flex flex-col gap-2 max-h-[560px] overflow-y-auto">
+              <div className="flex items-center justify-between text-xs font-bold text-foreground">
+                <span>Table Explorer ({filteredTables.length})</span>
+              </div>
+              <div className="space-y-1">
+                {filteredTables.map((t) => {
+                  const role = getTableRoleLabel(t);
+                  const isSelected = selectedTableName === t.name;
+                  const isExp = Boolean(explorerExpanded[t.name]);
+                  const hasRel = relationships.some((r) => r.fromTable === t.name || r.toTable === t.name);
+                  return (
+                    <div key={t.name} className="rounded-lg border border-border/50 bg-background/70 overflow-hidden">
+                      <div
+                        className={`flex items-center justify-between gap-1.5 px-2 py-1.5 text-xs cursor-pointer ${
+                          isSelected ? "bg-primary/10 text-primary font-semibold" : "hover:bg-muted/50 text-foreground"
+                        }`}
+                        onClick={() => selectTable(t.name)}
+                      >
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setExplorerExpanded((prev) => ({ ...prev, [t.name]: !isExp }));
+                            }}
+                            className="p-0.5 text-muted-foreground hover:text-foreground cursor-pointer"
+                          >
+                            {isExp ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                          </button>
+                          <Table2 className="h-3.5 w-3.5 text-primary shrink-0" />
+                          <span className="truncate" title={t.name}>{t.name}</span>
+                        </div>
+                        <span
+                          className={`h-2 w-2 rounded-full shrink-0 ${hasRel ? "bg-emerald-500" : "bg-amber-400"}`}
+                          title={hasRel ? "Connected in Star Schema" : `${role} (unconnected)`}
+                        />
+                      </div>
+                      {isExp && (
+                        <div className="border-t border-border/40 px-2.5 py-1.5 space-y-1 bg-surface/40 text-[11px]">
+                          <div className="text-[10px] font-semibold text-muted-foreground uppercase">{role} · {t.columns.length} cols</div>
+                          {t.columns.map((c, idx) => (
+                            <div key={`${c.name}-${idx}`} className="flex items-center gap-1.5 text-foreground/80 truncate">
+                              {pkSet.has(`${t.name}.${c.name}`) ? (
+                                <KeyRound className="h-3 w-3 text-amber-500 shrink-0" />
+                              ) : relColSet.has(`${t.name}.${c.name}`) ? (
+                                <Link2 className="h-3 w-3 text-blue-500 shrink-0" />
+                              ) : (
+                                <span className="h-1 w-1 rounded-full bg-muted-foreground/40 mx-1 shrink-0" />
+                              )}
+                              <span className="truncate">{c.name}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </aside>
+          )}
+
+          {/* Central Star Schema Canvas */}
+          <div className="flex flex-col min-w-0">
+            <div
+              ref={canvasViewportRef}
+              className="relative flex-1 min-h-[480px] max-h-[560px] overflow-auto bg-[radial-gradient(#e2e8f0_1px,transparent_1px)] dark:bg-[radial-gradient(#334155_1px,transparent_1px)] [background-size:20px_20px]"
+            >
               {tables.length > 0 ? (
-                <div
-                  style={{
-                    width: canvasBounds.width * zoom,
-                    height: canvasBounds.height * zoom,
-                  }}
-                >
+                <div style={{ width: canvasBounds.width * zoom, height: canvasBounds.height * zoom }}>
                   <div
                     className="relative"
                     style={{
@@ -1829,10 +2176,15 @@ function InteractivePowerBiModelPanel({
                         const p2 = nodePositions[r.toTable];
                         if (!p1 || !p2) return null;
 
+                        const t1 = tables.find((t) => t.name === r.fromTable);
+                        const t2 = tables.find((t) => t.name === r.toTable);
+                        const h1 = t1 ? getCardHeight(t1) : PBI_CARD_H;
+                        const h2 = t2 ? getCardHeight(t2) : PBI_CARD_H;
+
                         const c1x = p1.x + PBI_CARD_W / 2;
-                        const c1y = p1.y + PBI_CARD_H / 2;
+                        const c1y = p1.y + h1 / 2;
                         const c2x = p2.x + PBI_CARD_W / 2;
-                        const c2y = p2.y + PBI_CARD_H / 2;
+                        const c2y = p2.y + h2 / 2;
                         const dx = c2x - c1x;
                         const dy = c2y - c1y;
 
@@ -1845,8 +2197,8 @@ function InteractivePowerBiModelPanel({
                           x1 = dx >= 0 ? p1.x + PBI_CARD_W : p1.x;
                           x2 = dx >= 0 ? p2.x : p2.x + PBI_CARD_W;
                         } else {
-                          y1 = dy >= 0 ? p1.y + PBI_CARD_H : p1.y;
-                          y2 = dy >= 0 ? p2.y : p2.y + PBI_CARD_H;
+                          y1 = dy >= 0 ? p1.y + h1 : p1.y;
+                          y2 = dy >= 0 ? p2.y : p2.y + h2;
                         }
 
                         const midX = (x1 + x2) / 2;
@@ -1861,12 +2213,8 @@ function InteractivePowerBiModelPanel({
                           r.fromTable === selectedTableName ||
                           r.toTable === selectedTableName;
 
-                        const fromLabel = r.cardinality === "1:1" ? "1" : "*";
-                        const toLabel = "1";
-                        const lbl1X = x1 + (x2 - x1) * 0.14;
-                        const lbl1Y = y1 + (y2 - y1) * 0.14;
-                        const lbl2X = x2 - (x2 - x1) * 0.14;
-                        const lbl2Y = y2 - (y2 - y1) * 0.14;
+                        const badgeText = r.cardinality === "1:1" ? "1 — 1" : r.cardinality === "N:N" ? "∞ — ∞" : "1 — ∞";
+                        const stroke = isHighlighted ? "#16a34a" : "#22c55e";
 
                         return (
                           <g
@@ -1875,24 +2223,24 @@ function InteractivePowerBiModelPanel({
                             onClick={() => {
                               setSelectedRelId(r.id);
                               if (r.fromTable) setSelectedTableName(r.fromTable);
+                              setShowInspector(true);
                             }}
                           >
                             <path d={pathD} fill="none" stroke="transparent" strokeWidth={12} />
                             <path
                               d={pathD}
                               fill="none"
-                              stroke={isHighlighted ? "#4f46e5" : "#94a3b8"}
-                              strokeWidth={isHighlighted ? 2.2 : 1.5}
-                              opacity={isHighlighted ? 1 : 0.6}
+                              stroke={stroke}
+                              strokeWidth={isHighlighted ? 2.4 : 1.65}
+                              strokeDasharray={r.active === false ? "5 4" : undefined}
+                              opacity={isHighlighted ? 1 : 0.72}
                             />
-                            <circle cx={lbl1X} cy={lbl1Y} r={9.5} fill="#ffffff" stroke={isHighlighted ? "#4f46e5" : "#94a3b8"} strokeWidth={1.3} />
-                            <text x={lbl1X} y={lbl1Y + 3.5} textAnchor="middle" fontSize="10" fontWeight="bold" fill="#334155">
-                              {fromLabel}
-                            </text>
-                            <circle cx={lbl2X} cy={lbl2Y} r={9.5} fill="#ffffff" stroke={isHighlighted ? "#4f46e5" : "#94a3b8"} strokeWidth={1.3} />
-                            <text x={lbl2X} y={lbl2Y + 3.5} textAnchor="middle" fontSize="10" fontWeight="bold" fill="#334155">
-                              {toLabel}
-                            </text>
+                            <g transform={`translate(${midX}, ${midY})`}>
+                              <rect x={-22} y={-10} width={44} height={20} rx={6} fill="#ffffff" stroke={stroke} strokeWidth={1.2} />
+                              <text x={0} y={3.5} textAnchor="middle" fontSize="9.5" fontWeight="bold" fill="#166534">
+                                {badgeText}
+                              </text>
+                            </g>
                           </g>
                         );
                       })}
@@ -1900,45 +2248,82 @@ function InteractivePowerBiModelPanel({
 
                     {tables.map((t) => {
                       const pos = nodePositions[t.name] || { x: 24, y: 24 };
+                      const role = getTableRoleLabel(t);
                       const isSelected = selectedTableName === t.name;
-                      const isFact = factTablesSet.has(t.name);
-                      const visibleCols = (t.columns || []).slice(0, 5);
-                      const visibleMeasures = (t.measures || []).slice(0, 2);
+                      const isExp = Boolean(expandedCards[t.name]);
+                      const visibleCols = isExp ? t.columns : t.columns.slice(0, 5);
+                      const visibleMeasures = isExp ? (t.measures || []) : (t.measures || []).slice(0, 2);
                       const extraCount =
-                        Math.max(0, (t.columns || []).length - visibleCols.length) +
-                        Math.max(0, (t.measures || []).length - visibleMeasures.length);
+                        Math.max(0, t.columns.length - visibleCols.length) +
+                        Math.max(0, (t.measures?.length || 0) - visibleMeasures.length);
+                      const matches =
+                        !q ||
+                        t.name.toLowerCase().includes(q) ||
+                        t.columns.some((c) => c.name.toLowerCase().includes(q));
+
+                      const headerClass =
+                        role === "Fact Table"
+                          ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white"
+                          : role === "Date"
+                          ? "bg-gradient-to-r from-teal-600 to-cyan-600 text-white"
+                          : role === "Supporting"
+                          ? "bg-gradient-to-r from-violet-600 to-purple-600 text-white"
+                          : "bg-gradient-to-r from-sky-600 to-blue-500 text-white";
 
                       return (
                         <div
                           key={t.name}
                           onMouseDown={(e) => onNodeMouseDown(e, t.name)}
                           style={{ left: pos.x, top: pos.y, width: PBI_CARD_W }}
-                          className={`absolute rounded-xl border bg-background shadow-sm select-none cursor-grab active:cursor-grabbing overflow-hidden transition-shadow ${
+                          className={`absolute rounded-xl border bg-background shadow-sm select-none cursor-grab active:cursor-grabbing overflow-hidden transition-all ${
                             isSelected ? "ring-2 ring-primary border-primary shadow-md" : "border-border hover:border-primary/50"
-                          }`}
+                          } ${!matches ? "opacity-35" : "opacity-100"}`}
                         >
-                          <div
-                            className={`flex items-center gap-1.5 px-3 py-2 text-xs font-bold ${
-                              isFact
-                                ? "bg-gradient-to-r from-indigo-600 to-violet-600 text-white"
-                                : "bg-sky-50 dark:bg-sky-950/50 text-sky-950 dark:text-sky-100 border-b border-border/60"
-                            }`}
-                          >
-                            <Table2 className="h-3.5 w-3.5 shrink-0" />
-                            <span className="truncate" title={t.name}>{t.name}</span>
+                          <div className={`flex items-center justify-between gap-1.5 px-3 py-2 text-xs font-bold ${headerClass}`}>
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <Table2 className="h-3.5 w-3.5 shrink-0" />
+                              <span className="truncate" title={t.name}>{t.name}</span>
+                              <span className="text-[9px] font-medium bg-white/20 px-1.5 py-0.5 rounded shrink-0">
+                                {role === "Fact Table" ? "Fact" : role}
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onMouseDown={(e) => e.stopPropagation()}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setExpandedCards((prev) => ({ ...prev, [t.name]: !isExp }));
+                              }}
+                              className="p-0.5 rounded hover:bg-white/20 cursor-pointer"
+                            >
+                              {isExp ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                            </button>
                           </div>
+
                           <div className="divide-y divide-border/40 text-[11px] bg-background">
                             {visibleCols.map((c, idx) => {
                               const colName = String(c.name || c);
-                              const isKey = keyColsSet.has(`${t.name}.${colName}`);
+                              const isPk = pkSet.has(`${t.name}.${colName}`);
+                              const isFk = fkSet.has(`${t.name}.${colName}`);
+                              const inRel = relColSet.has(`${t.name}.${colName}`);
                               return (
-                                <div key={`${colName}-${idx}`} className="flex items-center gap-1.5 px-2.5 py-1 text-foreground/85">
-                                  {isKey ? (
-                                    <KeyRound className="h-3 w-3 text-amber-500 shrink-0" />
-                                  ) : (
-                                    <span className="w-3 shrink-0" />
-                                  )}
-                                  <span className="truncate">{colName}</span>
+                                <div
+                                  key={`${colName}-${idx}`}
+                                  className={`flex items-center justify-between gap-1.5 px-2.5 py-1 ${
+                                    inRel ? "bg-emerald-500/5 font-medium" : ""
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-1.5 min-w-0">
+                                    {isPk ? (
+                                      <KeyRound className="h-3 w-3 text-amber-500 shrink-0" />
+                                    ) : isFk || inRel ? (
+                                      <Link2 className="h-3 w-3 text-blue-500 shrink-0" />
+                                    ) : (
+                                      <span className="w-3 shrink-0" />
+                                    )}
+                                    <span className="truncate">{colName}</span>
+                                  </div>
+                                  <span className="text-[9px] text-muted-foreground shrink-0">{c.dataType}</span>
                                 </div>
                               );
                             })}
@@ -1949,9 +2334,17 @@ function InteractivePowerBiModelPanel({
                               </div>
                             ))}
                             {extraCount > 0 && (
-                              <div className="px-2.5 py-1 text-[10px] text-muted-foreground text-center bg-muted/30">
-                                +{extraCount} more fields
-                              </div>
+                              <button
+                                type="button"
+                                onMouseDown={(e) => e.stopPropagation()}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setExpandedCards((prev) => ({ ...prev, [t.name]: true }));
+                                }}
+                                className="w-full px-2.5 py-1 text-[10px] text-primary hover:bg-muted/30 text-left cursor-pointer"
+                              >
+                                +{extraCount} more ({t.columns.length} cols)
+                              </button>
                             )}
                           </div>
                         </div>
@@ -1964,36 +2357,74 @@ function InteractivePowerBiModelPanel({
               )}
             </div>
 
-            {/* Bottom Legend Bar */}
-            <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 border-t border-border bg-surface-elevated text-[11px] text-muted-foreground">
+            {/* Legend */}
+            <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2 border-t border-border bg-surface-elevated text-[11px] text-muted-foreground">
               <div className="flex flex-wrap items-center gap-3">
-                <span className="font-semibold text-foreground">Legend:</span>
-                <span className="inline-flex items-center gap-1.5">
-                  <span className="h-2.5 w-2.5 rounded-xs bg-indigo-600 inline-block" /> Fact / Source Table
-                </span>
-                <span className="inline-flex items-center gap-1.5">
-                  <span className="h-2.5 w-2.5 rounded-xs bg-sky-200 border border-sky-400 inline-block" /> Dimension Table
-                </span>
-                <span className="inline-flex items-center gap-1.5">
-                  <span className="h-0.5 w-3.5 bg-indigo-500 inline-block" /> Relationship ({relationships.length})
-                </span>
-                <span className="inline-flex items-center gap-1">
-                  <span className="inline-grid h-4 w-4 place-items-center rounded-full border border-border bg-background text-[10px] font-bold text-foreground">1</span> One
-                </span>
-                <span className="inline-flex items-center gap-1">
-                  <span className="inline-grid h-4 w-4 place-items-center rounded-full border border-border bg-background text-[10px] font-bold text-foreground">*</span> Many
-                </span>
-                <span className="hidden sm:inline text-muted-foreground/80">Tip: Drag tables to arrange</span>
+                <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-xs bg-indigo-600 inline-block" /> Fact Table</span>
+                <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-xs bg-sky-500 inline-block" /> Dimension</span>
+                <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-xs bg-teal-600 inline-block" /> Date</span>
+                <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-xs bg-violet-600 inline-block" /> Supporting</span>
+                <span className="inline-flex items-center gap-1"><span className="h-0.5 w-3.5 bg-emerald-500 inline-block" /> 1 — ∞ Relationship</span>
               </div>
-              <button
-                type="button"
-                onClick={fitToView}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 py-1 text-[11px] font-medium text-foreground hover:bg-muted cursor-pointer"
-              >
-                <Maximize2 className="h-3 w-3" /> Fit to View ({Math.round(zoom * 100)}%)
-              </button>
+              <span className="text-[11px]">Zoom: {Math.round(zoom * 100)}%</span>
             </div>
           </div>
+
+          {/* Right Relationship Inspector */}
+          {showInspector && (
+            <aside className="border-t lg:border-t-0 lg:border-l border-border bg-surface/60 flex flex-col">
+              <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-border bg-surface-elevated">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-foreground">
+                  <Link2 className="h-3.5 w-3.5 text-primary" />
+                  <span>Relationship Details</span>
+                </div>
+                <button type="button" onClick={() => setShowInspector(false)} className="p-1 rounded hover:bg-muted text-muted-foreground cursor-pointer">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+
+              {selectedRel ? (
+                <div className="p-3.5 space-y-2.5 text-xs">
+                  <div className="flex justify-between gap-2"><span className="text-muted-foreground">Source Table</span><strong className="text-foreground">{selectedRel.fromTable}</strong></div>
+                  <div className="flex justify-between gap-2"><span className="text-muted-foreground">Source Column</span><strong className="font-mono text-primary">{selectedRel.fromColumn}</strong></div>
+                  <div className="flex justify-between gap-2"><span className="text-muted-foreground">Target Table</span><strong className="text-foreground">{selectedRel.toTable}</strong></div>
+                  <div className="flex justify-between gap-2"><span className="text-muted-foreground">Target Column</span><strong className="font-mono text-primary">{selectedRel.toColumn}</strong></div>
+                  <div className="flex justify-between gap-2 items-center">
+                    <span className="text-muted-foreground">Cardinality</span>
+                    <span className="rounded-md border border-border bg-background px-2 py-0.5 text-[11px] font-semibold">
+                      {selectedRel.cardinality === "1:1" ? "One to One" : selectedRel.cardinality === "N:N" ? "Many to Many" : "One to Many"}
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-2 items-center">
+                    <span className="text-muted-foreground">Filter Direction</span>
+                    <span className="rounded-md border border-border bg-background px-2 py-0.5 text-[11px] font-semibold">Single</span>
+                  </div>
+                  <div className="flex justify-between gap-2 items-center">
+                    <span className="text-muted-foreground">Status</span>
+                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 px-2 py-0.5 text-[10px] font-semibold">
+                      <CheckCircle2 className="h-3 w-3" /> {selectedRel.active === false ? "Inactive" : "Valid"}
+                    </span>
+                  </div>
+                  <div className="rounded-lg border border-sky-500/25 bg-sky-500/10 p-2.5 text-[11px] text-sky-900 dark:text-sky-200">
+                    This relationship is valid and properly configured.
+                  </div>
+                  {selectedStoreRel && !selectedStoreRel.userApproved && (
+                    <button
+                      type="button"
+                      onClick={() => handleApproveRelationship(selectedStoreRel.id)}
+                      className="w-full rounded-lg bg-primary text-primary-foreground py-1.5 text-xs font-semibold hover:opacity-90 cursor-pointer"
+                    >
+                      Approve Relationship
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div className="p-4 text-xs text-muted-foreground">
+                  Select a relationship connector or table on the canvas to inspect its details.
+                </div>
+              )}
+            </aside>
+          )}
         </div>
       )}
 
@@ -2047,7 +2478,7 @@ function InteractivePowerBiModelPanel({
               <div className="flex flex-wrap gap-1.5">
                 {t.columns.map((c, i) => (
                   <span key={`${c.name}-${i}`} className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-2 py-0.5 text-[11px]">
-                    {keyColsSet.has(`${t.name}.${c.name}`) && <KeyRound className="h-3 w-3 text-amber-500" />}
+                    {pkSet.has(`${t.name}.${c.name}`) && <KeyRound className="h-3 w-3 text-amber-500" />}
                     {c.name}
                   </span>
                 ))}
@@ -2083,6 +2514,124 @@ function InteractivePowerBiModelPanel({
           </div>
         </div>
       )}
+
+      {/* Bottom Validation Results Panel */}
+      <div className="border-t border-border bg-surface-elevated">
+        <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5">
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setShowValidation((v) => !v)}
+              className="flex items-center gap-1.5 text-xs font-bold text-foreground cursor-pointer"
+            >
+              <AlertTriangle className="h-4 w-4 text-amber-500" />
+              <span>Validation Results</span>
+              {showValidation ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />}
+            </button>
+            <div className="flex flex-wrap items-center gap-1 text-[11px]">
+              {(
+                [
+                  { id: "all", label: `All (${validationItems.length})` },
+                  { id: "error", label: `Errors (${errCount})` },
+                  { id: "warning", label: `Warnings (${warnCount})` },
+                  { id: "info", label: `Info (${infoCount})` },
+                ] as const
+              ).map((f) => (
+                <button
+                  key={f.id}
+                  type="button"
+                  onClick={() => {
+                    setValidationFilter(f.id);
+                    setShowValidation(true);
+                  }}
+                  className={`rounded-full px-2.5 py-0.5 font-medium transition-colors cursor-pointer ${
+                    validationFilter === f.id
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-background border border-border text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleRefreshModel}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 py-1 text-[11px] font-semibold hover:bg-muted cursor-pointer"
+          >
+            <RefreshCw className="h-3 w-3 text-primary" /> Revalidate
+          </button>
+        </div>
+
+        {showValidation && (
+          <div className="border-t border-border bg-background overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-surface-elevated border-b border-border text-muted-foreground">
+                <tr>
+                  <th className="px-3 py-2 text-left font-semibold">Severity</th>
+                  <th className="px-3 py-2 text-left font-semibold">Workflow Step</th>
+                  <th className="px-3 py-2 text-left font-semibold">Table / Component</th>
+                  <th className="px-3 py-2 text-left font-semibold">Issue</th>
+                  <th className="px-3 py-2 text-left font-semibold">Reason</th>
+                  <th className="px-3 py-2 text-left font-semibold">Suggested Fix</th>
+                  <th className="px-3 py-2 text-left font-semibold">Status</th>
+                  <th className="px-3 py-2 text-right font-semibold">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/50">
+                {filteredValidationItems.map((item) => (
+                  <tr key={item.id} className="hover:bg-muted/30">
+                    <td className="px-3 py-2">
+                      <span
+                        className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                          item.severity === "error"
+                            ? "bg-destructive/15 text-destructive"
+                            : item.severity === "warning"
+                            ? "bg-amber-500/15 text-amber-700 dark:text-amber-300"
+                            : "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
+                        }`}
+                      >
+                        {item.severity === "info" ? "Info" : item.severity === "error" ? "Error" : "Warning"}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-muted-foreground">{item.workflowStep}</td>
+                    <td className="px-3 py-2 font-medium text-foreground">{item.tableOrComponent}</td>
+                    <td className="px-3 py-2 text-foreground">{item.issue}</td>
+                    <td className="px-3 py-2 text-muted-foreground">{item.reason}</td>
+                    <td className="px-3 py-2 text-muted-foreground">{item.suggestedFix}</td>
+                    <td className="px-3 py-2">
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                          item.status === "Valid"
+                            ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
+                            : "bg-amber-500/15 text-amber-700 dark:text-amber-300"
+                        }`}
+                      >
+                        {item.status}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveTab("diagram");
+                          if (item.relId) setSelectedRelId(item.relId);
+                          const tbl = tables.find((t) => t.name === item.tableOrComponent);
+                          if (tbl) selectTable(tbl.name);
+                        }}
+                        className="rounded-lg border border-border bg-background px-2.5 py-1 text-[11px] font-medium hover:bg-muted cursor-pointer"
+                      >
+                        View Details
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
