@@ -282,16 +282,6 @@ export function AppHeader() {
             </div>
           )}
 
-          {!isDemo && (
-            <button
-              onClick={handleLogout}
-              title="Logout"
-              className="grid place-items-center h-10 w-10 rounded-xl border border-border bg-surface hover:bg-red-500/10 hover:border-red-500/40 hover:text-red-500 transition-colors"
-            >
-              <LogOut className="h-4 w-4" />
-            </button>
-          )}
-
           {/* (...) menu with account deletion */}
           <div className="relative" ref={menuRef}>
             {isDemo ? (
