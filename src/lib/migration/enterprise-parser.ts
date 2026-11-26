@@ -1143,19 +1143,20 @@ export function buildSourceMappings(operations: Operation[], updates: Record<str
     }
     let mapped = (u.mappedRef || effectiveRef || ref).trim();
     
-    // Auto-detect from uploaded files if no manual update has been made
+    // Auto-detect from uploaded data files if no manual update has been made
     if (!u.mappedRef && !bypass) {
       const originalBasename = (ref.split(/[/\\]/).pop() || '').split('?')[0];
+      const origExt = (originalBasename.split('.').pop() || '').toLowerCase();
+      const dataExts = new Set(['csv', 'tsv', 'xlsx', 'xls', 'parquet', 'json', 'qvd', 'txt']);
       if (originalBasename) {
         const baseNameNoExt = originalBasename.split('.').slice(0, -1).join('.').toLowerCase() || originalBasename.toLowerCase();
         for (const f of files) {
-          if (f.isText && f.path.toLowerCase().endsWith('.qvs')) continue; // Skip script files
+          const fExt = (f.path.split('.').pop() || '').toLowerCase();
+          if (!dataExts.has(fExt) && !(origExt === 'xml' && fExt === 'xml')) continue;
           const fBasename = (f.path.split(/[/\\]/).pop() || '').split('?')[0];
           const fBaseNameNoExt = fBasename.split('.').slice(0, -1).join('.').toLowerCase() || fBasename.toLowerCase();
-          
-          if (fBaseNameNoExt && (fBaseNameNoExt === baseNameNoExt || table.toLowerCase().startsWith(fBaseNameNoExt) || fBaseNameNoExt.startsWith(table.toLowerCase()))) {
-            const dir = ref.substring(0, ref.length - originalBasename.length);
-            mapped = dir + fBasename;
+          if (fBaseNameNoExt && fBaseNameNoExt === baseNameNoExt) {
+            mapped = f.path;
             break;
           }
         }

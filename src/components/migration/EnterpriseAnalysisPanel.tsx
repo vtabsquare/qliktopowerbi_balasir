@@ -757,7 +757,10 @@ export function TabSourceMapping({
         }
       }
 
-      const normalizedRel = (matchedRelPath || relative).split(/[/\\]+/).filter(Boolean).join(sep);
+      const baseLeaf = trimmedBase.split(/[/\\]+/).filter(Boolean).pop()?.toLowerCase() || "";
+      const relParts = (matchedRelPath || relative).split(/[/\\]+/).filter(Boolean);
+      const dedupedParts = baseLeaf && relParts.length > 1 && relParts[0].toLowerCase() === baseLeaf ? relParts.slice(1) : relParts;
+      const normalizedRel = dedupedParts.join(sep);
       const mapped = `${trimmedBase}${sep}${normalizedRel}`;
       const ct = connector(mapped);
       updatedCount += 1;
