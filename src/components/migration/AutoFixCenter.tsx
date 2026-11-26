@@ -95,8 +95,29 @@ export function AutoFixCenter({ analysis, compact = false }: Props) {
     try {
       const report = await runAutoFix();
       if (!automatic) {
-        if (report.afterBlocking === 0) toast.success("AI Auto-Fix completed", { description: `${report.fixedCount} safe fixes were applied. The current validation list has been refreshed.` });
-        else toast.info("AI Auto-Fix completed", { description: `${report.fixedCount} safe fixes applied. ${report.afterBlocking} item(s) still need confirmation.` });
+        const remainingCount = report.remainingIssueIds.length;
+        const latestState = useMigration.getState();
+        const latestIssues = collectRepairIssues(latestState.enterpriseAnalysis, latestState.powerBiModel);
+        if (report.fixedCount > 0 && remainingCount === 0) {
+          toast.success("AI Auto-Fix completed", {
+            description: `${report.fixedCount} fix(es) were applied and verified. All validation issues are resolved.`,
+          });
+        } else if (report.fixedCount > 0 && remainingCount > 0) {
+          toast.warning("AI Auto-Fix partially completed", {
+            description: `${report.fixedCount} fix(es) applied. ${remainingCount} issue(s) still require your action.`,
+          });
+        } else if (remainingCount > 0) {
+          const firstIssue = latestIssues[0];
+          toast.warning("Manual action required", {
+            description: firstIssue
+              ? `0 automatic fixes could be safely applied. ${remainingCount} issue(s) remain: ${firstIssue.objectName} — ${firstIssue.recommendation}`
+              : `0 automatic fixes could be safely applied. ${remainingCount} issue(s) require your review.`,
+          });
+        } else {
+          toast.info("Validation verified", {
+            description: "No unresolved migration issues were found.",
+          });
+        }
       }
     } catch (error) {
       toast.error("AI Auto-Fix could not complete", { description: error instanceof Error ? error.message : "Review the validation details and try again." });
@@ -174,10 +195,10 @@ export function AutoFixCenter({ analysis, compact = false }: Props) {
 
       {autoFixReport && reportCoversCurrent && (
         <div className="grid gap-3 border-b border-border p-4 sm:grid-cols-4">
-          <Summary label="Before" value={autoFixReport.beforeBlocking} warning={autoFixReport.beforeBlocking > 0} />
+          <Summary label="Before" value={Math.max(autoFixReport.beforeBlocking, autoFixReport.inputIssueIds?.length || 0)} warning={Math.max(autoFixReport.beforeBlocking, autoFixReport.inputIssueIds?.length || 0) > 0} />
           <Summary label="Fixed safely" value={autoFixReport.fixedCount} good={autoFixReport.fixedCount > 0} />
-          <Summary label="Needs review" value={autoFixReport.reviewCount} warning={autoFixReport.reviewCount > 0} />
-          <Summary label="Remaining" value={autoFixReport.afterBlocking} good={autoFixReport.afterBlocking === 0} warning={autoFixReport.afterBlocking > 0} />
+          <Summary label="Needs review" value={Math.max(autoFixReport.reviewCount, issues.length)} warning={Math.max(autoFixReport.reviewCount, issues.length) > 0} />
+          <Summary label="Remaining" value={issues.length} good={issues.length === 0} warning={issues.length > 0} />
         </div>
       )}
       {autoFixReport && !reportCoversCurrent && (

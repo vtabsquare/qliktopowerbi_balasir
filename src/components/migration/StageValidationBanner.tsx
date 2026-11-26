@@ -172,19 +172,19 @@ export function StageValidationBanner({ stepId, canProceed, blockedReason }: Sta
         : false;
       const remainingBlocking = Math.max(report.afterBlocking, latestDaxBlocking ? 1 : 0);
 
-      if (remainingBlocking === 0) {
-        toast.success(
-          fixed > 0
-            ? `Auto-Fix resolved ${fixed} issue(s) — all blocking errors cleared!`
-            : "All blocking errors cleared — ready to proceed to the next step.",
-        );
-      } else if (fixed > 0) {
+      if (fixed > 0 && remainingBlocking === 0) {
+        toast.success(`Auto-Fix resolved ${fixed} issue(s) — all blocking errors cleared!`);
+      } else if (fixed > 0 && remainingBlocking > 0) {
         toast.warning(`Auto-Fix resolved ${fixed} issue(s)`, {
           description: `${remainingBlocking} blocking item(s) still require review before proceeding.`,
         });
+      } else if (remainingBlocking > 0) {
+        toast.warning("Manual action required", {
+          description: `0 automatic fixes applied. ${remainingBlocking} blocking item(s) still require your action before proceeding.`,
+        });
       } else {
-        toast.info("Auto-Fix checked all items", {
-          description: "Remaining items require a manual decision or file selection.",
+        toast.info("Validation verified", {
+          description: "No blocking errors were found.",
         });
       }
     } catch (err) {

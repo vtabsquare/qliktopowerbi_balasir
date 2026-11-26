@@ -397,6 +397,43 @@ export function repairPowerBiModel(
   }
 
   const normalizedMeasures = normalizeModelMeasures(dependencyResult.tables);
+  // Auto-designate safe row identifiers on lookup-side tables when a clear unique key column exists
+  const tablesWithSafeKeys = normalizedMeasures.tables.map((table) => {
+    if (!["dimension", "date", "parameter"].includes(table.kind)) return table;
+    const hasPrimary = table.columns.some((col) => col.isPrimaryKey);
+    if (hasPrimary) return table;
+    const candidate =
+      table.columns.find((col) => col.isKey) ||
+      table.columns.find((col) => /^(datekey|%datekey|targetkey)$/i.test(col.name)) ||
+      table.columns.find((col) => /(id|key)$/i.test(col.name));
+    if (!candidate) {
+      actions.push({
+        id: `table-key-review-${table.id}`,
+        area: "model-tables",
+        objectName: table.name,
+        action: "Row identifier requires manual selection",
+        status: "review",
+        confidence: 0,
+        detail: `Lookup-side table '${table.name}' has no primary key column and no obvious ID/Key candidate.`,
+      });
+      return table;
+    }
+    actions.push({
+      id: `table-key-${table.id}`,
+      area: "model-tables",
+      objectName: table.name,
+      action: "Designated recommended row identifier",
+      status: "fixed",
+      confidence: 92,
+      detail: `Marked '${candidate.name}' as the row identifier for '${table.name}'.`,
+    });
+    return {
+      ...table,
+      columns: table.columns.map((col) =>
+        col.id === candidate.id ? { ...col, isPrimaryKey: true, isKey: true } : col,
+      ),
+    };
+  });
   if (normalizedMeasures.removedDuplicateCount) {
     actions.push({ id: "measure-dedup", area: "dax", objectName: "Measures", action: "Consolidated duplicate measures", status: "fixed", confidence: 100, detail: `${normalizedMeasures.removedDuplicateCount} duplicate measure(s) were redirected to canonical measures.` });
   }
@@ -404,8 +441,8 @@ export function repairPowerBiModel(
     actions.push({ id: "measure-renames", area: "dax", objectName: "Measures", action: "Resolved measure name collisions", status: "fixed", confidence: 100, detail: `${normalizedMeasures.renamedCount} measure name collision(s) were renamed and references updated.` });
   }
 
-  const validColumnIds = new Set(normalizedMeasures.tables.flatMap((table) => table.columns.map((column) => column.id)));
-  const validMeasureIds = new Set(normalizedMeasures.tables.flatMap((table) => table.measures.map((measure) => measure.id)));
+  const validColumnIds = new Set(tablesWithSafeKeys.flatMap((table) => table.columns.map((column) => column.id)));
+  const validMeasureIds = new Set(tablesWithSafeKeys.flatMap((table) => table.measures.map((measure) => measure.id)));
   const visualBindings = model.visualBindings.map((binding) => {
     const dimensionIds = [...new Set(binding.dimensionIds.filter((id) => validColumnIds.has(id)))];
     const measureIds = [...new Set(binding.measureIds.map((id) => normalizedMeasures.idAliases[id] || id).filter((id) => validMeasureIds.has(id)))];
@@ -416,6 +453,6 @@ export function repairPowerBiModel(
     return { ...binding, dimensionIds, measureIds, status: dimensionIds.length || measureIds.length ? (changed ? "warning" as const : binding.status) : "manual" as const };
   });
 
-  model = validatePowerBiModel({ ...model, tables: normalizedMeasures.tables, relationships, visualBindings });
+  model = validatePowerBiModel({ ...model, tables: tablesWithSafeKeys, relationships, visualBindings });
   return { model, actions };
 }
