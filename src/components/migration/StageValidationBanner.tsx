@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { AlertCircle, AlertTriangle, Loader2, Sparkles, X } from "lucide-react";
+import { AlertCircle, AlertTriangle, Info, Loader2, Sparkles, X } from "lucide-react";
 import { toast } from "sonner";
 import { useMigration } from "@/lib/migration/store";
 import { WORKFLOW_STEPS } from "@/lib/migration/workflow-gating";
@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 
 export interface StepIssueItem {
   id: string;
-  severity: "error" | "warning";
+  severity: "error" | "action-required" | "warning";
   stepLabel: string;
   target?: string;
   cause: string;
@@ -133,22 +133,23 @@ export function StageValidationBanner({ stepId, canProceed, blockedReason }: Sta
     if (!canProceed && blockedReason && stepId > 1 && hasUploadedFiles && !items.some((i) => i.severity === "error")) {
       items.unshift({
         id: `gate-${stepId}`,
-        severity: "error",
+        severity: "action-required",
         stepLabel,
         cause: blockedReason,
         resolution: "Complete the required action in this step to unlock the next stage.",
-        canAutoFix: stepId >= 4 && stepId <= 8,
+        canAutoFix: false,
       });
     }
 
     return items;
   }, [blockedReason, canProceed, enterpriseAnalysis, hasUploadedFiles, powerBiModel, stepId, stepLabel]);
 
-  const visibleIssues = issues.filter((item) => item.severity === "error" || !dismissedIds[item.id]);
+  const visibleIssues = issues.filter((item) => item.severity !== "warning" || !dismissedIds[item.id]);
   if (!visibleIssues.length) return null;
 
   const errorCount = visibleIssues.filter((i) => i.severity === "error").length;
-  const warningCount = visibleIssues.length - errorCount;
+  const actionRequiredCount = visibleIssues.filter((i) => i.severity === "action-required").length;
+  const warningCount = visibleIssues.filter((i) => i.severity === "warning").length;
   const hasAutoFix = visibleIssues.some((i) => i.canAutoFix) && Boolean(enterpriseAnalysis);
 
   const handleAutoFix = async () => {
@@ -190,6 +191,8 @@ export function StageValidationBanner({ stepId, canProceed, blockedReason }: Sta
         "rounded-xl border p-4 shadow-xs",
         errorCount > 0
           ? "border-destructive/35 bg-destructive/5"
+          : actionRequiredCount > 0
+          ? "border-primary/30 bg-primary/5"
           : "border-amber-500/35 bg-amber-500/5",
       )}
     >
@@ -197,16 +200,25 @@ export function StageValidationBanner({ stepId, canProceed, blockedReason }: Sta
         <div className="flex items-center gap-2.5">
           {errorCount > 0 ? (
             <AlertCircle className="h-5 w-5 shrink-0 text-destructive" />
+          ) : actionRequiredCount > 0 ? (
+            <Info className="h-5 w-5 shrink-0 text-primary" />
           ) : (
             <AlertTriangle className="h-5 w-5 shrink-0 text-amber-500" />
           )}
           <div>
             <div className="text-xs font-bold uppercase tracking-wider text-foreground">
-              {stepLabel} — {errorCount > 0 ? `${errorCount} Blocking Error(s)` : `${warningCount} Warning(s)`}
+              {stepLabel} —{" "}
+              {errorCount > 0
+                ? `${errorCount} Blocking Error(s)`
+                : actionRequiredCount > 0
+                ? "Action Required"
+                : `${warningCount} Warning(s)`}
             </div>
             <p className="text-xs text-muted-foreground">
               {errorCount > 0
                 ? "Resolve blocking errors below before proceeding to the next step."
+                : actionRequiredCount > 0
+                ? "Complete the required action below to unlock the next step."
                 : "Warnings do not block progression and can be dismissed."}
             </p>
           </div>
@@ -237,10 +249,16 @@ export function StageValidationBanner({ stepId, canProceed, blockedReason }: Sta
                     "rounded px-1.5 py-0.5 text-[10px] font-bold uppercase",
                     issue.severity === "error"
                       ? "bg-destructive/15 text-destructive"
+                      : issue.severity === "action-required"
+                      ? "bg-primary/15 text-primary"
                       : "bg-amber-500/15 text-amber-600 dark:text-amber-400",
                   )}
                 >
-                  {issue.severity === "error" ? "Blocking" : "Warning"}
+                  {issue.severity === "error"
+                    ? "Blocking"
+                    : issue.severity === "action-required"
+                    ? "Action Required"
+                    : "Warning"}
                 </span>
                 {issue.target && <span className="font-mono font-semibold text-foreground">{issue.target}</span>}
               </div>
