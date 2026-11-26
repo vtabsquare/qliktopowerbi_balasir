@@ -21,6 +21,7 @@ function id(prefix: string, value: string): string {
 }
 function norm(value: string): string { return value.toLowerCase().replace(/[^a-z0-9]/g, ""); }
 function tableKind(name: string, profile?: Partial<TableProfile> | null, columns: PowerBiColumn[] = []): ModelTableKind {
+  if (/^(qlik variables|measures)$/i.test(name.trim())) return "disconnected";
   const value = `${name} ${profile?.classification ?? ""}`.toLowerCase();
   if (/calendar|date/.test(value)) return "date";
   if (/parameter/.test(value)) return "parameter";

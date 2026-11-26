@@ -399,7 +399,8 @@ export function repairPowerBiModel(
   const normalizedMeasures = normalizeModelMeasures(dependencyResult.tables);
   // Auto-designate safe row identifiers on lookup-side tables when a clear unique key column exists
   const tablesWithSafeKeys = normalizedMeasures.tables.map((table) => {
-    if (!["dimension", "date", "parameter"].includes(table.kind)) return table;
+    const isMeasureHost = table.hidden || /^(qlik variables|measures)$/i.test(table.name.trim()) || (table.columns.length === 1 && table.columns[0]?.name === "_MeasureHost");
+    if (isMeasureHost || !["dimension", "date", "parameter"].includes(table.kind)) return table;
     const hasPrimary = table.columns.some((col) => col.isPrimaryKey);
     if (hasPrimary) return table;
     const candidate =
