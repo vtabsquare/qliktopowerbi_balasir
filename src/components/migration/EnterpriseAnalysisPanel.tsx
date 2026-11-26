@@ -656,10 +656,12 @@ export function TabSourceMapping({
   const { isDemo } = useAuth();
   const { enterpriseFiles } = useMigration();
   const [excelSheetsByRef, setExcelSheetsByRef] = useState<Map<string, string[]>>(() => new Map());
+  const [multiSheetWorkbooks, setMultiSheetWorkbooks] = useState<Array<{ name: string; path: string; sheets: string[] }>>([]);
   useEffect(() => {
     let cancelled = false;
     (async () => {
       const map = new Map<string, string[]>();
+      const multiList: Array<{ name: string; path: string; sheets: string[] }> = [];
       for (const f of enterpriseFiles || []) {
         const ext = (f.extension || "").toLowerCase();
         if ((ext === ".xlsx" || ext === ".xls") && f.binaryBase64) {
@@ -672,6 +674,9 @@ export function TabSourceMapping({
               if (names.length) {
                 map.set((f.path || f.name || "").replace(/\\/g, "/").toLowerCase(), names);
                 map.set((f.name || "").toLowerCase(), names);
+                if (names.length > 1) {
+                  multiList.push({ name: f.name || f.path, path: f.path || f.name, sheets: names });
+                }
               }
             }
           } catch {
@@ -679,7 +684,10 @@ export function TabSourceMapping({
           }
         }
       }
-      if (!cancelled) setExcelSheetsByRef(map);
+      if (!cancelled) {
+        setExcelSheetsByRef(map);
+        setMultiSheetWorkbooks(multiList);
+      }
     })();
     return () => { cancelled = true; };
   }, [enterpriseFiles]);
@@ -984,6 +992,24 @@ export function TabSourceMapping({
 
       <div className="surface-card p-4">
         <SectionHeader title="Source Mapping Editor" sub="Set mapped paths and connector types. Leave bypassed QVDs as-is." />
+        {multiSheetWorkbooks.length > 0 && (
+          <div className="mb-3 rounded-xl border border-amber-500/35 bg-amber-500/10 px-3.5 py-2.5 text-xs text-amber-800 dark:text-amber-300 flex items-start gap-2.5">
+            <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
+            <div className="space-y-1">
+              <div className="font-semibold">
+                Multi-sheet Excel workbook{multiSheetWorkbooks.length > 1 ? "s" : ""} detected — verify or select the target Sheet Name for each table:
+              </div>
+              <ul className="list-disc pl-4 space-y-0.5 text-[11px]">
+                {multiSheetWorkbooks.map((wb) => (
+                  <li key={wb.path}>
+                    <span className="font-mono font-semibold">{wb.name}</span> ({wb.sheets.length} sheets):{" "}
+                    <span className="font-mono">{wb.sheets.join(", ")}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        )}
         <div className="overflow-auto rounded-xl border border-border">
           <table className="w-full text-xs">
             <thead className="bg-surface-elevated border-b border-border">
@@ -1030,9 +1056,14 @@ export function TabSourceMapping({
                         <input
                           value={row.sheetName ?? ""}
                           list={sheetSuggestions.length ? listId : undefined}
-                          placeholder={row.table || "Sheet1"}
+                          placeholder={sheetSuggestions.length > 1 ? "Select sheet..." : (row.table || "Sheet1")}
                           onChange={e => handleCellChange(i, "sheetName", e.target.value)}
-                          className="w-full min-w-[125px] px-2 py-1 rounded border border-border bg-surface text-xs text-foreground font-mono"
+                          className={cn(
+                            "w-full min-w-[125px] px-2 py-1 rounded border bg-surface text-xs text-foreground font-mono",
+                            sheetSuggestions.length > 1 && !(row.sheetName && sheetSuggestions.some(s => s.toLowerCase() === row.sheetName!.toLowerCase()))
+                              ? "border-amber-500/70 bg-amber-500/5"
+                              : "border-border",
+                          )}
                           title="Enter or select the Excel sheet name for this table"
                         />
                         {sheetSuggestions.length > 0 && (
@@ -1040,8 +1071,16 @@ export function TabSourceMapping({
                             <datalist id={listId}>
                               {sheetSuggestions.map(s => <option key={s} value={s} />)}
                             </datalist>
-                            <span className="shrink-0 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary" title={`Detected ${sheetSuggestions.length} sheet(s): ${sheetSuggestions.join(", ")}`}>
-                              {sheetSuggestions.length}
+                            <span
+                              className={cn(
+                                "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold whitespace-nowrap",
+                                sheetSuggestions.length > 1
+                                  ? "bg-amber-500/15 text-amber-700 dark:text-amber-300"
+                                  : "bg-primary/10 text-primary",
+                              )}
+                              title={`Detected ${sheetSuggestions.length} sheet(s): ${sheetSuggestions.join(", ")}`}
+                            >
+                              {sheetSuggestions.length} {sheetSuggestions.length === 1 ? "sheet" : "sheets"}
                             </span>
                           </>
                         )}
