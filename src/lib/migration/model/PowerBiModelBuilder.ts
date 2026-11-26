@@ -1,4 +1,4 @@
-import type { EnterpriseAnalysis } from "../enterprise-parser";
+import { tableRole, type EnterpriseAnalysis, type TableProfile } from "../enterprise-parser";
 import type { ExpressionArtifact, ExpressionInventory } from "../expression";
 import type { QvwAnalysis } from "../qvw";
 import { validatePowerBiModel } from "./ModelValidationEngine";
@@ -20,13 +20,23 @@ function id(prefix: string, value: string): string {
   return `${prefix}-${value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`;
 }
 function norm(value: string): string { return value.toLowerCase().replace(/[^a-z0-9]/g, ""); }
-function tableKind(name: string, classification?: string): ModelTableKind {
-  const value = `${name} ${classification ?? ""}`.toLowerCase();
+function tableKind(name: string, profile?: Partial<TableProfile> | null, columns: PowerBiColumn[] = []): ModelTableKind {
+  const value = `${name} ${profile?.classification ?? ""}`.toLowerCase();
   if (/calendar|date/.test(value)) return "date";
-  if (/bridge|link/.test(value)) return "bridge";
-  if (/fact|transaction|sales|orders|events|finance|ledger|inventory|stock|movement|payment|claim/.test(value)) return "fact";
-  if (/dimension|dim_|master|lookup|customer|product|region/.test(value)) return "dimension";
   if (/parameter/.test(value)) return "parameter";
+  if (/bridge|link/.test(value)) return "bridge";
+  const role = tableRole({
+    table: name,
+    fields: profile?.fields?.length ? profile.fields : columns.map((c) => c.name),
+    classification: profile?.classification || "resident/file",
+    operations: profile?.operations || [],
+    sourceRefs: profile?.sourceRefs || [],
+    isLoaded: profile?.isLoaded ?? true,
+  } as TableProfile);
+  if (role === "fact") return "fact";
+  if (role === "bridge") return "bridge";
+  if (role === "reference") return "parameter";
+  if (role === "dimension") return "dimension";
   return "unknown";
 }
 function columnType(value?: string): string {
@@ -95,7 +105,7 @@ function buildImportedTables(enterprise?: EnterpriseAnalysis | null): PowerBiTab
     const sampleRowCount = preview?.outputRows?.length || preview?.sourceRows?.length || undefined;
     return {
       id: id("TBL", name), name, sourceName: name, queryName: name, description: profile?.etlStory,
-      kind: tableKind(name, profile?.classification), hidden: false, columns, measures: [], hierarchies: [], sampleRowCount,
+      kind: tableKind(name, profile, columns), hidden: false, columns, measures: [], hierarchies: [], sampleRowCount,
       sourceLineage: profile?.sourceRefs ?? [], warnings: profile?.reviewNotes ?? [],
     };
   });

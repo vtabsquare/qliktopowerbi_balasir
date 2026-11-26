@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import JSZip from "jszip";
 import { extractFilesFromRawList } from "@/components/migration/MultiFileDropzone";
 import { runEnterpriseAnalysis, tableRole, type TableProfile } from "@/lib/migration/enterprise-parser";
+import { buildPowerBiModel } from "@/lib/migration/model/PowerBiModelBuilder";
 
 describe("Universal File Analysis & Multi-Fact Migration Engine", () => {
   it("recursively extracts files from nested ZIP archives", async () => {
@@ -102,5 +103,51 @@ DROP TABLE TempCalendar;
     expect(calMQuery).toContain("ShipDate");
     expect(calMQuery).not.toContain("Source_Shipments[%DateKey]");
     expect(calMQuery).not.toContain('Table.Column(Source_Shipments, "%DateKey")');
+  });
+
+  it("buildPowerBiModel detects Shipments, DeliveryExceptions, ServiceTargets, and FuelIndex as fact tables", () => {
+    const qvs = `
+Customers:
+LOAD CustomerID, CustomerName, Segment FROM [../SourceData/Customers.csv] (txt, utf8, embedded labels, delimiter is ',');
+
+Carriers:
+LOAD CarrierID, CarrierName, PrimaryMode FROM [../SourceData/Carriers.csv] (txt, utf8, embedded labels, delimiter is ',');
+
+Warehouses:
+LOAD WarehouseID, WarehouseName, City FROM [../SourceData/Warehouses.csv] (txt, utf8, embedded labels, delimiter is ',');
+
+Routes:
+LOAD RouteID, RouteName, DistanceKm FROM [../SourceData/Routes.csv] (txt, utf8, embedded labels, delimiter is ',');
+
+Shipments:
+LOAD ShipmentID, OrderID, ShipDate, CustomerID, CarrierID, WarehouseID, RouteID, WeightKg, FreightRevenue, FreightCost
+FROM [../SourceData/Shipments.csv] (txt, utf8, embedded labels, delimiter is ',');
+
+DeliveryExceptions:
+LOAD ExceptionID, ShipmentID, ExceptionDate, ExceptionType, ResolutionHours
+FROM [../SourceData/DeliveryExceptions.csv] (txt, utf8, embedded labels, delimiter is ',');
+
+ServiceTargets:
+LOAD DestinationZone, TargetMonth, OnTimeTargetPct, CostPerKgTarget
+FROM [../SourceData/OperationalTargets.xlsx] (ooxml, embedded labels, table is ServiceTargets);
+
+FuelIndex:
+LOAD Month, DieselIndex, JetFuelIndex, RailIndex
+FROM [../SourceData/OperationalTargets.xlsx] (ooxml, embedded labels, table is FuelIndex);
+`;
+    const analysis = runEnterpriseAnalysis([
+      { path: "SupplyChainControlTower-prj/LoadScript.txt", ext: ".txt", size: qvs.length, isText: true, content: qvs, note: "" },
+    ]);
+    const model = buildPowerBiModel(analysis, null, null, "SupplyChainControlTower");
+    const byName = new Map(model.tables.map((t) => [t.name, t]));
+
+    expect(byName.get("Shipments")?.kind).toBe("fact");
+    expect(byName.get("DeliveryExceptions")?.kind).toBe("fact");
+    expect(byName.get("ServiceTargets")?.kind).toBe("fact");
+    expect(byName.get("FuelIndex")?.kind).toBe("fact");
+    expect(byName.get("Customers")?.kind).toBe("dimension");
+    expect(byName.get("Carriers")?.kind).toBe("dimension");
+    expect(byName.get("Warehouses")?.kind).toBe("dimension");
+    expect(byName.get("Routes")?.kind).toBe("dimension");
   });
 });
