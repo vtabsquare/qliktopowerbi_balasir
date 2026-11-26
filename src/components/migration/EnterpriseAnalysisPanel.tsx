@@ -2017,10 +2017,10 @@ export function TabMQueryDataTypes({
 
         {Object.keys(mq).length > 0 && (
           <>
-            <div className="flex gap-1 overflow-x-auto pb-3 border-b border-border mb-3">
+            <div className="flex flex-wrap gap-2 pb-3 border-b border-border mb-4">
               {tables.map((t, i) => (
                 <button key={t} onClick={() => setActiveTable(i)}
-                  className={cn("px-4 py-2 text-sm font-medium rounded-lg whitespace-nowrap transition-all",
+                  className={cn("shrink-0 px-3.5 py-1.5 text-xs sm:text-sm font-medium rounded-lg whitespace-nowrap transition-all",
                     activeTable === i ? "bg-primary text-primary-foreground shadow-sm" : "border border-border text-muted-foreground hover:text-foreground hover:bg-surface-elevated")}>
                   {t}
                 </button>
