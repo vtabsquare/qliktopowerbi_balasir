@@ -95,10 +95,14 @@ export function StageValidationBanner({ stepId, canProceed, blockedReason }: Sta
         .map((m, i) => ({ id: `enterprise:${i}:${m.measureName}`, name: m.measureName, expression: m.dax, table: m.table }));
       const inputById = new Map([...modelInputs, ...enterpriseInputs].map((m) => [m.id, m]));
       const daxResults = validatedModel ? validateDaxMeasures([...modelInputs, ...enterpriseInputs], validatedModel.tables) : [];
+      const seenDaxIssues = new Set<string>();
       for (const res of daxResults) {
         const tableName = res.table || inputById.get(res.measureId)?.table;
         for (const issue of res.issues) {
           if (issue.severity === "error") {
+            const dedupeKey = `${res.measureName.toLowerCase()}::${issue.code}`;
+            if (seenDaxIssues.has(dedupeKey)) continue;
+            seenDaxIssues.add(dedupeKey);
             items.push({
               id: `dax-${res.measureId}-${issue.code}`,
               severity: "error",

@@ -249,11 +249,58 @@ function variableToDax(name: string, value: string, profiles: Record<string, Tab
   if (aggregate) {
     return { id: `VAR-${cleanName(name)}`, name: cleanName(name), dax: aggregate.dax, originalValue: value, variablesUsed: refs, confidence: aggregate.confidence, category: "calculated" };
   }
-  const replaced = replaceVariableReferences(trimmed)
+  let replaced = replaceVariableReferences(trimmed)
     .replace(/\bif\s*\(/gi, "IF(")
+    .replace(/\btoday\s*\(\s*\)/gi, "TODAY()")
+    .replace(/\bnow\s*\(\s*\)/gi, "NOW()")
     .replace(/<>/g, "<>")
     .replace(/\band\b/gi, "&&")
     .replace(/\bor\b/gi, "||");
+  // Resolve bare Qlik aggregations (e.g. Max(OrderDate)) inside variable expressions
+  replaced = replaced.replace(/\b(Sum|Count|Avg|Average|Min|Max)\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)/gi, (_m, fn: string, field: string) => {
+    const tbl = inferFieldTable(field, profiles);
+    const daxFn = fn.toLowerCase() === "avg" || fn.toLowerCase() === "average" ? "AVERAGE" : fn.toUpperCase();
+    return `${daxFn}(${quoteTable(tbl)}[${cleanField(field)}])`;
+  });
+  const replaceBalanced = (src: string, fnName: string, builder: (inner: string) => string): string => {
+    const re = new RegExp(`\\b${fnName}\\s*\\(`, "i");
+    let out = src;
+    for (let guard = 0; guard < 12; guard += 1) {
+      const m = re.exec(out);
+      if (!m) break;
+      const openIdx = m.index + m[0].length - 1;
+      let depth = 1;
+      let i = openIdx + 1;
+      let inStr = false;
+      while (i < out.length && depth > 0) {
+        const ch = out[i];
+        if (ch === '"' || ch === "'") inStr = !inStr;
+        else if (!inStr && ch === "(") depth += 1;
+        else if (!inStr && ch === ")") depth -= 1;
+        i += 1;
+      }
+      if (depth !== 0) break;
+      const inner = out.slice(openIdx + 1, i - 1);
+      out = out.slice(0, m.index) + builder(inner) + out.slice(i);
+    }
+    return out;
+  };
+  replaced = replaceBalanced(replaced, "AddMonths", (inner) => {
+    const parts = inner.split(",");
+    const d = parts[0]?.trim() || inner;
+    const n = parts.slice(1).join(",").trim() || "0";
+    return `EDATE(${d}, ${n})`;
+  });
+  replaced = replaceBalanced(replaced, "AddYears", (inner) => {
+    const parts = inner.split(",");
+    const d = parts[0]?.trim() || inner;
+    const n = parts.slice(1).join(",").trim() || "0";
+    return `EDATE(${d}, (${n}) * 12)`;
+  });
+  replaced = replaceBalanced(replaced, "MonthStart", (inner) => `DATE(YEAR(${inner}), MONTH(${inner}), 1)`);
+  replaced = replaceBalanced(replaced, "MonthEnd", (inner) => `EOMONTH(${inner}, 0)`);
+  replaced = replaceBalanced(replaced, "YearStart", (inner) => `DATE(YEAR(${inner}), 1, 1)`);
+  replaced = replaceBalanced(replaced, "YearEnd", (inner) => `DATE(YEAR(${inner}), 12, 31)`);
   const looksDaxSafe = !/\b(?:LOAD|RESIDENT|ApplyMap|Peek|Previous|NoOfRows|FieldValue)\b/i.test(replaced);
   return {
     id: `VAR-${cleanName(name)}`,
