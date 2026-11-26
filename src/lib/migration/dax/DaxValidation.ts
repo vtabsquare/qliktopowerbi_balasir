@@ -158,6 +158,30 @@ export function validateDaxMeasures(measures: DaxMeasureInput[], tables: PowerBi
     for (const match of masked.text.matchAll(/\b([A-Za-z][A-Za-z0-9_.]*)\s*\(/g)) {
       const name = match[1].toUpperCase();
       if (!DAX_FUNCTIONS.has(name)) addIssue(issues, expression, "DAX_FUNCTION_UNKNOWN", "error", `Unknown or unsupported DAX function '${match[1]}'.`, "Use a supported DAX function or manually review the translation.", match.index);
+      if (["SUM", "AVERAGE", "MIN", "MAX", "COUNT"].includes(name)) {
+        const openIdx = (match.index ?? 0) + match[0].length - 1;
+        let depth = 1;
+        let closeIdx = -1;
+        for (let idx = openIdx + 1; idx < masked.text.length; idx += 1) {
+          if (masked.text[idx] === "(") depth += 1;
+          else if (masked.text[idx] === ")" && --depth === 0) { closeIdx = idx; break; }
+        }
+        if (closeIdx > openIdx) {
+          const inner = expression.slice(openIdx + 1, closeIdx).trim();
+          const isSingleColumn = /^(?:'(?:[^']|'')+'|[A-Za-z_][A-Za-z0-9_ ]*)\s*\[[^\]]+\]$/.test(inner);
+          if (inner && !isSingleColumn) {
+            addIssue(
+              issues,
+              expression,
+              "DAX_AGGREGATION_REQUIRES_COLUMN",
+              "error",
+              `The ${name} function only accepts a column reference as an argument; use ${name}X(Table, expression) instead.`,
+              `Rewrite ${name}(...) as ${name}X(Table, ...).`,
+              match.index,
+            );
+          }
+        }
+      }
     }
 
     const qualifiedSpans: Array<[number, number]> = [];

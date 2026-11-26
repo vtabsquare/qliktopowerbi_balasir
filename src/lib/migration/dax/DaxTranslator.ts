@@ -256,8 +256,40 @@ export class DaxTranslator {
       text = literal(namedColour);
       explanation.push(`Qlik ${node.name}() was converted to hexadecimal colour ${namedColour}.`);
     }
-    else if (aggregateMap[name]) text = `${aggregateMap[name]}(${arg(0)})`;
-    else if (name === "count") text = node.distinct ? `DISTINCTCOUNT(${arg(0)})` : `COUNT(${arg(0)})`;
+    else if (aggregateMap[name]) {
+      const firstArg = node.args[0];
+      const renderedArg = arg(0);
+      const iteratorMap: Record<string, string> = {
+        SUM: "SUMX",
+        AVERAGE: "AVERAGEX",
+        MIN: "MINX",
+        MAX: "MAXX",
+        MEDIAN: "MEDIANX",
+        "STDEV.S": "STDEVX.S",
+        "VAR.S": "VARX.S",
+      };
+      if (firstArg && firstArg.kind !== "field" && iteratorMap[aggregateMap[name]]) {
+        const tableMatch = renderedArg.match(/'((?:[^']|'')+)'\s*\[|([A-Za-z_][A-Za-z0-9_]*)\s*\[/);
+        const iterTable = (tableMatch?.[1] || tableMatch?.[2] || context.defaultTable || "Data").replace(/''/g, "'");
+        const quotedIterTable = `'${iterTable.replace(/'/g, "''")}'`;
+        text = `${iteratorMap[aggregateMap[name]]}(${quotedIterTable}, ${renderedArg})`;
+        explanation.push(`Row-level expression inside Qlik ${node.name}() was translated to DAX iterator ${iteratorMap[aggregateMap[name]]}().`);
+      } else {
+        text = `${aggregateMap[name]}(${renderedArg})`;
+      }
+    }
+    else if (name === "count") {
+      const firstArg = node.args[0];
+      const renderedArg = arg(0);
+      if (!node.distinct && firstArg && firstArg.kind !== "field") {
+        const tableMatch = renderedArg.match(/'((?:[^']|'')+)'\s*\[|([A-Za-z_][A-Za-z0-9_]*)\s*\[/);
+        const iterTable = (tableMatch?.[1] || tableMatch?.[2] || context.defaultTable || "Data").replace(/''/g, "'");
+        const quotedIterTable = `'${iterTable.replace(/'/g, "''")}'`;
+        text = `COUNTX(${quotedIterTable}, ${renderedArg})`;
+      } else {
+        text = node.distinct ? `DISTINCTCOUNT(${renderedArg})` : `COUNT(${renderedArg})`;
+      }
+    }
     else if (name === "only") { text = `SELECTEDVALUE(${arg(0)})`; confidence = Math.min(confidence, 90); explanation.push("Qlik Only() was mapped to SELECTEDVALUE()."); }
     else if (name === "if") text = `IF(${arg(0)}, ${arg(1)}, ${arg(2)})`;
     else if (name === "alt") text = `COALESCE(${args.map((a) => a.text).join(", ")})`;

@@ -223,6 +223,28 @@ function repairQlikFunctions(expression: string, tables: PowerBiTable[] = [], or
     /\[((?:Max|Min|Sum|Avg|Average|Count)\s*\([^)]+\)(?:\s*[+-]\s*\d+(?:\.\d+)?)?)\]/gi,
     (full, inner: string) => resolveBracketedQlikAgg(inner, tables, false) || full,
   );
+
+  // Pattern 5: SUM/AVERAGE/MIN/MAX/COUNT over a row-level expression (e.g. SUM(('T'[A] * 'T'[B]))) -> SUMX('T', ...)
+  const iteratorPairs: Array<[string, string]> = [
+    ["SUM", "SUMX"],
+    ["AVERAGE", "AVERAGEX"],
+    ["MIN", "MINX"],
+    ["MAX", "MAXX"],
+    ["COUNT", "COUNTX"],
+  ];
+  for (const [aggFn, iterFn] of iteratorPairs) {
+    result = replaceBalancedCalls(result, aggFn, (arg) => {
+      const trimmed = arg.trim();
+      const isSingleCol = /^(?:'(?:[^']|'')+'|[A-Za-z_][A-Za-z0-9_ ]*)\s*\[[^\]]+\]$/.test(trimmed);
+      if (isSingleCol) return `${aggFn}(${trimmed})`;
+      const tableMatch = trimmed.match(/'((?:[^']|'')+)'\s*\[|([A-Za-z_][A-Za-z0-9_]*)\s*\[/);
+      if (!tableMatch) return `${aggFn}(${trimmed})`;
+      const tableName = (tableMatch[1] || tableMatch[2]).replace(/''/g, "'");
+      const quotedTable = `'${tableName.replace(/'/g, "''")}'`;
+      const unwrapped = trimmed.startsWith("(") && trimmed.endsWith(")") ? trimmed.slice(1, -1).trim() : trimmed;
+      return `${iterFn}(${quotedTable}, ${unwrapped})`;
+    });
+  }
   return result;
 }
 
