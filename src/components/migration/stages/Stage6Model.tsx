@@ -1659,7 +1659,7 @@ function computeStarSchemaPositions(
   return positions;
 }
 
-function InteractivePowerBiModelPanel({
+export function InteractivePowerBiModelPanel({
   title,
   tables,
   relationships,
@@ -1970,6 +1970,27 @@ function InteractivePowerBiModelPanel({
     setTimeout(fitToView, 50);
     toast.success("Power BI Star Schema model refreshed");
   };
+
+  const selectedTableObj = useMemo(
+    () => tables.find((t) => t.name === selectedTableName) || tables[0] || null,
+    [tables, selectedTableName],
+  );
+
+  const selectedTablePrimaryKey = useMemo(() => {
+    if (!selectedTableObj) return "—";
+    const pk = selectedTableObj.columns.find((c) => pkSet.has(`${selectedTableObj.name}.${c.name}`));
+    return pk ? pk.name : "—";
+  }, [selectedTableObj, pkSet]);
+
+  const selectedTableRelatedCount = useMemo(() => {
+    if (!selectedTableObj) return 0;
+    const related = new Set<string>();
+    relationships.forEach((r) => {
+      if (r.fromTable === selectedTableObj.name && r.toTable) related.add(r.toTable);
+      if (r.toTable === selectedTableObj.name && r.fromTable) related.add(r.fromTable);
+    });
+    return related.size;
+  }, [selectedTableObj, relationships]);
 
   return (
     <div className="surface-card overflow-hidden flex flex-col">
@@ -2370,18 +2391,42 @@ function InteractivePowerBiModelPanel({
             </div>
           </div>
 
-          {/* Right Relationship Inspector */}
+          {/* Right Properties Panel (Table Properties + Relationship Details) */}
           {showInspector && (
-            <aside className="border-t lg:border-t-0 lg:border-l border-border bg-surface/60 flex flex-col">
+            <aside className="border-t lg:border-t-0 lg:border-l border-border bg-surface/60 flex flex-col max-h-[560px] overflow-y-auto">
               <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-border bg-surface-elevated">
                 <div className="flex items-center gap-1.5 text-xs font-bold text-foreground">
                   <Link2 className="h-3.5 w-3.5 text-primary" />
-                  <span>Relationship Details</span>
+                  <span>{selectedTableObj ? "Table & Relationship Properties" : "Relationship Details"}</span>
                 </div>
                 <button type="button" onClick={() => setShowInspector(false)} className="p-1 rounded hover:bg-muted text-muted-foreground cursor-pointer">
                   <X className="h-3.5 w-3.5" />
                 </button>
               </div>
+
+              {selectedTableObj && (
+                <div className="p-3.5 border-b border-border space-y-2 text-xs">
+                  <div className="flex items-center gap-2">
+                    <div className="grid h-8 w-8 place-items-center rounded-lg bg-primary/10 text-primary shrink-0">
+                      <Table2 className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="font-bold text-foreground truncate">{selectedTableObj.name}</div>
+                      <div className="text-[11px] text-muted-foreground">{getTableRoleLabel(selectedTableObj)}</div>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5 text-[11px] pt-1">
+                    <div className="text-muted-foreground">Table Type</div>
+                    <div className="font-semibold text-foreground text-right">{getTableRoleLabel(selectedTableObj)}</div>
+                    <div className="text-muted-foreground">Total Columns</div>
+                    <div className="font-semibold text-foreground text-right">{selectedTableObj.columns.length}</div>
+                    <div className="text-muted-foreground">Primary Key</div>
+                    <div className="font-mono font-semibold text-primary text-right truncate">{selectedTablePrimaryKey}</div>
+                    <div className="text-muted-foreground">Related Tables</div>
+                    <div className="font-semibold text-foreground text-right">{selectedTableRelatedCount}</div>
+                  </div>
+                </div>
+              )}
 
               {selectedRel ? (
                 <div className="p-3.5 space-y-2.5 text-xs">

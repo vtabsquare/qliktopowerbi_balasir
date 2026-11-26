@@ -34,6 +34,7 @@ import { markStepCompleted, navigateWorkflow } from "@/lib/migration/workflow-ga
 import { useNavigationLoading } from "@/components/common/NavigationLoadingOverlay";
 import { repairDomId } from "@/lib/migration/autofix";
 import { RepairFocusNotice } from "./RepairFocusNotice";
+import { InteractivePowerBiModelPanel } from "./stages/Stage6Model";
 import {
   cardinalitySymbols,
   recommendRelationship,
@@ -99,6 +100,53 @@ export function SimplePowerBiModelPage({ forcedRelationshipsPage }: { forcedRela
       if (table) { setSearch(table.name); setTableFilter("all"); }
     }
   }, [repairFocus, powerBiModel]);
+
+  const pbiViewTables = useMemo(() => {
+    if (!powerBiModel) return [];
+    return powerBiModel.tables.map((t) => ({
+      id: t.id,
+      name: t.name,
+      type: (t.kind === "fact" || t.kind === "bridge"
+        ? "Fact"
+        : t.kind === "date"
+        ? "Calendar"
+        : "Dimension") as "Fact" | "Calendar" | "Dimension",
+      columns: t.columns.map((c) => ({
+        name: c.name,
+        dataType: c.dataType,
+        derived: c.kind === "calculated",
+      })),
+      measures: t.measures.map((m) => ({ name: m.name })),
+      keys: t.columns.filter((c) => c.isKey).map((c) => c.name),
+      sourceTables: [],
+      isFinal: true,
+      steps: [],
+      lineage: [],
+    }));
+  }, [powerBiModel]);
+
+  const pbiViewRelationships = useMemo(() => {
+    if (!powerBiModel) return [];
+    return powerBiModel.relationships
+      .filter((r) => !r.deleted && (r.active || r.userApproved))
+      .map((r) => {
+        const ft = powerBiModel.tables.find((t) => t.id === r.fromTableId);
+        const fc = ft?.columns.find((c) => c.id === r.fromColumnId);
+        const tt = powerBiModel.tables.find((t) => t.id === r.toTableId);
+        const tc = tt?.columns.find((c) => c.id === r.toColumnId);
+        if (!ft || !fc || !tt || !tc) return null;
+        return {
+          id: r.id,
+          fromTable: ft.name,
+          fromColumn: fc.name,
+          toTable: tt.name,
+          toColumn: tc.name,
+          cardinality: r.cardinality === "one-to-one" ? "1:1" : r.cardinality === "many-to-many" ? "N:N" : "N:1",
+          active: r.active,
+        };
+      })
+      .filter((r): r is NonNullable<typeof r> => Boolean(r));
+  }, [powerBiModel]);
 
   if (!powerBiModel || !powerBiModel.tables.length) return <EmptyModel />;
 
@@ -202,13 +250,20 @@ export function SimplePowerBiModelPage({ forcedRelationshipsPage }: { forcedRela
       </section>
 
       {tab === "overview" && (
-        <OverviewPanel
-          tables={powerBiModel.tables}
-          relationships={powerBiModel.relationships}
-          onOpenTables={() => setTab("tables")}
-          onOpenRelationships={() => setTab("relationships")}
-          onApply={applyRecommended}
-        />
+        <div className="space-y-5">
+          <InteractivePowerBiModelPanel
+            title="Power BI Model View"
+            tables={pbiViewTables}
+            relationships={pbiViewRelationships}
+          />
+          <OverviewPanel
+            tables={powerBiModel.tables}
+            relationships={powerBiModel.relationships}
+            onOpenTables={() => setTab("tables")}
+            onOpenRelationships={() => setTab("relationships")}
+            onApply={applyRecommended}
+          />
+        </div>
       )}
 
       {tab === "tables" && (
