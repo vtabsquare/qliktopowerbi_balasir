@@ -112,38 +112,67 @@ export async function extractFilesFromRawList(
     const ext = "." + (file.name.split(".").pop() ?? "").toLowerCase();
     if (ext === ".zip") {
       try {
-        const zip = await JSZip.loadAsync(file);
-        for (const [path, zipEntry] of Object.entries(zip.files)) {
-          if (zipEntry.dir) continue;
-          const entryExt = "." + path.split(".").pop()!.toLowerCase();
-          const entryWithSize = zipEntry as unknown as { _data?: { uncompressedSize?: number } };
-          const sizeKb = parseFloat(((entryWithSize._data?.uncompressedSize ?? 0) / 1024).toFixed(2));
-          let text: string | null = null;
-          if (isTextFile(entryExt)) {
-            text = await zipEntry.async("text");
-          } else if ([".xlsx", ".xls"].includes(entryExt)) {
-            const buf = await zipEntry.async("arraybuffer");
-            text = await parseExcelToCsvText(buf);
+        const extractZipRecursive = async (
+          zipSource: File | ArrayBuffer,
+          originPackage: string,
+          prefix: string,
+          depth: number,
+        ) => {
+          if (depth > 4) return;
+          const loadedSource =
+            zipSource instanceof Blob && typeof zipSource.arrayBuffer === "function"
+              ? await zipSource.arrayBuffer()
+              : zipSource;
+          const zip = await JSZip.loadAsync(loadedSource);
+          for (const [rawPath, zipEntry] of Object.entries(zip.files)) {
+            if (zipEntry.dir) continue;
+            const path = prefix ? `${prefix}/${rawPath}` : rawPath;
+            const entryName = rawPath.split("/").pop() || rawPath;
+            const entryExt = "." + (entryName.split(".").pop() ?? "").toLowerCase();
+            if (entryExt === ".zip") {
+              try {
+                const nestedBuf = await zipEntry.async("arraybuffer");
+                await extractZipRecursive(
+                  nestedBuf,
+                  `${originPackage} -> ${entryName}`,
+                  path.replace(/\.zip$/i, ""),
+                  depth + 1,
+                );
+              } catch (nestedErr) {
+                console.warn("Nested ZIP parse failed:", path, nestedErr);
+              }
+              continue;
+            }
+            const entryWithSize = zipEntry as unknown as { _data?: { uncompressedSize?: number } };
+            const sizeKb = parseFloat(((entryWithSize._data?.uncompressedSize ?? 0) / 1024).toFixed(2));
+            let text: string | null = null;
+            if (isTextFile(entryExt)) {
+              text = await zipEntry.async("text");
+            } else if ([".xlsx", ".xls"].includes(entryExt)) {
+              const buf = await zipEntry.async("arraybuffer");
+              text = await parseExcelToCsvText(buf);
+            }
+            const binaryBase64 = entryExt === ".qvw" ? await zipEntry.async("base64") : undefined;
+            const entry: ExtractedFile = {
+              path,
+              name: entryName,
+              extension: entryExt,
+              sizeKb,
+              text,
+              parsedAsText: text !== null,
+              binaryBase64,
+              originPackage,
+            };
+            result.push(entry);
+            if (entryExt === ".qvd" && outputDir !== "__SKIP__") {
+              const qvdBlob = await zipEntry.async("blob");
+              const qvdFile = new File([qvdBlob], entry.name, { type: "application/octet-stream" });
+              const conv = await convertQvdFile(qvdFile, path, outputDir, dirHandle);
+              if ("csvFile" in conv) result.push(conv.csvFile);
+            }
           }
-          const binaryBase64 = entryExt === ".qvw" ? await zipEntry.async("base64") : undefined;
-          const entry: ExtractedFile = {
-            path,
-            name: path.split("/").pop()!,
-            extension: entryExt,
-            sizeKb,
-            text,
-            parsedAsText: text !== null,
-            binaryBase64,
-            originPackage: file.name,
-          };
-          result.push(entry);
-          if (entryExt === ".qvd" && outputDir !== "__SKIP__") {
-            const qvdBlob = await zipEntry.async("blob");
-            const qvdFile = new File([qvdBlob], entry.name, { type: "application/octet-stream" });
-            const conv = await convertQvdFile(qvdFile, path, outputDir, dirHandle);
-            if ("csvFile" in conv) result.push(conv.csvFile);
-          }
-        }
+        };
+        await extractZipRecursive(file, file.name, "", 0);
       } catch (e) {
         console.warn("ZIP parse failed:", file.name, e);
       }

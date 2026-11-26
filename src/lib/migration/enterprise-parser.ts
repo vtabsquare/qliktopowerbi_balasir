@@ -511,10 +511,32 @@ function compileAutogenerateCalendarExpression(
 
       const nextLineage = [...lineage, `${currentTable}.${currentColumn}`];
       const expressions = producer.fieldExpressions || {};
+      const extractCalculatedSourceField = (expr: string): string | null => {
+        const direct = directFieldReference(expr);
+        if (direct) return direct;
+        // Strip single-quoted string literals (e.g. 'YYYY-MM-DD') and Qlik hash-functions (Date#, Num#, etc.)
+        const withoutStrings = String(expr || "")
+          .replace(/'[^']*'/g, " ")
+          .replace(/\b[A-Za-z_][A-Za-z0-9_]*#\s*\(/g, "(");
+        const matches = Array.from(
+          withoutStrings.matchAll(/\b([A-Za-z_][A-Za-z0-9_.$@-]*)\b(?!\s*\()/g)
+        ).map((m) => cleanName(m[1]));
+        const ignored = new Set(["as", "and", "or", "not", "null", "true", "false", "distinct"]);
+        const candidates = matches.filter((c) => c && !ignored.has(c.toLowerCase()) && !/^\d+$/.test(c));
+        if (!candidates.length) return null;
+        return candidates.find((c) => /date|time|dt/i.test(c)) || candidates[0];
+      };
+
       const exactOutput = Object.keys(expressions).find((name) => name.toLowerCase() === currentColumn.toLowerCase());
       if (exactOutput) {
-        const sourceField = directFieldReference(expressions[exactOutput]);
+        const sourceField = extractCalculatedSourceField(expressions[exactOutput]);
         if (sourceField && producer.resident?.[0]) return walk(cleanName(producer.resident[0]), sourceField, nextLineage);
+        if (sourceField && (producer.sourceRefs || []).length) {
+          return { query: `Source_${cleanName(producer.table)}`, column: sourceField, lineage: nextLineage };
+        }
+        if ((producer.sourceRefs || []).length) {
+          return { query: cleanName(producer.table), column: currentColumn, lineage: nextLineage };
+        }
       }
 
       // A downstream table may rename the requested source field to another
@@ -3484,16 +3506,20 @@ export function buildDaxMeasures(operations: Operation[], profiles: Record<strin
 // ──────────────────────────────────────────────────────────────
 
 const KEY_RE_R = /(id$|_id$|key$|_key$|code$|number$|no$|guid$)/i;
-const FACT_RE = /(fact|sales|invoice|order|transaction|ledger|finance|inventory|stock|claim|payment|movement|event|detail|line)/i;
-const DIM_RE = /(dim|customer|product|item|vendor|supplier|date|calendar|account|region|country|employee|store|lookup|master)/i;
+const FACT_RE = /(fact|sales|invoice|order|transaction|ledger|finance|inventory|stock|claim|payment|movement|event|detail|line|shipment|deliver|exception|target|fuelindex|booking|enrollment|tuition|scholarship|grade)/i;
+const DIM_RE = /(dim|customer|product|item|vendor|supplier|date|calendar|account|region|country|employee|store|lookup|master|carrier|warehouse|route)/i;
 
 export function tableRole(p: TableProfile): string {
   if (p.classification === 'inline/static') return 'reference';
   if (/bridge|link/i.test(p.table)) return 'bridge';
   if (FACT_RE.test(p.table)) return 'fact';
   if (DIM_RE.test(p.table)) return 'dimension';
-  const measures = p.fields.filter(f => /(amount|sales|qty|quantity|price|cost|value|revenue|margin|total|balance)/i.test(f));
-  return measures.length >= 2 || p.fields.length > 12 ? 'fact' : 'dimension';
+  const measures = p.fields.filter(f => /(amount|sales|qty|quantity|price|cost|value|revenue|margin|total|balance|weight|pieces|freight|index|rate|score|pct|percent|ontime)/i.test(f));
+  const foreignKeys = p.fields.filter(f => KEY_RE_R.test(f));
+  if (measures.length >= 2 || p.fields.length > 12) return 'fact';
+  if (measures.length >= 1 && foreignKeys.length >= 2) return 'fact';
+  if (foreignKeys.length >= 3) return 'fact';
+  return 'dimension';
 }
 
 function matchPrefix(t: string, f: string): boolean {

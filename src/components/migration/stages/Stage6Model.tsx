@@ -1622,17 +1622,19 @@ function computeStarSchemaPositions(
   const primaryFact =
     factTables[0] ||
     [...tables].sort((a, b) => (degree.get(b.name) || 0) - (degree.get(a.name) || 0))[0];
+  const centerFacts = factTables.length > 0 ? factTables : primaryFact ? [primaryFact] : [];
+  const centerFactNames = new Set(centerFacts.map((t) => t.name));
 
   const connectedDims = tables.filter(
-    (t) => t.name !== primaryFact?.name && (connectedTo.get(t.name)?.size || 0) > 0,
+    (t) => !centerFactNames.has(t.name) && (connectedTo.get(t.name)?.size || 0) > 0,
   );
   const supportingTables = tables.filter(
-    (t) => t.name !== primaryFact?.name && (connectedTo.get(t.name)?.size || 0) === 0,
+    (t) => !centerFactNames.has(t.name) && (connectedTo.get(t.name)?.size || 0) === 0,
   );
 
   const leftDims = connectedDims.filter((_, i) => i % 2 === 0);
   const rightDims = connectedDims.filter((_, i) => i % 2 === 1);
-  const maxSideRows = Math.max(leftDims.length, rightDims.length, 1);
+  const maxSideRows = Math.max(leftDims.length, rightDims.length, centerFacts.length, 1);
 
   // Dynamically distribute columns across the available canvas width to avoid empty space or overlap
   const usableW = Math.max(880, viewportWidth - 48);
@@ -1645,9 +1647,14 @@ function computeStarSchemaPositions(
     positions[t.name] = { x: leftX, y: 28 + i * rowStepY };
   });
 
-  if (primaryFact) {
-    const centerY = Math.max(36, Math.round(((maxSideRows - 1) * rowStepY) / 2) + 16);
-    positions[primaryFact.name] = { x: centerX, y: centerY };
+  if (centerFacts.length > 0) {
+    const startCenterY = Math.max(
+      28,
+      Math.round(((maxSideRows - centerFacts.length) * rowStepY) / 2) + 28,
+    );
+    centerFacts.forEach((fact, idx) => {
+      positions[fact.name] = { x: centerX, y: startCenterY + idx * rowStepY };
+    });
   }
 
   rightDims.forEach((t, i) => {
