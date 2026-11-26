@@ -237,6 +237,8 @@ FROM [../SourceData/OperationalTargets.xlsx] (ooxml, embedded labels, table is F
     const exprEntry = Object.keys(pbipZip.files).find((k) => k.endsWith("expressions.tmdl"))!;
     const exprTmdl = await pbipZip.files[exprEntry].async("string");
     expect(exprTmdl).toContain("Excel.Workbook(_binary, null, true)");
+    expect(exprTmdl).toContain("expression Source_SalesTargets");
+    expect(exprTmdl).toContain("expression Source_MacroEconomicIndex");
     expect(exprTmdl).not.toContain('File.Contents("SourceData/OperationalTargets.xlsx")');
     expect(exprTmdl).not.toContain('File.Contents("../SourceData/OperationalTargets.xlsx")');
   });

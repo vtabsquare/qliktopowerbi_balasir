@@ -2064,9 +2064,9 @@ function embeddedProjectFileSourceExpression(file: ProjectFile, connectorType: s
   return `let\n            _binary = ${binary},\n            _rows = Csv.Document(_binary, [Delimiter=${esc(delimiter)}, Encoding=65001, QuoteStyle=QuoteStyle.Csv]),\n            _table = Table.PromoteHeaders(_rows, [PromoteAllScalars=true])\n        in\n            _table`;
 }
 
-function sourceExpression(m: SourceMap | null, table: string, uploadedFile: ProjectFile | null = null): string | { dbExpr: string; navExpr: (dbStep: string) => string } {
+function sourceExpression(m: SourceMap | null, table: string, uploadedFile: ProjectFile | null = null, sheetHint = ""): string | { dbExpr: string; navExpr: (dbStep: string) => string } {
   const isDb = m?.connectorType && ['Database/SQL', 'SQL Server', 'PostgreSQL', 'MySQL'].includes(m.connectorType);
-  const embedded = (!isDb && uploadedFile) ? embeddedProjectFileSourceExpression(uploadedFile, m?.connectorType || connector(uploadedFile.path), table) : null;
+  const embedded = (!isDb && uploadedFile) ? embeddedProjectFileSourceExpression(uploadedFile, m?.connectorType || connector(uploadedFile.path), sheetHint || table) : null;
   if (embedded) return embedded;
   if (!m || m.status !== 'Mapped') {
     return `error Error.Record("QLIK2PBI.SourceMapping", "No executable source mapping is available for table ${table}.", [Table=${esc(table)}, Source=${esc(m?.originalRef || "unmapped")}])`;
@@ -2134,9 +2134,13 @@ function buildSourceStagingPlan(
       || mappingLookup.get(canonicalRef(sourceRef))
       || mappingLookup.get(basenameRef(sourceRef))
       || null;
+    const sheetMatch = String(operation.raw || "").match(/\btable\s+is\s+(?:"([^"]+)"|'([^']+)'|\[([^\]]+)\]|([A-Za-z0-9_.$@-]+))/i);
+    const explicitSheet = (sheetMatch?.[1] || sheetMatch?.[2] || sheetMatch?.[3] || sheetMatch?.[4] || "").trim();
+    const isExcelSource = mapping?.connectorType === "Excel" || /\.xlsx?$/i.test(sourceRef);
     const signature = [
       mapping?.connectorType || "Unknown",
       canonicalRef(mapping?.mappedRef || mapping?.effectiveRef || sourceRef),
+      ...(isExcelSource ? [explicitSheet || cleanName(operation.table)] : []),
     ].join("::");
     let queryName = queryBySignature.get(signature);
     if (!queryName) {
@@ -2146,10 +2150,10 @@ function buildSourceStagingPlan(
       while (queries[queryName]) queryName = `${baseName}_${suffix++}`;
       queryBySignature.set(signature, queryName);
       const uploadedFile = findUploadedSourceFile(files, operation, sourceRef, mapping);
-      sourceModeByQuery[queryName] = uploadedFile && embeddedProjectFileSourceExpression(uploadedFile, mapping?.connectorType || connector(uploadedFile.path))
+      sourceModeByQuery[queryName] = uploadedFile && embeddedProjectFileSourceExpression(uploadedFile, mapping?.connectorType || connector(uploadedFile.path), explicitSheet || operation.table)
         ? "embedded-upload"
         : "external-connector";
-      const srcExpr = sourceExpression(mapping, operation.table, uploadedFile);
+      const srcExpr = sourceExpression(mapping, operation.table, uploadedFile, explicitSheet);
       let queryBody = "";
       if (typeof srcExpr === "string") {
         queryBody = `    Source = ${srcExpr}\nin\n    Source`;
