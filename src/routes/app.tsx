@@ -4,7 +4,7 @@ import { StageNav } from "@/components/migration/StageNav";
 import { useMigration } from "@/lib/migration/store";
 import { Outlet } from "@tanstack/react-router";
 import { useAuth } from "@/contexts/AuthContext";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { FloatingWorkflowNav } from "@/components/migration/FloatingWorkflowNav";
 import { DemoEndedModal } from "@/components/migration/DemoEndedModal";
 import { TourProvider } from "@/contexts/TourContext";
@@ -19,6 +19,7 @@ import {
   markStepCompleted,
   consumePendingReloadRedirect,
   getLockedStepActionMessage,
+  scrollWorkflowToTop,
   WORKFLOW_STEPS,
 } from "@/lib/migration/workflow-gating";
 import { StageModalOverlay } from "@/components/migration/StageModalOverlay";
@@ -137,21 +138,20 @@ function MigrationLayout() {
   const [modalStepId, setModalStepId] = useState<number | null>(null);
   const mainScrollRef = useRef<HTMLElement>(null);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const resetScroll = () => {
       if (mainScrollRef.current) {
         mainScrollRef.current.scrollTop = 0;
+        mainScrollRef.current.scrollTo?.({ top: 0, left: 0, behavior: "instant" as ScrollBehavior });
       }
-      if (typeof window !== "undefined") {
-        window.scrollTo({ top: 0, left: 0, behavior: "auto" });
-      }
+      scrollWorkflowToTop();
     };
     resetScroll();
     const rafId = typeof window !== "undefined" ? window.requestAnimationFrame(resetScroll) : 0;
+    const timerId = typeof window !== "undefined" ? window.setTimeout(resetScroll, 80) : 0;
     return () => {
-      if (rafId && typeof window !== "undefined") {
-        window.cancelAnimationFrame(rafId);
-      }
+      if (rafId && typeof window !== "undefined") window.cancelAnimationFrame(rafId);
+      if (timerId && typeof window !== "undefined") window.clearTimeout(timerId);
     };
   }, [currentPath]);
 

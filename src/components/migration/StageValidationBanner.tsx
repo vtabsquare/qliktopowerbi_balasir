@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
-import { AlertCircle, AlertTriangle, Info, Loader2, Sparkles, X } from "lucide-react";
+import { AlertCircle, AlertTriangle, CheckCircle2, Info, Loader2, RotateCcw, Sparkles, X } from "lucide-react";
 import { toast } from "sonner";
 import { useMigration } from "@/lib/migration/store";
+import { AUTO_FIX_PHASES } from "@/lib/migration/autofix";
 import { WORKFLOW_STEPS } from "@/lib/migration/workflow-gating";
 import { validatePowerBiModel } from "@/lib/migration/model";
 import { modelDaxInputs, validateDaxMeasures } from "@/lib/migration/dax";
@@ -29,7 +30,10 @@ export function StageValidationBanner({ stepId, canProceed, blockedReason }: Sta
     enterpriseAnalysis,
     powerBiModel,
     runAutoFix,
+    rollbackLastAutoFix,
     autoFixRunning,
+    autoFixPhase,
+    autoFixReport,
   } = useMigration();
   const [dismissedIds, setDismissedIds] = useState<Record<string, boolean>>({});
   const step = WORKFLOW_STEPS[stepId] || WORKFLOW_STEPS[0];
@@ -167,14 +171,16 @@ export function StageValidationBanner({ stepId, canProceed, blockedReason }: Sta
         : false;
       const remainingBlocking = Math.max(report.afterBlocking, latestDaxBlocking ? 1 : 0);
 
-      if (fixed > 0 && remainingBlocking === 0) {
-        toast.success(`Auto-Fix resolved ${fixed} issue(s) — all blocking errors cleared!`);
+      if (report.finalStatus === "Fix Failed") {
+        toast.error("Fix Failed", { description: report.errorMessage || report.summary });
+      } else if (report.finalStatus === "Fixed Successfully" && remainingBlocking === 0) {
+        toast.success(`Fixed Successfully (${fixed} issue(s) resolved)`);
       } else if (fixed > 0 && remainingBlocking > 0) {
-        toast.warning(`Auto-Fix resolved ${fixed} issue(s)`, {
-          description: `${remainingBlocking} blocking item(s) still require review before proceeding.`,
+        toast.warning(`Partially Fixed (${fixed} resolved)`, {
+          description: `${remainingBlocking} blocking item(s) still require manual review before proceeding.`,
         });
       } else if (remainingBlocking > 0) {
-        toast.warning("Manual action required", {
+        toast.warning("Manual Action Required", {
           description: `0 automatic fixes applied. ${remainingBlocking} blocking item(s) still require your action before proceeding.`,
         });
       } else {
@@ -292,6 +298,73 @@ export function StageValidationBanner({ stepId, canProceed, blockedReason }: Sta
           </li>
         )}
       </ul>
+
+      {autoFixRunning && (
+        <div className="mt-3 rounded-lg border border-primary/25 bg-primary/5 p-3">
+          <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+            {AUTO_FIX_PHASES.map((phase) => {
+              const active = autoFixPhase === phase;
+              return (
+                <span
+                  key={phase}
+                  className={cn(
+                    "inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-medium",
+                    active ? "bg-primary text-primary-foreground" : "bg-background/70 text-muted-foreground border border-border/50",
+                  )}
+                >
+                  {active && <Loader2 className="h-3 w-3 animate-spin" />}
+                  {phase}
+                </span>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {!autoFixRunning && autoFixReport && (
+        <div className="mt-3 rounded-lg border border-border/60 bg-background/80 p-3 text-xs space-y-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase",
+                  autoFixReport.finalStatus === "Fixed Successfully"
+                    ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+                    : autoFixReport.finalStatus === "Partially Fixed"
+                    ? "bg-amber-500/15 text-amber-700 dark:text-amber-300"
+                    : "bg-destructive/15 text-destructive",
+                )}
+              >
+                <CheckCircle2 className="h-3 w-3" />
+                {autoFixReport.finalStatus}
+              </span>
+              <span className="text-muted-foreground">{autoFixReport.summary}</span>
+            </div>
+            {autoFixReport.canRollback && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (rollbackLastAutoFix()) toast.info("Reverted last Auto-Fix changes.");
+                }}
+                className="inline-flex items-center gap-1 rounded border border-border px-2 py-1 text-[11px] font-medium hover:bg-muted"
+              >
+                <RotateCcw className="h-3 w-3" />
+                Undo Auto-Fix
+              </button>
+            )}
+          </div>
+          {autoFixReport.actions.length > 0 && (
+            <div className="grid gap-1.5 sm:grid-cols-2">
+              {autoFixReport.actions.slice(0, 4).map((a) => (
+                <div key={a.id} className="rounded border border-border/50 bg-surface/60 px-2.5 py-1.5 text-[11px]">
+                  <span className="font-semibold">{a.objectName}:</span>{" "}
+                  <span className="text-muted-foreground">{a.action} — {a.detail}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

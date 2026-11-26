@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { resetWorkflowStorageOnReload } from "./workflow-gating";
+import { invalidateDownstreamSteps, resetWorkflowStorageOnReload } from "./workflow-gating";
 
 // Ensure hard refresh / reload clears persisted workflow state before Zustand hydrates
 resetWorkflowStorageOnReload();
@@ -43,11 +43,14 @@ import {
 import {
   autoMapSourceRows,
   collectRepairIssues,
+  computeAutoFixFinalStatus,
   repairPowerBiModel,
   repairEnterpriseLineage,
   normalizedEnterpriseTypeEdits,
   type AutoFixAction,
+  type AutoFixProgressPhase,
   type AutoFixReport,
+  type RepairArea,
   type RepairFocus,
   type RepairIssue,
 } from "./autofix";
@@ -129,10 +132,20 @@ interface MigrationStore extends MigrationMetadata {
   repairFocus: RepairFocus | null;
   autoFixReport: AutoFixReport | null;
   autoFixRunning: boolean;
+  autoFixPhase: AutoFixProgressPhase | null;
+  autoFixSnapshot: {
+    enterpriseMappingRows: MappingRow[];
+    enterpriseMappingUpdates: Record<string, { mappedRef?: string; connectorType?: string; status?: string; notes?: string; sheetName?: string }>;
+    enterpriseColumnTypeEdits: Record<string, string>;
+    enterpriseAnalysis: EnterpriseAnalysis | null;
+    expressionInventory: ExpressionInventory | null;
+    powerBiModel: PowerBiModelState | null;
+  } | null;
   validationState: ValidationState;
   reset: () => void;
   setRepairFocus: (focus: RepairFocus | null) => void;
   runAutoFix: () => Promise<AutoFixReport>;
+  rollbackLastAutoFix: () => boolean;
   setRequirement: (r: Requirement) => void;
   setRuleBook: (md: string) => void;
   setAiMetadata: (data: { finalTables: FinalTable[]; relationships: Relationship[]; sourceTables?: SourceTable[] }) => void;
@@ -192,6 +205,15 @@ const initial: MigrationMetadata & {
   repairFocus: RepairFocus | null;
   autoFixReport: AutoFixReport | null;
   autoFixRunning: boolean;
+  autoFixPhase: AutoFixProgressPhase | null;
+  autoFixSnapshot: {
+    enterpriseMappingRows: MappingRow[];
+    enterpriseMappingUpdates: Record<string, { mappedRef?: string; connectorType?: string; status?: string; notes?: string; sheetName?: string }>;
+    enterpriseColumnTypeEdits: Record<string, string>;
+    enterpriseAnalysis: EnterpriseAnalysis | null;
+    expressionInventory: ExpressionInventory | null;
+    powerBiModel: PowerBiModelState | null;
+  } | null;
   validationState: ValidationState;
 } = {
   sourceTables: [], etlOperations: [], allTables: [], finalTables: [], relationships: [], variables: {}, droppedTables: [], intermediateTables: [], setAnalysisRows: [],
@@ -200,6 +222,7 @@ const initial: MigrationMetadata & {
   stageAccuracy: { 1: null, 2: null, 3: null, 4: null, 5: null, 6: null },
   enterpriseFiles: [], enterpriseAnalysis: null, enterpriseMappingRows: [], enterpriseMappingUpdates: {}, enterpriseColumnTypeEdits: {}, qvwAnalysis: null,
   expressionInventory: null, powerBiModel: null, projectWorkspace: null, pipelineLogs: [], repairFocus: null, autoFixReport: null, autoFixRunning: false,
+  autoFixPhase: null, autoFixSnapshot: null,
   validationState: { workspaceRevision: 0, validationRevision: 0, status: "idle", issues: [] },
 };
 
@@ -393,13 +416,34 @@ export const useMigration = create<MigrationStore>()(persist((set, get) => ({
   setRepairFocus: (repairFocus) => set({ repairFocus }),
   runAutoFix: async () => {
     const before = get();
-    const beforeIssues = collectRepairIssues(before.enterpriseAnalysis, before.powerBiModel);
+    if (before.autoFixRunning && before.autoFixReport) {
+      return before.autoFixReport;
+    }
+    const yieldPhase = (phase: AutoFixProgressPhase) => {
+      set({ autoFixPhase: phase });
+      return new Promise<void>((resolve) => setTimeout(resolve, 0));
+    };
+    const snapshot = {
+      enterpriseMappingRows: before.enterpriseMappingRows,
+      enterpriseMappingUpdates: before.enterpriseMappingUpdates,
+      enterpriseColumnTypeEdits: before.enterpriseColumnTypeEdits,
+      enterpriseAnalysis: before.enterpriseAnalysis,
+      expressionInventory: before.expressionInventory,
+      powerBiModel: before.powerBiModel,
+    };
+
     set((state) => ({
       autoFixRunning: true,
+      autoFixPhase: "Analysing Issue",
       validationState: { ...state.validationState, status: "validating" },
     }));
+    await yieldPhase("Analysing Issue");
+    const beforeIssues = collectRepairIssues(before.enterpriseAnalysis, before.powerBiModel);
+    await yieldPhase("Identifying Root Cause");
+
     const actions: AutoFixAction[] = [];
     try {
+      await yieldPhase("Applying Fix");
       const mapped = autoMapSourceRows(before.enterpriseMappingRows, before.enterpriseFiles);
       actions.push(...mapped.actions);
       const enterpriseMappingUpdates = { ...before.enterpriseMappingUpdates };
@@ -410,6 +454,7 @@ export const useMigration = create<MigrationStore>()(persist((set, get) => ({
           connectorType: row.connectorType,
           status: row.status,
           notes: row.notes,
+          ...(row.sheetName ? { sheetName: row.sheetName } : {}),
         };
       }
 
@@ -437,10 +482,16 @@ export const useMigration = create<MigrationStore>()(persist((set, get) => ({
         }
       }
 
+      await yieldPhase("Regenerating Component");
       let enterpriseAnalysis = before.enterpriseAnalysis;
       const projectFiles = toEnterpriseProjectFiles(before.enterpriseFiles);
       if (projectFiles.length) {
-        enterpriseAnalysis = runEnterpriseAnalysis(projectFiles, enterpriseMappingUpdates, enterpriseColumnTypeEdits);
+        try {
+          enterpriseAnalysis = runEnterpriseAnalysis(projectFiles, enterpriseMappingUpdates, enterpriseColumnTypeEdits);
+        } catch {
+          // Retry once safely for transient analysis errors
+          enterpriseAnalysis = runEnterpriseAnalysis(projectFiles, enterpriseMappingUpdates, enterpriseColumnTypeEdits);
+        }
         const repairedMappings = enterpriseAnalysis.sourceMappings.filter((item) => item.status === "Mapped").length - (before.enterpriseAnalysis?.sourceMappings.filter((item) => item.status === "Mapped").length || 0);
         if (repairedMappings > 0) actions.push({ id: "pipeline-rerun", area: "source-mapping", objectName: "Enterprise pipeline", action: "Re-ran conversion with repaired mappings", status: "fixed", confidence: 100, detail: `${repairedMappings} additional source mapping(s) passed validation.` });
       }
@@ -523,16 +574,53 @@ export const useMigration = create<MigrationStore>()(persist((set, get) => ({
         enterpriseAnalysis = revalidateEnterpriseAnalysis({ ...enterpriseAnalysis, daxMeasures });
       }
 
+      await yieldPhase("Revalidating");
       const afterIssues = collectRepairIssues(enterpriseAnalysis, powerBiModel);
+      const fixedCount = actions.filter((action) => action.status === "fixed").length;
+      const reviewCount = actions.filter((action) => action.status === "review").length;
+      const afterBlocking = afterIssues.filter((issue) => issue.severity === "blocking-error" || issue.severity === "error").length;
+      const finalStatus = computeAutoFixFinalStatus({
+        fixedCount,
+        afterBlocking,
+        remainingCount: afterIssues.length,
+      });
+      const affectedAreas = Array.from(new Set(actions.filter((a) => a.status === "fixed").map((a) => a.area))) as RepairArea[];
+      const areaToStep: Record<RepairArea, number> = {
+        "source-mapping": 4,
+        "data-types": 5,
+        "power-query": 5,
+        dax: 6,
+        "model-tables": 7,
+        relationships: 8,
+        visuals: 2,
+        validation: 9,
+      };
+      if (fixedCount > 0 && affectedAreas.length > 0 && typeof window !== "undefined") {
+        const minAffectedStep = Math.min(...affectedAreas.map((a) => areaToStep[a] ?? 9));
+        const isDemoMode = window.location.pathname.startsWith("/demo");
+        invalidateDownstreamSteps(minAffectedStep, isDemoMode);
+      }
+      const summary =
+        finalStatus === "Fixed Successfully"
+          ? `${fixedCount} safe fix(es) applied and verified. All validation checks passed.`
+          : finalStatus === "Partially Fixed"
+          ? `${fixedCount} safe fix(es) applied. ${afterIssues.length} remaining item(s) require manual review.`
+          : `No safe automatic fixes could be applied. ${afterIssues.length} issue(s) require manual action.`;
+
+      await yieldPhase("Resolution Result");
       const report: AutoFixReport = {
         runAt: new Date().toISOString(),
         beforeBlocking: beforeIssues.filter((issue) => issue.severity === "blocking-error" || issue.severity === "error").length,
-        afterBlocking: afterIssues.filter((issue) => issue.severity === "blocking-error" || issue.severity === "error").length,
-        fixedCount: actions.filter((action) => action.status === "fixed").length,
-        reviewCount: actions.filter((action) => action.status === "review").length,
+        afterBlocking,
+        fixedCount,
+        reviewCount,
         actions,
         inputIssueIds: beforeIssues.map((issue) => issue.id),
         remainingIssueIds: afterIssues.map((issue) => issue.id),
+        finalStatus,
+        summary,
+        affectedAreas,
+        canRollback: fixedCount > 0,
       };
       set((state) => ({
         enterpriseAnalysis,
@@ -543,6 +631,8 @@ export const useMigration = create<MigrationStore>()(persist((set, get) => ({
         powerBiModel,
         autoFixReport: report,
         autoFixRunning: false,
+        autoFixPhase: "Resolution Result",
+        autoFixSnapshot: fixedCount > 0 ? snapshot : state.autoFixSnapshot,
         validationState: validatedState(
           enterpriseAnalysis,
           powerBiModel,
@@ -553,15 +643,59 @@ export const useMigration = create<MigrationStore>()(persist((set, get) => ({
         projectWorkspace: touchWorkspace(state.projectWorkspace),
         pipelineLogs: appendPipelineLogs(
           state.pipelineLogs,
-          `AI Auto-Fix: ${report.fixedCount} safe fix(es) applied`,
+          `AI Auto-Fix [${finalStatus}]: ${report.fixedCount} safe fix(es) applied`,
           `AI Auto-Fix: ${report.afterBlocking} blocking issue(s) remain`,
         ),
       }));
       return report;
     } catch (error) {
-      set({ autoFixRunning: false });
-      throw error;
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const afterIssues = collectRepairIssues(before.enterpriseAnalysis, before.powerBiModel);
+      const failedReport: AutoFixReport = {
+        runAt: new Date().toISOString(),
+        beforeBlocking: beforeIssues.filter((issue) => issue.severity === "blocking-error" || issue.severity === "error").length,
+        afterBlocking: afterIssues.filter((issue) => issue.severity === "blocking-error" || issue.severity === "error").length,
+        fixedCount: 0,
+        reviewCount: afterIssues.length,
+        actions,
+        inputIssueIds: beforeIssues.map((issue) => issue.id),
+        remainingIssueIds: afterIssues.map((issue) => issue.id),
+        finalStatus: "Fix Failed",
+        summary: `Auto-Fix failed: ${errorMessage}`,
+        affectedAreas: [],
+        errorMessage,
+        canRollback: false,
+      };
+      set({
+        autoFixRunning: false,
+        autoFixPhase: "Resolution Result",
+        autoFixReport: failedReport,
+      });
+      return failedReport;
     }
+  },
+  rollbackLastAutoFix: () => {
+    const snap = get().autoFixSnapshot;
+    if (!snap) return false;
+    set((state) => ({
+      enterpriseMappingRows: snap.enterpriseMappingRows,
+      enterpriseMappingUpdates: snap.enterpriseMappingUpdates,
+      enterpriseColumnTypeEdits: snap.enterpriseColumnTypeEdits,
+      enterpriseAnalysis: snap.enterpriseAnalysis,
+      expressionInventory: snap.expressionInventory,
+      powerBiModel: snap.powerBiModel,
+      autoFixSnapshot: null,
+      autoFixReport: null,
+      autoFixPhase: null,
+      validationState: validatedState(
+        snap.enterpriseAnalysis,
+        snap.powerBiModel,
+        state.validationState.workspaceRevision + 1,
+        state.validationState.validationRevision + 1,
+      ),
+      pipelineLogs: appendPipelineLogs(state.pipelineLogs, "AI Auto-Fix: Reverted last automatic repair snapshot."),
+    }));
+    return true;
   },
   setRequirement: (requirement) => set((s) => ({ requirement, stageStatus: { ...s.stageStatus, 1: "complete" } })),
   setRuleBook: (ruleBookMd) => set((s) => ({ ruleBookMd, stageStatus: { ...s.stageStatus, 2: "complete" } })),

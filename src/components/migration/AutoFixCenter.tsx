@@ -8,13 +8,14 @@ import {
   Loader2,
   MapPin,
   RefreshCw,
+  RotateCcw,
   ShieldCheck,
   Sparkles,
   WandSparkles,
 } from "lucide-react";
 import { toast } from "sonner";
 import type { EnterpriseAnalysis } from "@/lib/migration/enterprise-parser";
-import { collectRepairIssues, issueFingerprint, type RepairArea, type RepairIssue } from "@/lib/migration/autofix";
+import { AUTO_FIX_PHASES, collectRepairIssues, issueFingerprint, type RepairArea, type RepairIssue } from "@/lib/migration/autofix";
 import { useMigration } from "@/lib/migration/store";
 import { cn } from "@/lib/utils";
 
@@ -62,8 +63,10 @@ export function AutoFixCenter({ analysis, compact = false }: Props) {
   const {
     powerBiModel,
     autoFixRunning,
+    autoFixPhase,
     autoFixReport,
     runAutoFix,
+    rollbackLastAutoFix,
     setRepairFocus,
     validationState,
   } = useMigration();
@@ -193,12 +196,65 @@ export function AutoFixCenter({ analysis, compact = false }: Props) {
         </div>
       </div>
 
+      {autoFixRunning && (
+        <div className="border-b border-border bg-primary/5 px-4 py-3">
+          <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+            {AUTO_FIX_PHASES.map((phase) => {
+              const active = autoFixPhase === phase;
+              return (
+                <span
+                  key={phase}
+                  className={cn(
+                    "inline-flex items-center gap-1 rounded-full px-2.5 py-1 font-medium",
+                    active ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground border border-border",
+                  )}
+                >
+                  {active && <Loader2 className="h-3 w-3 animate-spin" />}
+                  {phase}
+                </span>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {autoFixReport && reportCoversCurrent && (
-        <div className="grid gap-3 border-b border-border p-4 sm:grid-cols-4">
-          <Summary label="Before" value={Math.max(autoFixReport.beforeBlocking, autoFixReport.inputIssueIds?.length || 0)} warning={Math.max(autoFixReport.beforeBlocking, autoFixReport.inputIssueIds?.length || 0) > 0} />
-          <Summary label="Fixed safely" value={autoFixReport.fixedCount} good={autoFixReport.fixedCount > 0} />
-          <Summary label="Needs review" value={Math.max(autoFixReport.reviewCount, issues.length)} warning={Math.max(autoFixReport.reviewCount, issues.length) > 0} />
-          <Summary label="Remaining" value={issues.length} good={issues.length === 0} warning={issues.length > 0} />
+        <div className="border-b border-border p-4 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+            <div className="flex items-center gap-2">
+              <span
+                className={cn(
+                  "rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase",
+                  autoFixReport.finalStatus === "Fixed Successfully"
+                    ? "bg-emerald-500/15 text-emerald-700"
+                    : autoFixReport.finalStatus === "Partially Fixed"
+                    ? "bg-amber-500/15 text-amber-700"
+                    : "bg-destructive/15 text-destructive",
+                )}
+              >
+                {autoFixReport.finalStatus}
+              </span>
+              <span className="text-muted-foreground">{autoFixReport.summary}</span>
+            </div>
+            {autoFixReport.canRollback && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (rollbackLastAutoFix()) toast.info("Reverted last Auto-Fix changes.");
+                }}
+                className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1 text-xs font-medium hover:bg-muted"
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+                Undo Auto-Fix
+              </button>
+            )}
+          </div>
+          <div className="grid gap-3 sm:grid-cols-4">
+            <Summary label="Before" value={Math.max(autoFixReport.beforeBlocking, autoFixReport.inputIssueIds?.length || 0)} warning={Math.max(autoFixReport.beforeBlocking, autoFixReport.inputIssueIds?.length || 0) > 0} />
+            <Summary label="Fixed safely" value={autoFixReport.fixedCount} good={autoFixReport.fixedCount > 0} />
+            <Summary label="Needs review" value={Math.max(autoFixReport.reviewCount, issues.length)} warning={Math.max(autoFixReport.reviewCount, issues.length) > 0} />
+            <Summary label="Remaining" value={issues.length} good={issues.length === 0} warning={issues.length > 0} />
+          </div>
         </div>
       )}
       {autoFixReport && !reportCoversCurrent && (

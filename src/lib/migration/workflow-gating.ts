@@ -553,21 +553,32 @@ export function resetWorkflow(isDemo: boolean): void {
 }
 
 /**
- * Resets vertical scroll position on the active workflow main container and window.
+ * Resets vertical scroll position on the active workflow main container, nested scroll containers, and window.
  */
 export function scrollWorkflowToTop(): void {
   if (typeof window === "undefined") return;
-  const reset = () => {
-    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
-    const mainEl = document.querySelector<HTMLElement>('[data-workflow-main-scroll="true"]');
-    if (mainEl) {
-      mainEl.scrollTop = 0;
+  try {
+    if ("scrollRestoration" in window.history) {
+      window.history.scrollRestoration = "manual";
     }
+  } catch {
+    // ignore
+  }
+  const reset = () => {
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" as ScrollBehavior });
+    if (document.documentElement) document.documentElement.scrollTop = 0;
+    if (document.body) document.body.scrollTop = 0;
+    const mainContainers = document.querySelectorAll<HTMLElement>('[data-workflow-main-scroll="true"]');
+    mainContainers.forEach((el) => {
+      el.scrollTop = 0;
+      el.scrollTo?.({ top: 0, left: 0, behavior: "instant" as ScrollBehavior });
+    });
   };
   reset();
   if (typeof window.requestAnimationFrame === "function") {
     window.requestAnimationFrame(reset);
   }
+  window.setTimeout(reset, 50);
 }
 
 /**

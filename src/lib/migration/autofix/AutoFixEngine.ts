@@ -47,6 +47,23 @@ export interface RepairIssue {
   safeAutoFix: boolean;
 }
 
+export const AUTO_FIX_PHASES = [
+  "Analysing Issue",
+  "Identifying Root Cause",
+  "Applying Fix",
+  "Regenerating Component",
+  "Revalidating",
+  "Resolution Result",
+] as const;
+
+export type AutoFixProgressPhase = (typeof AUTO_FIX_PHASES)[number];
+
+export type AutoFixFinalStatus =
+  | "Fixed Successfully"
+  | "Partially Fixed"
+  | "Manual Action Required"
+  | "Fix Failed";
+
 export interface AutoFixAction {
   id: string;
   area: RepairArea;
@@ -66,6 +83,24 @@ export interface AutoFixReport {
   actions: AutoFixAction[];
   inputIssueIds: string[];
   remainingIssueIds: string[];
+  finalStatus: AutoFixFinalStatus;
+  summary: string;
+  affectedAreas: RepairArea[];
+  errorMessage?: string;
+  canRollback?: boolean;
+}
+
+export function computeAutoFixFinalStatus(params: {
+  fixedCount: number;
+  afterBlocking: number;
+  remainingCount: number;
+  errorMessage?: string;
+}): AutoFixFinalStatus {
+  if (params.errorMessage) return "Fix Failed";
+  if (params.afterBlocking === 0 && params.remainingCount === 0) return "Fixed Successfully";
+  if (params.fixedCount > 0 && (params.afterBlocking > 0 || params.remainingCount > 0)) return "Partially Fixed";
+  if (params.afterBlocking > 0 || params.remainingCount > 0) return "Manual Action Required";
+  return "Fixed Successfully";
 }
 
 export interface AutoFixMappingRow {
@@ -79,6 +114,7 @@ export interface AutoFixMappingRow {
   bypassQvd: boolean;
   effectiveRef: string;
   qvdProducerTable: string;
+  sheetName?: string;
 }
 
 export interface AutoFixFile {

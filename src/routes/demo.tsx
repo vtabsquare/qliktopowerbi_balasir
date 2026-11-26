@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useLayoutEffect, useRef } from "react";
 import { useMigration } from "@/lib/migration/store";
 import { toast } from "sonner";
 import {
@@ -10,6 +10,7 @@ import {
   getCompletedSteps,
   markStepCompleted,
   consumePendingReloadRedirect,
+  scrollWorkflowToTop,
   WorkflowStep,
 } from "@/lib/migration/workflow-gating";
 import { useNavigationLoading } from "@/components/common/NavigationLoadingOverlay";
@@ -184,21 +185,20 @@ function DemoWorkspace({ session, onLoggedOut }: { session?: unknown; onLoggedOu
   const readiness = useStageReadiness(activeStepId);
   const mainScrollRef = useRef<HTMLElement>(null);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const resetScroll = () => {
       if (mainScrollRef.current) {
         mainScrollRef.current.scrollTop = 0;
+        mainScrollRef.current.scrollTo?.({ top: 0, left: 0, behavior: "instant" as ScrollBehavior });
       }
-      if (typeof window !== "undefined") {
-        window.scrollTo({ top: 0, left: 0, behavior: "auto" });
-      }
+      scrollWorkflowToTop();
     };
     resetScroll();
     const rafId = typeof window !== "undefined" ? window.requestAnimationFrame(resetScroll) : 0;
+    const timerId = typeof window !== "undefined" ? window.setTimeout(resetScroll, 80) : 0;
     return () => {
-      if (rafId && typeof window !== "undefined") {
-        window.cancelAnimationFrame(rafId);
-      }
+      if (rafId && typeof window !== "undefined") window.cancelAnimationFrame(rafId);
+      if (timerId && typeof window !== "undefined") window.clearTimeout(timerId);
     };
   }, [activeStepId]);
 
