@@ -409,6 +409,18 @@ export class DaxTranslator {
     return { text: filters.filters.join(", "), ...combine(...filters.parts) };
   }
 
+  private renderDollarInner(innerRaw: string, context: DaxTranslationContext): { result: RenderResult; isExpression: boolean } {
+    const inner = innerRaw.trim();
+    if (/^[A-Za-z_][A-Za-z0-9_.$]*$/.test(inner)) {
+      return { result: this.renderVariable(inner, context), isExpression: false };
+    }
+    const parsed = new ExpressionParser().parse(inner);
+    if (parsed.ast) {
+      return { result: this.render(parsed.ast, context), isExpression: true };
+    }
+    return { result: this.renderVariable(inner, context), isExpression: false };
+  }
+
   private setFilters(node: SetAnalysisNode, context: DaxTranslationContext): { filters: string[]; parts: RenderResult[] } {
     const filters: string[] = [];
     const parts: RenderResult[] = [];
@@ -422,22 +434,30 @@ export class DaxTranslator {
         const conditions: string[] = [];
         for (const match of raw.matchAll(/(>=|<=|>|<|=)\s*(\$\([^)]+\)|[^<>=]+)/g)) {
           const rhsRaw = match[2].trim();
-          const rhs = rhsRaw.startsWith("$(") ? this.renderVariable(rhsRaw.replace(/^\$\(\s*=?\s*/, "").replace(/\)$/, ""), context) : empty(/^[-+]?\d+(\.\d+)?$/.test(rhsRaw) ? rhsRaw : literal(rhsRaw));
+          const rhs = rhsRaw.startsWith("$(")
+            ? this.renderDollarInner(rhsRaw.replace(/^\$\(\s*=?\s*/, "").replace(/\)$/, ""), context).result
+            : empty(/^[-+]?\d+(\.\d+)?$/.test(rhsRaw) ? rhsRaw : literal(rhsRaw));
           parts.push(rhs);
           conditions.push(`${column} ${match[1]} ${rhs.text}`);
         }
         filters.push(`FILTER(ALL(${column}), ${conditions.join(" && ") || "TRUE()"})`);
         continue;
       }
+      let hasDynamicExpression = false;
       const renderedValues = values.map((value) => {
         const cleaned = value.replace(/^['"]|['"]$/g, "");
         if (cleaned.startsWith("$(")) {
-          const result = this.renderVariable(cleaned.replace(/^\$\(\s*=?\s*/, "").replace(/\)$/, ""), context);
-          parts.push(result); return result.text;
+          const { result, isExpression } = this.renderDollarInner(cleaned.replace(/^\$\(\s*=?\s*/, "").replace(/\)$/, ""), context);
+          if (isExpression) hasDynamicExpression = true;
+          parts.push(result);
+          return result.text;
         }
         return /^[-+]?\d+(?:\.\d+)?$/.test(cleaned) ? cleaned : literal(cleaned);
       });
-      if (modifier.operator === "-=") filters.push(`KEEPFILTERS(NOT (${column} IN { ${renderedValues.join(", ")} }))`);
+      if (hasDynamicExpression && renderedValues.length === 1) {
+        const op = modifier.operator === "-=" ? "<>" : "=";
+        filters.push(`FILTER(ALL(${column}), ${column} ${op} ${renderedValues[0]})`);
+      } else if (modifier.operator === "-=") filters.push(`KEEPFILTERS(NOT (${column} IN { ${renderedValues.join(", ")} }))`);
       else if (modifier.operator === "+=") filters.push(`KEEPFILTERS(${column} IN { ${renderedValues.join(", ")} })`);
       else if (renderedValues.length === 0) filters.push(`REMOVEFILTERS(${column})`);
       else filters.push(`KEEPFILTERS(${column} IN { ${renderedValues.join(", ")} })`);

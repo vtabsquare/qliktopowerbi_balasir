@@ -1,7 +1,9 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { CalendarDays, CheckCircle2, CircleAlert, Clock3, Database, GitBranch, Settings2, Sparkles } from "lucide-react";
+import { CalendarDays, CheckCircle2, CircleAlert, Clock3, Database, GitBranch, Loader2, Settings2, Sparkles } from "lucide-react";
+import { toast } from "sonner";
 import { useMigration } from "@/lib/migration/store";
 import { analyzeCalendars } from "@/lib/migration/calendar-analysis";
+import { validateDaxMeasures, modelDaxInputs } from "@/lib/migration/dax";
 import { AppHeader } from "./AppHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,12 +14,72 @@ import { Input } from "@/components/ui/input";
 
 export function CalendarAnalysisPage() {
   const analysis = useMigration(s => s.enterpriseAnalysis);
+  const powerBiModel = useMigration(s => s.powerBiModel);
+  const runAutoFix = useMigration(s => s.runAutoFix);
+  const autoFixRunning = useMigration(s => s.autoFixRunning);
   const result = useMemo(() => analyzeCalendars(analysis), [analysis]);
   const [selectedId, setSelectedId] = useState<string>("");
   const selected = result.candidates.find(c => c.id === selectedId) ?? result.candidates[0];
   const [fiscalStart, setFiscalStart] = useState("detected");
   const [firstDay, setFirstDay] = useState("detected");
   const [culture, setCulture] = useState("en-US");
+
+  const calendarMeasures = useMemo(() => {
+    const tables = powerBiModel?.tables || [];
+    const daxValidationMap = new Map<string, { status: string; issues: string[] }>();
+    if (tables.length) {
+      for (const res of validateDaxMeasures(modelDaxInputs(tables), tables)) {
+        daxValidationMap.set(`${res.table.toLowerCase()}::${res.measureName.toLowerCase()}`, {
+          status: res.status,
+          issues: res.issues.filter((i) => i.severity === "error").map((i) => i.message),
+        });
+      }
+    }
+    const calTableName = selected?.table || "MasterCalendar";
+    const calCols = selected?.generatedColumns || [];
+    const rows: Array<{
+      name: string;
+      table: string;
+      calendarTable: string;
+      dateColumn: string;
+      dax: string;
+      valid: boolean;
+      issue: string;
+    }> = [];
+    for (const m of analysis?.daxMeasures || []) {
+      const dax = m.dax || "";
+      const refsSelectedCal = new RegExp(`['"]?${calTableName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}['"]?\\s*\\[([^\\]]+)\\]`, "i").exec(dax);
+      const refsDateCol = /(?:'([^']+)'|([A-Za-z_][A-Za-z0-9_]*))\s*\[(Date|CalendarDate|FiscalYear|Year|Month|Quarter|Week|MonthYear|OrderDate|AdmissionDate)[^\]]*\]/i.exec(dax);
+      const isTimeIntel = /\b(TOTALYTD|TOTALQTD|TOTALMTD|SAMEPERIODLASTYEAR|DATEADD|DATESYTD|PREVIOUSYEAR|FiscalYear)\b/i.test(dax);
+      if (!refsSelectedCal && !refsDateCol && !isTimeIntel) continue;
+      const detectedCalTable = refsSelectedCal ? calTableName : (refsDateCol?.[1] || refsDateCol?.[2] || calTableName);
+      const detectedDateCol = refsSelectedCal?.[1] || refsDateCol?.[3] || calCols.find((c) => /date/i.test(c)) || "Date";
+      const key = `${(m.table || "").toLowerCase()}::${(m.measureName || "").toLowerCase()}`;
+      const val = daxValidationMap.get(key);
+      const issueMsg = val?.issues?.join("; ") || m.warning || "";
+      rows.push({
+        name: m.measureName,
+        table: m.table,
+        calendarTable: detectedCalTable,
+        dateColumn: detectedDateCol,
+        dax,
+        valid: val ? val.status === "valid" : !m.warning,
+        issue: issueMsg,
+      });
+    }
+    return rows;
+  }, [analysis, powerBiModel, selected]);
+
+  const handleRunCalendarAutoFix = async () => {
+    const report = await runAutoFix();
+    if (report.finalStatus === "Fixed Successfully") {
+      toast.success("Fixed Successfully", { description: report.summary });
+    } else if (report.finalStatus === "Partially Fixed") {
+      toast.warning("Partially Fixed", { description: report.summary });
+    } else {
+      toast.warning(report.finalStatus, { description: report.summary });
+    }
+  };
 
   const metric = (label:string, value:number, Icon:any) => <Card><CardContent className="pt-5 flex items-center gap-3"><div className="rounded-xl bg-primary/10 p-3"><Icon className="h-5 w-5 text-primary"/></div><div><div className="text-2xl font-bold">{value}</div><div className="text-xs text-muted-foreground">{label}</div></div></CardContent></Card>;
   return <div className="min-h-screen bg-background"><AppHeader/><main className="mx-auto max-w-7xl px-6 py-8 space-y-6">
@@ -26,7 +88,7 @@ export function CalendarAnalysisPage() {
       <div className="grid md:grid-cols-5 gap-4">{metric("Calendars",result.summary.detected,CalendarDays)}{metric("AUTOGENERATE",result.summary.autogenerate,Clock3)}{metric("Fiscal",result.summary.fiscal,Database)}{metric("Role playing",result.summary.rolePlaying,GitBranch)}{metric("Blocking checks",result.summary.blocking,CircleAlert)}</div>
       {result.candidates.length===0 ? <Card><CardContent className="py-10 text-center text-muted-foreground">No calendar candidate was detected. Review the parser inventory or configure a date source manually.</CardContent></Card> : <>
         <div className="flex flex-wrap gap-2">{result.candidates.map(c=><Button key={c.id} variant={selected?.id===c.id?"default":"outline"} onClick={()=>setSelectedId(c.id)}>{c.table}<Badge className="ml-2" variant="secondary">{Math.round(c.confidence*100)}%</Badge></Button>)}</div>
-        <Tabs defaultValue="overview"><TabsList className="flex flex-wrap h-auto"><TabsTrigger value="overview">Overview</TabsTrigger><TabsTrigger value="qlik">Original Qlik logic</TabsTrigger><TabsTrigger value="variables">Resolved variables</TabsTrigger><TabsTrigger value="lineage">Calendar lineage</TabsTrigger><TabsTrigger value="m">Generated M</TabsTrigger><TabsTrigger value="columns">Generated columns</TabsTrigger><TabsTrigger value="sort">Sort configuration</TabsTrigger><TabsTrigger value="relationships">Relationships</TabsTrigger><TabsTrigger value="validation">Validation results</TabsTrigger><TabsTrigger value="repair">AI repair</TabsTrigger></TabsList>
+        <Tabs defaultValue="overview"><TabsList className="flex flex-wrap h-auto"><TabsTrigger value="overview">Overview</TabsTrigger><TabsTrigger value="qlik">Original Qlik logic</TabsTrigger><TabsTrigger value="variables">Resolved variables</TabsTrigger><TabsTrigger value="lineage">Calendar lineage</TabsTrigger><TabsTrigger value="m">Generated M</TabsTrigger><TabsTrigger value="columns">Generated columns</TabsTrigger><TabsTrigger value="sort">Sort configuration</TabsTrigger><TabsTrigger value="relationships">Relationships</TabsTrigger><TabsTrigger value="measures">Measure validation ({calendarMeasures.length})</TabsTrigger><TabsTrigger value="validation">Validation results</TabsTrigger><TabsTrigger value="repair">AI repair</TabsTrigger></TabsList>
           <TabsContent value="overview"><div className="grid lg:grid-cols-3 gap-4"><Card className="lg:col-span-2"><CardHeader><CardTitle>{selected.table}</CardTitle></CardHeader><CardContent className="grid md:grid-cols-2 gap-4 text-sm"><Info label="Calendar type" value={selected.kind}/><Info label="Date-range source" value={selected.dateRangeSource}/><Info label="Start logic" value={selected.startLogic}/><Info label="End logic" value={selected.endLogic}/><Info label="Fiscal start" value={selected.fiscalStartMonth?`Month ${selected.fiscalStartMonth}`:"Not detected"}/><Info label="Continuity" value={selected.continuous?"Continuous":"Sparse or unknown"}/><div className="md:col-span-2"><b>Detection signals</b><div className="flex gap-2 flex-wrap mt-2">{selected.signals.map(s=><Badge key={s} variant="outline">{s}</Badge>)}</div></div></CardContent></Card><Card><CardHeader><CardTitle className="flex gap-2"><Settings2 className="h-5 w-5"/> Calendar settings</CardTitle></CardHeader><CardContent className="space-y-4"><Setting label="Fiscal start month"><Select value={fiscalStart} onValueChange={setFiscalStart}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="detected">Use detected</SelectItem>{Array.from({length:12},(_,i)=><SelectItem key={i+1} value={String(i+1)}>{new Date(2024,i,1).toLocaleString("en",{month:"long"})}</SelectItem>)}</SelectContent></Select></Setting><Setting label="First day of week"><Select value={firstDay} onValueChange={setFirstDay}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="detected">Use detected/Qlik</SelectItem><SelectItem value="monday">Monday</SelectItem><SelectItem value="sunday">Sunday</SelectItem></SelectContent></Select></Setting><Setting label="Culture"><Input value={culture} onChange={e=>setCulture(e.target.value)}/></Setting><Button className="w-full" variant="outline">Save override proposal</Button></CardContent></Card></div></TabsContent>
           <TabsContent value="qlik"><CodeCard title="Original consolidated Qlik calendar logic" code={selected.qlikScript}/></TabsContent>
           <TabsContent value="variables"><Card><CardContent className="pt-6 space-y-3">{result.variables.length?result.variables.map(v=><div key={v.name} className="rounded-lg border p-3 grid md:grid-cols-4 gap-2 text-sm"><b>{v.name}</b><code className="md:col-span-2 break-all">{v.expression}</code><Badge variant={v.status==="resolved"?"default":"outline"}>{v.status} · {Math.round(v.confidence*100)}%</Badge>{v.resolvedValue&&<div className="md:col-span-4 text-emerald-600">Resolved: {v.resolvedValue}</div>}</div>):<p className="text-muted-foreground">No calendar-related variables were found.</p>}</CardContent></Card></TabsContent>
@@ -35,8 +97,9 @@ export function CalendarAnalysisPage() {
           <TabsContent value="columns"><Card><CardContent className="pt-6 flex flex-wrap gap-2">{selected.generatedColumns.map(c=><Badge key={c} variant="outline">{c}</Badge>)}</CardContent></Card></TabsContent>
           <TabsContent value="sort"><Card><CardContent className="pt-6 space-y-2 text-sm"><Line label="Month" value="MonthNumber"/><Line label="Quarter" value="QuarterNumber"/><Line label="WeekDay" value="WeekDayNumber"/><Line label="MonthYear" value="MonthYearSort"/><Line label="WeekYear" value="WeekYearSort"/><p className="text-muted-foreground pt-2">Only mappings supported by generated columns are written to the semantic model. Missing sort columns are generated as Power BI enhancements.</p></CardContent></Card></TabsContent>
           <TabsContent value="relationships"><Card><CardContent className="pt-6 space-y-3">{selected.factDependencies.length?selected.factDependencies.map(d=><div key={d} className="rounded-lg border p-3 text-sm"><b>{selected.table}[Date]</b> → {d} <Badge className="ml-2" variant="outline">validate key</Badge></div>):<p className="text-muted-foreground">No fact dependency was resolved. The source resolver will score eligible date fields before proposing a relationship.</p>}</CardContent></Card></TabsContent>
+          <TabsContent value="measures"><Card><CardHeader className="flex flex-row items-center justify-between gap-4"><CardTitle>Calendar &amp; Time-Intelligence Measure Validation</CardTitle><Button size="sm" disabled={autoFixRunning} onClick={() => void handleRunCalendarAutoFix()}>{autoFixRunning ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Sparkles className="mr-2 h-4 w-4"/>}Auto-Fix &amp; Revalidate</Button></CardHeader><CardContent className="space-y-3">{calendarMeasures.length ? calendarMeasures.map((m, idx) => <div key={`${m.table}-${m.name}-${idx}`} className="rounded-lg border p-3 space-y-2 text-xs"><div className="flex flex-wrap items-center justify-between gap-2"><div className="flex flex-wrap items-center gap-2"><span className="font-semibold text-sm">{m.name}</span><Badge variant="outline">Calendar: {m.calendarTable}</Badge><Badge variant="outline">Date Col: {m.dateColumn}</Badge></div><Badge variant={m.valid ? "default" : "destructive"}>{m.valid ? "Valid" : "Needs Fix"}</Badge></div><pre className="rounded bg-slate-950 text-slate-100 p-2.5 overflow-x-auto">{m.dax}</pre>{!m.valid && m.issue && <div className="text-destructive font-medium">{m.issue}</div>}</div>) : <p className="text-sm text-muted-foreground">No measures referencing calendar or date columns were detected.</p>}</CardContent></Card></TabsContent>
           <TabsContent value="validation"><Card><CardContent className="pt-6 space-y-3">{selected.validation.map(v=><div key={v.name} className="flex items-start gap-3 rounded-lg border p-3">{v.status==="pass"?<CheckCircle2 className="h-5 w-5 text-emerald-600"/>:<CircleAlert className={`h-5 w-5 ${v.status==="error"?"text-red-600":"text-amber-600"}`}/>}<div><b>{v.name}</b><p className="text-sm text-muted-foreground">{v.detail}</p></div></div>)}</CardContent></Card></TabsContent>
-          <TabsContent value="repair"><Card><CardHeader><CardTitle className="flex gap-2"><Sparkles className="h-5 w-5"/> Calendar AI repair plan</CardTitle></CardHeader><CardContent className="space-y-3 text-sm"><p>1. Identify the exact generation pattern and source operations.</p><p>2. Resolve literal, variable, Peek, Min/Max or fact-field date bounds.</p><p>3. Compile AUTOGENERATE/WHILE/IterNo to List.Dates, List.DateTimes or List.Generate.</p><p>4. Convert deterministic functions such as WeekDay and Right without treating function names as fields.</p><p>5. Repair datatypes and create display/sort pairs.</p><p>6. Revalidate M syntax, date-key uniqueness, continuity and relationships.</p>{selected.warnings.map(w=><div key={w} className="rounded-lg border border-amber-300 bg-amber-50/50 p-3">{w}</div>)}<Button>Generate reviewable repair proposal</Button></CardContent></Card></TabsContent>
+          <TabsContent value="repair"><Card><CardHeader><CardTitle className="flex gap-2"><Sparkles className="h-5 w-5"/> Calendar AI repair plan</CardTitle></CardHeader><CardContent className="space-y-3 text-sm"><p>1. Identify the exact generation pattern and source operations.</p><p>2. Resolve literal, variable, Peek, Min/Max or fact-field date bounds.</p><p>3. Compile AUTOGENERATE/WHILE/IterNo to List.Dates, List.DateTimes or List.Generate.</p><p>4. Convert deterministic functions such as WeekDay and Right without treating function names as fields.</p><p>5. Repair datatypes and create display/sort pairs.</p><p>6. Revalidate M syntax, date-key uniqueness, continuity and relationships.</p>{selected.warnings.map(w=><div key={w} className="rounded-lg border border-amber-300 bg-amber-50/50 p-3">{w}</div>)}<Button disabled={autoFixRunning} onClick={() => void handleRunCalendarAutoFix()}>{autoFixRunning ? "Running Auto-Fix..." : "Run Auto-Fix & Revalidate"}</Button></CardContent></Card></TabsContent>
         </Tabs>
       </>}
     </>}

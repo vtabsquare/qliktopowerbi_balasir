@@ -131,6 +131,36 @@ function splitTopLevelArgs(value: string): string[] {
   return args;
 }
 
+function resolveBracketedQlikAgg(inner: string, tables: PowerBiTable[], scoped: boolean): string | null {
+  const m = inner.trim().match(/^(Max|Min|Sum|Avg|Average|Count)\s*\(\s*([A-Za-z_][A-Za-z0-9_ ]*)\s*\)(?:\s*([+-])\s*(\d+(?:\.\d+)?))?$/i);
+  if (!m) return null;
+  const aggRaw = m[1].toLowerCase();
+  const daxAgg = aggRaw === "avg" || aggRaw === "average" ? "AVERAGE" : aggRaw.toUpperCase();
+  const fieldName = m[2].trim();
+  const op = m[3];
+  const offset = m[4];
+  const ranked = [...tables].sort((a, b) => {
+    const score = (t: PowerBiTable) =>
+      /mastercalendar/i.test(t.name) ? 3 : t.kind === "calendar" || /calendar|date/i.test(t.name) ? 2 : 0;
+    return score(b) - score(a);
+  });
+  let targetTable: PowerBiTable | undefined;
+  let targetCol: PowerBiTable["columns"][number] | undefined;
+  for (const t of ranked) {
+    const found = t.columns.find((c) => nameKey(c.name) === nameKey(fieldName) || nameKey(c.sourceName) === nameKey(fieldName));
+    if (found) {
+      targetTable = t;
+      targetCol = found;
+      break;
+    }
+  }
+  if (!targetTable || !targetCol) return null;
+  const qt = /^[A-Za-z_][A-Za-z0-9_]*$/.test(targetTable.name) ? targetTable.name : `'${targetTable.name.replace(/'/g, "''")}'`;
+  const colRef = `${qt}[${targetCol.name}]`;
+  const baseExpr = scoped ? `CALCULATE(${daxAgg}(${colRef}), ALL(${qt}))` : `${daxAgg}(${colRef})`;
+  return op && offset ? `${baseExpr} ${op} ${offset}` : baseExpr;
+}
+
 function repairQlikFunctions(expression: string, tables: PowerBiTable[] = [], originalQlikExpression = ""): string {
   let result = rewriteQlikColourFunctions(expression);
 
@@ -173,6 +203,26 @@ function repairQlikFunctions(expression: string, tables: PowerBiTable[] = [], or
   result = replaceBalancedCalls(result, "YearStart", (arg) => `DATE(YEAR(${arg}), 1, 1)`);
   result = replaceBalancedCalls(result, "YearEnd", (arg) => `DATE(YEAR(${arg}), 12, 31)`);
   result = replaceBalancedCalls(result, "Num", (arg) => `VALUE(${arg.split(",")[0]?.trim() || arg})`);
+
+  // Pattern 4: Set analysis dollar-expansion leaked as [Max(FiscalYear)] or [Max(FiscalYear)-1] inside KEEPFILTERS(... IN { ... })
+  result = result.replace(
+    /KEEPFILTERS\s*\(\s*NOT\s*\(\s*('[^']+'\[[^\]]+\]|[A-Za-z_][A-Za-z0-9_]*\[[^\]]+\])\s+IN\s*\{\s*\[([^\]]+)\]\s*\}\s*\)\s*\)/gi,
+    (full, colRef: string, inner: string) => {
+      const resolved = resolveBracketedQlikAgg(inner, tables, true);
+      return resolved ? `FILTER(ALL(${colRef}), ${colRef} <> ${resolved})` : full;
+    },
+  );
+  result = result.replace(
+    /KEEPFILTERS\s*\(\s*('[^']+'\[[^\]]+\]|[A-Za-z_][A-Za-z0-9_]*\[[^\]]+\])\s+IN\s*\{\s*\[([^\]]+)\]\s*\}\s*\)/gi,
+    (full, colRef: string, inner: string) => {
+      const resolved = resolveBracketedQlikAgg(inner, tables, true);
+      return resolved ? `FILTER(ALL(${colRef}), ${colRef} = ${resolved})` : full;
+    },
+  );
+  result = result.replace(
+    /\[((?:Max|Min|Sum|Avg|Average|Count)\s*\([^)]+\)(?:\s*[+-]\s*\d+(?:\.\d+)?)?)\]/gi,
+    (full, inner: string) => resolveBracketedQlikAgg(inner, tables, false) || full,
+  );
   return result;
 }
 
