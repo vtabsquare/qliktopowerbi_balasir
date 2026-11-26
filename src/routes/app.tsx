@@ -135,6 +135,25 @@ function MigrationLayout() {
   const currentStep = matchedStep || WORKFLOW_STEPS[0];
   const readiness = useStageReadiness(currentStep.id);
   const [modalStepId, setModalStepId] = useState<number | null>(null);
+  const mainScrollRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    const resetScroll = () => {
+      if (mainScrollRef.current) {
+        mainScrollRef.current.scrollTop = 0;
+      }
+      if (typeof window !== "undefined") {
+        window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+      }
+    };
+    resetScroll();
+    const rafId = typeof window !== "undefined" ? window.requestAnimationFrame(resetScroll) : 0;
+    return () => {
+      if (rafId && typeof window !== "undefined") {
+        window.cancelAnimationFrame(rafId);
+      }
+    };
+  }, [currentPath]);
 
   const openNextStage = () => {
     if (!readiness.canProceed) {
@@ -166,7 +185,11 @@ function MigrationLayout() {
         <div className="flex min-h-0 flex-1 flex-col md:flex-row overflow-hidden">
           {matchedStep && <StageNav viewportDocked />}
 
-          <main className="min-w-0 min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3 pb-16 sm:px-5 sm:py-4 sm:pb-16">
+          <main
+            ref={mainScrollRef}
+            data-workflow-main-scroll="true"
+            className="min-w-0 min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3 pb-16 sm:px-5 sm:py-4 sm:pb-16"
+          >
             <div className="w-full max-w-full space-y-3">
               {isInstructions ? (
                 <Hero tableCount={tableCount} compact />

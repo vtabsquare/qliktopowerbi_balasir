@@ -182,6 +182,25 @@ function DemoWorkspace({ session, onLoggedOut }: { session?: unknown; onLoggedOu
   const currentStep = WORKFLOW_STEPS[activeStepId] || WORKFLOW_STEPS[0];
   const tableCount = enterpriseAnalysis?.finalTables.length ?? 0;
   const readiness = useStageReadiness(activeStepId);
+  const mainScrollRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    const resetScroll = () => {
+      if (mainScrollRef.current) {
+        mainScrollRef.current.scrollTop = 0;
+      }
+      if (typeof window !== "undefined") {
+        window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+      }
+    };
+    resetScroll();
+    const rafId = typeof window !== "undefined" ? window.requestAnimationFrame(resetScroll) : 0;
+    return () => {
+      if (rafId && typeof window !== "undefined") {
+        window.cancelAnimationFrame(rafId);
+      }
+    };
+  }, [activeStepId]);
 
   const openNextStage = () => {
     if (!readiness.canProceed) {
@@ -209,7 +228,11 @@ function DemoWorkspace({ session, onLoggedOut }: { session?: unknown; onLoggedOu
           <StageNav viewportDocked activeStepId={activeStepId} onStepSelect={(targetStage) => handleSelectStep(WORKFLOW_STEPS[targetStage.id])} />
 
           {/* Main Content Area */}
-          <main className="min-w-0 min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3 pb-16 sm:px-5 sm:py-4 sm:pb-16">
+          <main
+            ref={mainScrollRef}
+            data-workflow-main-scroll="true"
+            className="min-w-0 min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3 pb-16 sm:px-5 sm:py-4 sm:pb-16"
+          >
             <div className="w-full max-w-full space-y-3">
               {/* Demo Hero Banner (Shown on Step 0: Instructions; hidden on Step 1: Upload Qlik Files and subsequent steps) */}
               {activeStepId === 0 && (

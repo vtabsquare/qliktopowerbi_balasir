@@ -33,10 +33,16 @@ export function StageModalOverlay({
 }: StageModalOverlayProps) {
   const [fullscreen, setFullscreen] = useState(false);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const contentScrollRef = useRef<HTMLDivElement>(null);
   const currentStep = WORKFLOW_STEPS[stepId] || WORKFLOW_STEPS[0];
   const nextStep = WORKFLOW_STEPS[stepId + 1];
   const prevStep = stepId > 0 ? WORKFLOW_STEPS[stepId - 1] : null;
   const readiness = useStageReadiness(stepId);
+
+  useEffect(() => {
+    if (!isOpen || !contentScrollRef.current) return;
+    contentScrollRef.current.scrollTop = 0;
+  }, [isOpen, stepId]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -107,7 +113,7 @@ export function StageModalOverlay({
           </div>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-background/50 p-4 sm:p-6">{renderStep()}</div>
+        <div ref={contentScrollRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-background/50 p-4 sm:p-6">{renderStep()}</div>
 
         <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-border/80 bg-surface/95 px-4 py-3 backdrop-blur-md sm:px-6">
           <button type="button" onClick={() => onViewInCanvas(stepId)} className="rounded-xl border border-border px-3 py-2 text-xs font-semibold text-foreground hover:bg-muted sm:px-4">Close &amp; view in canvas</button>

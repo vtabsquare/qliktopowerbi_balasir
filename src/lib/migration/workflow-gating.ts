@@ -553,6 +553,24 @@ export function resetWorkflow(isDemo: boolean): void {
 }
 
 /**
+ * Resets vertical scroll position on the active workflow main container and window.
+ */
+export function scrollWorkflowToTop(): void {
+  if (typeof window === "undefined") return;
+  const reset = () => {
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    const mainEl = document.querySelector<HTMLElement>('[data-workflow-main-scroll="true"]');
+    if (mainEl) {
+      mainEl.scrollTop = 0;
+    }
+  };
+  reset();
+  if (typeof window.requestAnimationFrame === "function") {
+    window.requestAnimationFrame(reset);
+  }
+}
+
+/**
  * Universal Workflow Navigation helper
  * In Demo mode, keeps the user on /demo?step=... without reloading or leaving demo.
  * In Production mode, uses TanStack navigate({ to: path }).
@@ -569,12 +587,14 @@ export function navigateWorkflow(targetPath: string, navigate?: any): void {
       } catch {
         // ignore
       }
+      scrollWorkflowToTop();
       return;
     }
   }
 
   if (navigate) {
     navigate({ to: targetPath });
+    scrollWorkflowToTop();
   } else if (typeof window !== "undefined") {
     window.location.href = targetPath;
   }
