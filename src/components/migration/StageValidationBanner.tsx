@@ -84,15 +84,6 @@ export function StageValidationBanner({ stepId, canProceed, blockedReason }: Sta
           });
         }
       }
-      items.push({
-        id: "action-check-datatypes-5",
-        severity: "action-required",
-        stepLabel,
-        target: "Column Data Types",
-        cause: "Check and confirm all column data types (Date, Whole Number, Decimal, Text) in the Data Types table below.",
-        resolution: "Review the Data Types section, update any mismatched types, click Save data types if changed, and click Regenerate M Query to prevent Power BI Desktop type errors.",
-        canAutoFix: false,
-      });
     }
 
     if (stepId === 6) {

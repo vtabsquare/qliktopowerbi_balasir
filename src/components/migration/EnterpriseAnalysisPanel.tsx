@@ -2031,6 +2031,36 @@ export function TabMQueryDataTypes({
         )}
       </div>
 
+      {/* Column Data Types Action Required Notice */}
+      {(!isStep1Completed || hasUnsavedChanges) && (
+        <div
+          role="region"
+          aria-label="Column Data Types Action Required"
+          className="action-required-banner rounded-xl border border-amber-500/70 bg-amber-500/10 p-4 shadow-xs transition-all"
+        >
+          <div className="flex items-start gap-3">
+            <div className="relative mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-55" />
+              <AlertCircle className="relative h-5 w-5 text-amber-600 dark:text-amber-400" />
+            </div>
+            <div className="space-y-1 text-xs">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-300">
+                  Action Required
+                </span>
+                <span className="font-bold text-foreground">Column Data Types</span>
+              </div>
+              <p className="text-foreground/90">
+                Check and confirm all column data types (Date, Whole Number, Decimal, Text) in the Data Types table below.
+              </p>
+              <p className="text-muted-foreground">
+                <strong>Action:</strong> Review the Data Types section, update any mismatched types, click <em>Save data types</em> if changed, and click <em>Regenerate M Query</em> to prevent Power BI Desktop type errors.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="surface-card p-6 border border-border">
         <SectionHeader title="Raw, Staging, Intermediate & Final Data Types" />
         <p className="text-sm text-muted-foreground mb-4">
