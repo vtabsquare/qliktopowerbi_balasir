@@ -6,7 +6,7 @@
  * Step 3: DAX Measures
  */
 import { useEffect, useState } from "react";
-import { unmarkStepCompleted } from "./workflow-gating";
+import { setRequiredActionCompleted, unmarkStepCompleted } from "./workflow-gating";
 
 export type PowerQueryStepStatus = "pending" | "in_progress" | "completed" | "failed";
 
@@ -110,6 +110,7 @@ export function invalidatePowerQueryFromStep(isDemo: boolean, fromStep: 1 | 2 | 
     next.step2Status = "pending";
     next.step3Status = "pending";
     unmarkStepCompleted(5, isDemo);
+    setRequiredActionCompleted(5, isDemo, false);
   } else if (fromStep === 2) {
     next.step2Status = "pending";
     next.step3Status = "pending";
@@ -126,6 +127,7 @@ export function invalidatePowerQueryFromStep(isDemo: boolean, fromStep: 1 | 2 | 
 export function resetPowerQueryWorkflow(isDemo: boolean): void {
   saveWorkflowState(isDemo, { ...DEFAULT_STATE });
   unmarkStepCompleted(5, isDemo);
+  setRequiredActionCompleted(5, isDemo, false);
 }
 
 export function validateCanExecuteStep(

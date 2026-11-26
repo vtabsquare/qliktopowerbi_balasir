@@ -8,11 +8,15 @@ import {
   validateCanExecuteStep,
 } from "../src/lib/migration/power-query-workflow-state";
 import {
+  getCompletedSteps,
+  invalidateDownstreamSteps,
+  isRequiredActionCompleted,
   isStepCompleted,
   isStepUnlocked,
   markStepCompleted,
+  resetWorkflowStorageOnReload,
+  setRequiredActionCompleted,
   unmarkStepCompleted,
-  getCompletedSteps,
 } from "../src/lib/migration/workflow-gating";
 
 describe("Power Query Sequential Workflow Engine", () => {
@@ -257,6 +261,31 @@ describe("Power Query Sequential Workflow Engine", () => {
       expect(getPowerQueryWorkflowState(true).step1Status).toBe("pending");
       expect(getPowerQueryWorkflowState(true).step2Status).toBe("pending");
       expect(validateCanExecuteStep(true, 2).ok).toBe(false);
+    });
+  });
+
+  describe("Scenario 11: Reload & Upstream Invalidation", () => {
+    it("clears Power Query Regenerate M Query completion on reload and upstream ETL invalidation", () => {
+      for (const isDemo of [false, true]) {
+        resetPowerQueryWorkflow(isDemo);
+        setPowerQueryStepStatus(isDemo, 1, "completed");
+        setRequiredActionCompleted(5, isDemo, true);
+
+        expect(getPowerQueryWorkflowState(isDemo).step1Status).toBe("completed");
+        expect(isRequiredActionCompleted(5, isDemo)).toBe(true);
+
+        // Browser reload must not preserve false Completed state
+        resetWorkflowStorageOnReload(true);
+        expect(getPowerQueryWorkflowState(isDemo).step1Status).toBe("pending");
+        expect(isRequiredActionCompleted(5, isDemo)).toBe(false);
+
+        // Upstream ETL invalidation must also reset Regenerate M Query completion
+        setPowerQueryStepStatus(isDemo, 1, "completed");
+        setRequiredActionCompleted(5, isDemo, true);
+        invalidateDownstreamSteps(4, isDemo);
+        expect(getPowerQueryWorkflowState(isDemo).step1Status).toBe("pending");
+        expect(isRequiredActionCompleted(5, isDemo)).toBe(false);
+      }
     });
   });
 });

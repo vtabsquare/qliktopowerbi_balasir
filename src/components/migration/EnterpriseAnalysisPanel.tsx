@@ -26,7 +26,7 @@ import type { ExtractedFile } from "./MultiFileDropzone";
 import { useMigration } from "@/lib/migration/store";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePowerQueryWorkflow } from "@/lib/migration/power-query-workflow-state";
-import { setRequiredActionCompleted } from "@/lib/migration/workflow-gating";
+import { isRequiredActionCompleted, setRequiredActionCompleted } from "@/lib/migration/workflow-gating";
 import { collectCompilerInvariantIssues, compileAuthoritatively, compilerFingerprint } from "@/lib/migration/QlikCompilerService";
 import { AutoFixCenter } from "./AutoFixCenter";
 import { repairDomId } from "@/lib/migration/autofix";
@@ -1585,6 +1585,14 @@ export function TabMQueryDataTypes({
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
+  // Sync Step 1 completion state with session verification and current config:
+  // never falsely show Completed on initial open or after reload/config changes.
+  useEffect(() => {
+    if (pqState.step1Status === "completed" && !isRequiredActionCompleted(5, isDemo)) {
+      invalidateFromStep(1);
+    }
+  }, [isDemo, pqState.step1Status, invalidateFromStep]);
+
   const handleTypeChange = (key: string, val: string) => {
     onTypeChange(key, val);
     setHasUnsavedChanges(true);
@@ -2023,11 +2031,11 @@ export function TabMQueryDataTypes({
             <button
               data-tour="generate-m-query"
               onClick={() => handleAiGenerate()}
-              disabled={generatingAi || hasUnsavedChanges}
+              disabled={generatingAi || pqState.step1Status === "in_progress" || hasUnsavedChanges}
               title={hasUnsavedChanges ? "Save your data type changes first" : undefined}
               className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-medium shadow-sm hover:opacity-90 disabled:opacity-50 transition-all shrink-0 sm:ml-auto cursor-pointer"
             >
-              {generatingAi ? (
+              {generatingAi || pqState.step1Status === "in_progress" ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : pqState.step1Status === "completed" ? (
                 <Check className="h-4 w-4 text-emerald-400" />
@@ -2037,32 +2045,44 @@ export function TabMQueryDataTypes({
                 <Sparkles className="h-4 w-4" />
               )}
               <span>
-                {generatingAi
-                  ? "Generating..."
-                  : pqState.step1Status === "completed"
-                  ? "Regenerate M Query"
-                  : pqState.step1Status === "failed"
-                  ? "Retry Generate M Query"
-                  : "Generate M Query"}
+                {generatingAi || pqState.step1Status === "in_progress"
+                  ? "Regenerating M Query..."
+                  : "Regenerate M Query"}
               </span>
-              {pqState.step1Status === "completed" && (
+              {(generatingAi || pqState.step1Status === "in_progress") && (
+                <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-white/20 text-primary-foreground ml-1">Processing</span>
+              )}
+              {!(generatingAi || pqState.step1Status === "in_progress") && pqState.step1Status === "completed" && (
                 <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 ml-1">Completed</span>
               )}
-              {pqState.step1Status === "failed" && (
+              {!(generatingAi || pqState.step1Status === "in_progress") && pqState.step1Status === "failed" && (
                 <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-red-500/20 text-red-300 ml-1">Failed</span>
+              )}
+              {!(generatingAi || pqState.step1Status === "in_progress") && pqState.step1Status === "pending" && (
+                <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-white/15 text-primary-foreground/90 ml-1">Ready</span>
               )}
             </button>
           </div>
 
+          {/* Error message on regeneration failure */}
+          {(aiError || (pqState.step1Status === "failed" && pqState.lastError)) && (
+            <div className="p-3 bg-red-500/10 text-red-600 dark:text-red-400 rounded-lg text-sm leading-relaxed border border-red-500/25 flex items-start gap-2">
+              <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+              <div>
+                <strong>Regeneration failed:</strong> {aiError || pqState.lastError}
+              </div>
+            </div>
+          )}
+
           {/* Info tip */}
           {hasUnsavedChanges && (
             <div className="p-3 bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 rounded-lg text-sm leading-relaxed border border-yellow-500/20">
-              <strong>Unsaved changes:</strong> Click <em>Save data types</em> first, then generate.
+              <strong>Unsaved changes:</strong> Click <em>Save data types</em> first, then click <em>Regenerate M Query</em>.
             </div>
           )}
           {!hasUnsavedChanges && !saveSuccess && (
             <div className="p-3 bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded-lg text-sm leading-relaxed border border-blue-500/20">
-              <strong>Tip:</strong> Change types, click <em>Save</em>, then click <em>Generate M Query</em>.
+              <strong>Tip:</strong> Change types, click <em>Save data types</em>, then click <em>Regenerate M Query</em>.
             </div>
           )}
         </div>

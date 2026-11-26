@@ -194,6 +194,7 @@ export function resetWorkflowStorageOnReload(force = false): boolean {
       if (!k) continue;
       if (
         k.startsWith("workflow_completed_steps_") ||
+        k.startsWith("qlik2pbi_pq_workflow_") ||
         k === "qlik2pbi-enhanced-workspace-v3"
       ) {
         lsKeysToRemove.push(k);
@@ -346,15 +347,24 @@ export function unmarkStepCompleted(stepId: number, isDemo: boolean): void {
 export function invalidateDownstreamSteps(fromStepId: number, isDemo: boolean): number[] {
   const current = getCompletedSteps(isDemo);
   const removed = current.filter((id) => id > fromStepId);
-  if (removed.length === 0) return [];
   const retained = current.filter((id) => id <= fromStepId);
   if (typeof window !== "undefined") {
     try {
-      localStorage.setItem(getStorageKey(isDemo), JSON.stringify(retained));
-      for (const id of removed) {
-        setRequiredActionCompleted(id, isDemo, false);
+      if (removed.length > 0) {
+        localStorage.setItem(getStorageKey(isDemo), JSON.stringify(retained));
+        for (const id of removed) {
+          setRequiredActionCompleted(id, isDemo, false);
+        }
       }
-      window.dispatchEvent(new CustomEvent("workflow-step-completed", { detail: { stepId: fromStepId, isDemo, invalidated: removed } }));
+      if (fromStepId < 5) {
+        setRequiredActionCompleted(5, isDemo, false);
+        const pqKey = isDemo ? "qlik2pbi_pq_workflow_demo_v1" : "qlik2pbi_pq_workflow_prod_v1";
+        localStorage.removeItem(pqKey);
+        window.dispatchEvent(new CustomEvent("pq-workflow-state-changed", { detail: { isDemo } }));
+      }
+      if (removed.length > 0) {
+        window.dispatchEvent(new CustomEvent("workflow-step-completed", { detail: { stepId: fromStepId, isDemo, invalidated: removed } }));
+      }
     } catch (e) {
       console.error("Failed to invalidate downstream workflow steps:", e);
     }
@@ -533,6 +543,9 @@ export function resetWorkflow(isDemo: boolean): void {
   if (typeof window === "undefined") return;
   try {
     localStorage.removeItem(getStorageKey(isDemo));
+    localStorage.removeItem(isDemo ? "qlik2pbi_pq_workflow_demo_v1" : "qlik2pbi_pq_workflow_prod_v1");
+    sessionStorage.removeItem(getActionsStorageKey(isDemo));
+    window.dispatchEvent(new CustomEvent("pq-workflow-state-changed", { detail: { isDemo } }));
     window.dispatchEvent(new CustomEvent("workflow-step-completed", { detail: { stepId: 0, isDemo } }));
   } catch (e) {
     console.error("Failed to reset workflow:", e);

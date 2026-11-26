@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMigration } from "@/lib/migration/store";
 import { useAuth } from "@/contexts/AuthContext";
 import { validatePowerBiModel } from "@/lib/migration/model";
@@ -7,6 +7,7 @@ import { modelDaxInputs, validateDaxMeasures } from "@/lib/migration/dax";
 
 export function useStageReadiness(stepId: number) {
   const { isDemo } = useAuth();
+  const [revision, setRevision] = useState(0);
   const {
     enterpriseFiles,
     enterpriseAnalysis,
@@ -14,6 +15,17 @@ export function useStageReadiness(stepId: number) {
     expressionInventory,
     powerBiModel,
   } = useMigration();
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const bump = () => setRevision((r) => r + 1);
+    window.addEventListener("workflow-step-completed", bump);
+    window.addEventListener("pq-workflow-state-changed", bump);
+    return () => {
+      window.removeEventListener("workflow-step-completed", bump);
+      window.removeEventListener("pq-workflow-state-changed", bump);
+    };
+  }, []);
 
   return useMemo(() => {
     const validatedModel = powerBiModel ? validatePowerBiModel(powerBiModel) : null;
@@ -60,6 +72,6 @@ export function useStageReadiness(stepId: number) {
       hasErrors: !result.ok,
       statusLabel: result.ok ? "Ready to proceed" : "Action required",
     };
-  }, [enterpriseAnalysis, enterpriseFiles, expressionInventory, powerBiModel, qvwAnalysis, stepId]);
+  }, [enterpriseAnalysis, enterpriseFiles, expressionInventory, isDemo, powerBiModel, qvwAnalysis, revision, stepId]);
 }
 
