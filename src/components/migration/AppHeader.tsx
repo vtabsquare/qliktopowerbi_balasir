@@ -1,16 +1,13 @@
-import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { MoreHorizontal, LogOut, Trash2, Lock, Compass, User as UserIcon, ChevronDown, ShieldCheck, Layers, Mail, CheckCircle2 } from "lucide-react";
+import { Link, useRouterState } from "@tanstack/react-router";
+import { MoreHorizontal, LogOut, Trash2, Lock, Compass, User as UserIcon, ChevronDown, ShieldCheck, Mail, CheckCircle2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 import { useState, useRef, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { useMigration } from "@/lib/migration/store";
 
 export function AppHeader() {
-  const navigate = useNavigate();
   const currentPath = useRouterState({ select: (s) => s.location.pathname });
   const { isDemo: authIsDemo, signOut, user, session } = useAuth();
-  const { enterpriseFiles, enterpriseAnalysis } = useMigration();
   const isDemo = authIsDemo || currentPath.startsWith("/demo");
   const [menuOpen, setMenuOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -51,7 +48,6 @@ export function AppHeader() {
     .join("") || "U";
   const accountStatus = session || user ? "Active" : "Guest";
   const isVerified = Boolean(user?.email_confirmed_at || session);
-  const workspaceActive = enterpriseFiles.length > 0 || Boolean(enterpriseAnalysis);
 
   const handleLogout = async () => {
     try {
@@ -246,7 +242,7 @@ export function AppHeader() {
                     </div>
                   </div>
 
-                  {/* Role & Workspace Details */}
+                  {/* Role & Account Status */}
                   <div className="p-3.5 space-y-2.5 text-xs border-b border-border">
                     <div className="flex items-center justify-between gap-2">
                       <span className="inline-flex items-center gap-1.5 text-muted-foreground">
@@ -264,36 +260,10 @@ export function AppHeader() {
                         {isVerified ? "Verified · Active" : accountStatus}
                       </span>
                     </div>
-                    <div className="rounded-xl border border-border bg-surface-elevated/60 p-2.5 space-y-1">
-                      <div className="flex items-center justify-between">
-                        <span className="inline-flex items-center gap-1.5 font-semibold text-foreground">
-                          <Layers className="h-3.5 w-3.5 text-primary" />
-                          Production Workspace
-                        </span>
-                        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${workspaceActive ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" : "bg-muted text-muted-foreground"}`}>
-                          {workspaceActive ? "Active" : "Ready"}
-                        </span>
-                      </div>
-                      <div className="text-[11px] text-muted-foreground flex items-center justify-between pt-0.5">
-                        <span>{enterpriseFiles.length} file(s) loaded</span>
-                        <span>{enterpriseAnalysis?.finalTables.length ?? 0} final table(s)</span>
-                      </div>
-                    </div>
                   </div>
 
                   {/* Account Actions */}
                   <div className="p-1.5">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setProfileOpen(false);
-                        navigate({ to: "/app/logs" });
-                      }}
-                      className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium text-foreground hover:bg-muted transition-colors cursor-pointer"
-                    >
-                      <Layers className="h-3.5 w-3.5 text-muted-foreground" />
-                      Pipeline Logs
-                    </button>
                     <button
                       type="button"
                       id="profile-logout-btn"
