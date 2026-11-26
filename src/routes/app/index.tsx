@@ -287,6 +287,7 @@ export function UploadPage() {
           bypassQvd: mapping.bypassQvd,
           effectiveRef: mapping.effectiveRef,
           qvdProducerTable: mapping.qvdProducerTable,
+          sheetName: mapping.sheetName,
         })),
       );
       setStageStatus(3, "complete", 100);

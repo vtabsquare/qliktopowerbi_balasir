@@ -92,6 +92,7 @@ export function AnalysisPage() {
         originalRef: m.originalRef, mappedRef: m.mappedRef, connectorType: m.connectorType,
         status: m.status, notes: m.notes, table: m.table, sourceRole: m.sourceRole,
         bypassQvd: m.bypassQvd, effectiveRef: m.effectiveRef, qvdProducerTable: m.qvdProducerTable,
+        sheetName: m.sheetName,
       })));
       return result;
     } catch (e) {

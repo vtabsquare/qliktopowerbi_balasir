@@ -64,6 +64,7 @@ interface MappingRow {
   bypassQvd: boolean;
   effectiveRef: string;
   qvdProducerTable: string;
+  sheetName?: string;
 }
 
 export interface ProjectWorkspace {
@@ -319,6 +320,7 @@ function mappingRowsFromAnalysis(analysis: EnterpriseAnalysis): MappingRow[] {
     bypassQvd: mapping.bypassQvd,
     effectiveRef: mapping.effectiveRef,
     qvdProducerTable: mapping.qvdProducerTable,
+    sheetName: mapping.sheetName,
   }));
 }
 

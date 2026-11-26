@@ -112,6 +112,7 @@ export async function loadDemoDatasetToStore(force = false): Promise<boolean> {
           bypassQvd: m.bypassQvd,
           effectiveRef: m.effectiveRef,
           qvdProducerTable: m.qvdProducerTable,
+          sheetName: m.sheetName,
         })),
       );
       store.setStageStatus(3, "complete", 100);

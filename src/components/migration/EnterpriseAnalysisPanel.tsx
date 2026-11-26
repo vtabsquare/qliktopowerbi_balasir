@@ -520,7 +520,17 @@ function buildMappedRef(parts: Record<string, string>): string {
 }
 
 const TEXT_SOURCE_EXTENSIONS = new Set([".csv", ".tsv", ".txt", ".json", ".xml", ".qvs"]);
+const BINARY_SHEET_EXTENSIONS = new Set([".xlsx", ".xls", ".xlsm"]);
 const SUPPORTED_SOURCE_ACCEPT = ".csv,.tsv,.txt,.xlsx,.xls,.xlsm,.parquet,.json,.xml,.qvd,.qvs,.zip";
+
+function uint8ToBase64(bytes: Uint8Array): string {
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
 
 async function registerAlternateSourceFiles(fileList: File[]): Promise<ExtractedFile[]> {
   const created: ExtractedFile[] = [];
@@ -536,12 +546,14 @@ async function registerAlternateSourceFiles(fileList: File[]): Promise<Extracted
           const isText = TEXT_SOURCE_EXTENSIONS.has(entryExt);
           const text = isText ? await entry.async("string") : null;
           const bytes = await entry.async("uint8array");
+          const binaryBase64 = !isText && BINARY_SHEET_EXTENSIONS.has(entryExt) ? uint8ToBase64(bytes) : undefined;
           created.push({
             path: entryPath,
             name: baseName,
             extension: entryExt,
             sizeKb: Math.max(1, Math.round(bytes.byteLength / 1024)),
             text,
+            binaryBase64,
             parsedAsText: isText && text !== null,
             originPackage: file.name,
           });
@@ -556,6 +568,9 @@ async function registerAlternateSourceFiles(fileList: File[]): Promise<Extracted
 
     const isText = TEXT_SOURCE_EXTENSIONS.has(ext);
     const text = isText ? await file.text() : null;
+    const binaryBase64 = !isText && BINARY_SHEET_EXTENSIONS.has(ext)
+      ? uint8ToBase64(new Uint8Array(await file.arrayBuffer()))
+      : undefined;
     const browserFile = file as File & { webkitRelativePath?: string; path?: string };
     const relPath = browserFile.path || browserFile.webkitRelativePath || file.name;
     created.push({
@@ -564,6 +579,7 @@ async function registerAlternateSourceFiles(fileList: File[]): Promise<Extracted
       extension: ext,
       sizeKb: Math.max(1, Math.round(file.size / 1024)),
       text,
+      binaryBase64,
       parsedAsText: isText && text !== null,
     });
   }
@@ -657,6 +673,32 @@ export function TabSourceMapping({
   const { enterpriseFiles } = useMigration();
   const [excelSheetsByRef, setExcelSheetsByRef] = useState<Map<string, string[]>>(() => new Map());
   const [multiSheetWorkbooks, setMultiSheetWorkbooks] = useState<Array<{ name: string; path: string; sheets: string[] }>>([]);
+  const resolveAutoSheetName = (row: MappingRow, sheetsMap: Map<string, string[]>): string | undefined => {
+    const isExcelRow = row.connectorType === "Excel" || /\.xlsx?$/i.test(row.mappedRef || row.originalRef);
+    if (row.bypassQvd || !isExcelRow) return row.sheetName;
+    const refKey = (row.mappedRef || row.originalRef || "").replace(/\\/g, "/").replace(/^(\.\.?\/)+/, "").toLowerCase();
+    const refBase = refKey.split("/").pop() || "";
+    const suggestions = sheetsMap.get(refKey) || sheetsMap.get(refBase) || [];
+    const current = (row.sheetName || "").trim();
+    if (suggestions.length > 0) {
+      if (current) {
+        const exactCi = suggestions.find((s) => s.toLowerCase() === current.toLowerCase());
+        if (exactCi) return exactCi;
+        if (suggestions.length === 1 && current.toLowerCase() === (row.table || "").trim().toLowerCase()) {
+          return suggestions[0];
+        }
+        return current;
+      }
+      const tableMatch = row.table
+        ? suggestions.find((s) => s.toLowerCase() === row.table.trim().toLowerCase())
+        : undefined;
+      if (tableMatch) return tableMatch;
+      if (suggestions.length === 1) return suggestions[0];
+      return row.table || suggestions[0];
+    }
+    return current || row.table || "Sheet1";
+  };
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -664,7 +706,7 @@ export function TabSourceMapping({
       const multiList: Array<{ name: string; path: string; sheets: string[] }> = [];
       for (const f of enterpriseFiles || []) {
         const ext = (f.extension || "").toLowerCase();
-        if ((ext === ".xlsx" || ext === ".xls") && f.binaryBase64) {
+        if ((ext === ".xlsx" || ext === ".xls" || ext === ".xlsm") && f.binaryBase64) {
           try {
             const zip = await JSZip.loadAsync(f.binaryBase64, { base64: true });
             const wbEntry = zip.file("xl/workbook.xml");
@@ -687,6 +729,20 @@ export function TabSourceMapping({
       if (!cancelled) {
         setExcelSheetsByRef(map);
         setMultiSheetWorkbooks(multiList);
+        if (mappingRows.length > 0) {
+          let changed = false;
+          const nextRows = mappingRows.map((row) => {
+            const nextSheet = resolveAutoSheetName(row, map);
+            if (nextSheet !== row.sheetName) {
+              changed = true;
+              return { ...row, sheetName: nextSheet };
+            }
+            return row;
+          });
+          if (changed) {
+            onMappingChange(nextRows);
+          }
+        }
       }
     })();
     return () => { cancelled = true; };
@@ -716,6 +772,11 @@ export function TabSourceMapping({
         if (value.trim() && !["Unknown", "QVD - map to supported source"].includes(newRow.connectorType)) {
           newRow.status = "Mapped";
         }
+        if (newRow.connectorType === "Excel" || /\.xlsx?$/i.test(value)) {
+          newRow.sheetName = resolveAutoSheetName(newRow, excelSheetsByRef);
+        }
+      } else if (field === "connectorType" && value === "Excel" && !newRow.sheetName) {
+        newRow.sheetName = resolveAutoSheetName(newRow, excelSheetsByRef);
       }
       return newRow;
     });
@@ -803,12 +864,16 @@ export function TabSourceMapping({
       const mapped = `${trimmedBase}${sep}${normalizedRel}`;
       const ct = connector(mapped);
       updatedCount += 1;
-      return {
+      const nextRow: MappingRow = {
         ...r,
         mappedRef: mapped,
         connectorType: ct !== "Unknown" ? ct : r.connectorType,
         status: ["Unknown", "QVD - map to supported source"].includes(ct) ? "Needs review" : "Mapped",
       };
+      if (nextRow.connectorType === "Excel" || /\.xlsx?$/i.test(mapped)) {
+        nextRow.sheetName = resolveAutoSheetName(nextRow, excelSheetsByRef);
+      }
+      return nextRow;
     });
 
     setUnmatchedFiles(missing);
@@ -821,6 +886,8 @@ export function TabSourceMapping({
           connector_type: r.connectorType,
           status: r.status,
           notes: r.notes,
+          sheet_name: r.sheetName || "",
+          table: r.table || "",
           bypass_qvd: r.bypassQvd ? "true" : "false",
         })),
       ),
@@ -3224,6 +3291,7 @@ export function EnterpriseAnalysisPanel({ files, onAnalysisComplete }: { files: 
         originalRef: m.originalRef, mappedRef: m.mappedRef, connectorType: m.connectorType,
         status: m.status, notes: m.notes, table: m.table, sourceRole: m.sourceRole,
         bypassQvd: m.bypassQvd, effectiveRef: m.effectiveRef, qvdProducerTable: m.qvdProducerTable,
+        sheetName: m.sheetName,
       })));
       onAnalysisComplete();
       return result;
