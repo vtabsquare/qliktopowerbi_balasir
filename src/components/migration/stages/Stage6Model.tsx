@@ -711,7 +711,7 @@ const PBI_CARD_H = 196;
 const PBI_GAP_X = 96;
 const PBI_GAP_Y = 74;
 
-function computeInitialPositions(tables: PbiTableWithMeasures[], rels: any[]): Record<string, NodePos> {
+function computeInitialPositions(tables: PbiTableWithMeasures[], rels: any[], viewportWidth = 960): Record<string, NodePos> {
   const positions: Record<string, NodePos> = {};
   if (!tables.length) return positions;
 
@@ -762,10 +762,12 @@ function computeInitialPositions(tables: PbiTableWithMeasures[], rels: any[]): R
 
   let cursorY = 28;
   const maxCols = 4;
+  const usableW = Math.max(840, viewportWidth - 48);
 
   components.forEach((comp) => {
     const sorted = [...comp].sort((a, b) => (degree.get(b.name) || 0) - (degree.get(a.name) || 0));
     const colsCount = Math.min(maxCols, Math.max(2, Math.ceil(Math.sqrt(sorted.length * 1.4))));
+    const dynamicGapX = Math.max(PBI_GAP_X, Math.floor((usableW - colsCount * QLIK_CARD_W) / Math.max(1, colsCount)));
     if (sorted.length >= 3) {
       const hub = sorted.shift()!;
       const midIdx = Math.floor(Math.min(colsCount, sorted.length + 1) / 2);
@@ -775,7 +777,7 @@ function computeInitialPositions(tables: PbiTableWithMeasures[], rels: any[]): R
       const col = idx % colsCount;
       const row = Math.floor(idx / colsCount);
       positions[t.name] = {
-        x: 28 + col * (PBI_CARD_W + PBI_GAP_X),
+        x: 28 + col * (QLIK_CARD_W + dynamicGapX),
         y: cursorY + row * (PBI_CARD_H + PBI_GAP_Y),
       };
     });
@@ -784,11 +786,13 @@ function computeInitialPositions(tables: PbiTableWithMeasures[], rels: any[]): R
   });
 
   if (standalone.length) {
+    const standaloneCols = Math.min(maxCols, Math.max(2, standalone.length));
+    const dynamicGapX = Math.max(PBI_GAP_X, Math.floor((usableW - standaloneCols * QLIK_CARD_W) / Math.max(1, standaloneCols)));
     standalone.forEach((t, idx) => {
       const col = idx % maxCols;
       const row = Math.floor(idx / maxCols);
       positions[t.name] = {
-        x: 28 + col * (PBI_CARD_W + PBI_GAP_X),
+        x: 28 + col * (QLIK_CARD_W + dynamicGapX),
         y: cursorY + row * (PBI_CARD_H + PBI_GAP_Y),
       };
     });
@@ -926,7 +930,8 @@ function QlikDataModelDesigner({
   };
 
   const computeAutoLayout = () => {
-    setNodePositions(computeInitialPositions(tables, relationships));
+    const w = canvasViewportRef.current?.clientWidth || 960;
+    setNodePositions(computeInitialPositions(tables, relationships, w));
   };
 
   useEffect(() => {
@@ -1590,6 +1595,7 @@ type StarValidationItem = {
 function computeStarSchemaPositions(
   tables: PbiTableWithMeasures[],
   relationships: any[],
+  viewportWidth = 960,
 ): Record<string, NodePos> {
   const positions: Record<string, NodePos> = {};
   if (!tables.length) return positions;
@@ -1628,30 +1634,36 @@ function computeStarSchemaPositions(
   const rightDims = connectedDims.filter((_, i) => i % 2 === 1);
   const maxSideRows = Math.max(leftDims.length, rightDims.length, 1);
 
-  const leftX = 36;
-  const centerX = leftDims.length > 0 ? 370 : 120;
-  const rightX = 704;
-  const rowStepY = 232;
+  // Dynamically distribute columns across the available canvas width to avoid empty space or overlap
+  const usableW = Math.max(880, viewportWidth - 48);
+  const leftX = 32;
+  const rightX = Math.max(leftX + (leftDims.length > 0 ? 640 : 340), usableW - PBI_CARD_W - 32);
+  const centerX = leftDims.length > 0 ? Math.round((leftX + rightX) / 2) : 120;
+  const rowStepY = 268;
 
   leftDims.forEach((t, i) => {
-    positions[t.name] = { x: leftX, y: 32 + i * rowStepY };
+    positions[t.name] = { x: leftX, y: 28 + i * rowStepY };
   });
 
   if (primaryFact) {
-    const centerY = Math.max(40, Math.round(((maxSideRows - 1) * rowStepY) / 2) + 20);
+    const centerY = Math.max(36, Math.round(((maxSideRows - 1) * rowStepY) / 2) + 16);
     positions[primaryFact.name] = { x: centerX, y: centerY };
   }
 
   rightDims.forEach((t, i) => {
-    positions[t.name] = { x: rightX, y: 32 + i * rowStepY };
+    positions[t.name] = { x: rightX, y: 28 + i * rowStepY };
   });
 
-  const bottomY = 32 + maxSideRows * rowStepY + 24;
+  const bottomY = 28 + maxSideRows * rowStepY + 18;
+  const supportCols = Math.max(2, Math.min(4, Math.floor((usableW - 40) / (PBI_CARD_W + 64))));
+  const supportGapX = supportingTables.length > 1
+    ? Math.max(64, Math.floor((usableW - supportCols * PBI_CARD_W) / Math.max(1, supportCols)))
+    : 80;
   supportingTables.forEach((t, i) => {
-    const col = i % 3;
-    const row = Math.floor(i / 3);
+    const col = i % supportCols;
+    const row = Math.floor(i / supportCols);
     positions[t.name] = {
-      x: leftX + col * (PBI_CARD_W + 96),
+      x: leftX + col * (PBI_CARD_W + supportGapX),
       y: bottomY + row * rowStepY,
     };
   });
@@ -1685,7 +1697,8 @@ export function InteractivePowerBiModelPanel({
   const canvasViewportRef = useRef<HTMLDivElement>(null);
 
   const autoArrange = () => {
-    setNodePositions(computeStarSchemaPositions(tables, relationships));
+    const w = canvasViewportRef.current?.clientWidth || 960;
+    setNodePositions(computeStarSchemaPositions(tables, relationships, w));
   };
 
   useEffect(() => {

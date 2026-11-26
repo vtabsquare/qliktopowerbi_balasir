@@ -237,3 +237,19 @@ body.demo-restricted-clipboard textarea {
   user-select: text !important;
 }
 
+/* ── Action Required Attention Highlight ───────────────────────────────────── */
+@keyframes action-required-glow {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.32), 0 4px 14px -2px rgba(245, 158, 11, 0.16);
+    border-color: rgba(245, 158, 11, 0.72);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.18), 0 6px 20px -2px rgba(245, 158, 11, 0.28);
+    border-color: rgba(217, 119, 6, 0.95);
+  }
+}
+
+.action-required-banner {
+  animation: action-required-glow 2s ease-in-out infinite;
+}
+

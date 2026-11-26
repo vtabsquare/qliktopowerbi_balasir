@@ -197,11 +197,11 @@ export function StageValidationBanner({ stepId, canProceed, blockedReason }: Sta
       role="region"
       aria-label="Step validation issues"
       className={cn(
-        "rounded-xl border p-4 shadow-xs",
+        "rounded-xl border p-4 shadow-xs transition-all",
         errorCount > 0
           ? "border-destructive/35 bg-destructive/5"
           : actionRequiredCount > 0
-          ? "border-primary/30 bg-primary/5"
+          ? "action-required-banner border-amber-500/70 bg-amber-500/10"
           : "border-amber-500/35 bg-amber-500/5",
       )}
     >
@@ -210,7 +210,10 @@ export function StageValidationBanner({ stepId, canProceed, blockedReason }: Sta
           {errorCount > 0 ? (
             <AlertCircle className="h-5 w-5 shrink-0 text-destructive" />
           ) : actionRequiredCount > 0 ? (
-            <Info className="h-5 w-5 shrink-0 text-primary" />
+            <div className="relative flex h-5 w-5 shrink-0 items-center justify-center">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-55" />
+              <AlertTriangle className="relative h-5 w-5 text-amber-600 dark:text-amber-400" />
+            </div>
           ) : (
             <AlertTriangle className="h-5 w-5 shrink-0 text-amber-500" />
           )}
@@ -259,7 +262,7 @@ export function StageValidationBanner({ stepId, canProceed, blockedReason }: Sta
                     issue.severity === "error"
                       ? "bg-destructive/15 text-destructive"
                       : issue.severity === "action-required"
-                      ? "bg-primary/15 text-primary"
+                      ? "bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30"
                       : "bg-amber-500/15 text-amber-600 dark:text-amber-400",
                   )}
                 >
