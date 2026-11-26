@@ -1,31 +1,57 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { MoreHorizontal, LogOut, Trash2, Lock, Compass } from "lucide-react";
+import { MoreHorizontal, LogOut, Trash2, Lock, Compass, User as UserIcon, ChevronDown, ShieldCheck, Layers, Mail, CheckCircle2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 import { useState, useRef, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useMigration } from "@/lib/migration/store";
 
 export function AppHeader() {
   const navigate = useNavigate();
   const currentPath = useRouterState({ select: (s) => s.location.pathname });
-  const { isDemo: authIsDemo, signOut } = useAuth();
+  const { isDemo: authIsDemo, signOut, user, session } = useAuth();
+  const { enterpriseFiles, enterpriseAnalysis } = useMigration();
   const isDemo = authIsDemo || currentPath.startsWith("/demo");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const profileRef = useRef<HTMLDivElement>(null);
 
-  // Close menu when clicking outside
+  // Close menus when clicking outside
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setMenuOpen(false);
         setDeleteConfirm(false);
       }
+      if (profileRef.current && !profileRef.current.contains(e.target as Node)) {
+        setProfileOpen(false);
+      }
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  const userEmail = user?.email || "Signed-in User";
+  const userName =
+    (user?.user_metadata?.full_name as string | undefined) ||
+    (user?.user_metadata?.name as string | undefined) ||
+    (user?.email ? user.email.split("@")[0] : "Production User");
+  const userRole =
+    (user?.user_metadata?.role as string | undefined) ||
+    (user?.app_metadata?.role as string | undefined) ||
+    "Migration Engineer";
+  const userInitials = userName
+    .split(/[\s._-]+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((p) => p[0]?.toUpperCase() || "")
+    .join("") || "U";
+  const accountStatus = session || user ? "Active" : "Guest";
+  const isVerified = Boolean(user?.email_confirmed_at || session);
+  const workspaceActive = enterpriseFiles.length > 0 || Boolean(enterpriseAnalysis);
 
   const handleLogout = async () => {
     try {
@@ -168,6 +194,121 @@ export function AppHeader() {
             >
               <Lock className="h-3.5 w-3.5 shrink-0" />
               <span>DEMO VERSION</span>
+            </div>
+          )}
+
+          {!isDemo && (
+            <div className="relative" ref={profileRef}>
+              <button
+                type="button"
+                id="header-user-profile-btn"
+                aria-label="User Profile"
+                aria-expanded={profileOpen}
+                onClick={() => {
+                  setProfileOpen((v) => !v);
+                  setMenuOpen(false);
+                }}
+                className="flex items-center gap-2 h-10 pl-1.5 pr-2.5 rounded-xl border border-border bg-surface hover:bg-muted/60 transition-colors cursor-pointer"
+              >
+                <div className="grid h-7 w-7 place-items-center rounded-lg bg-gradient-to-br from-primary to-[oklch(0.62_0.2_260)] text-primary-foreground text-xs font-bold shadow-xs">
+                  {userInitials}
+                </div>
+                <div className="hidden sm:flex flex-col items-start leading-tight max-w-[130px]">
+                  <span className="text-xs font-semibold text-foreground truncate max-w-full">{userName}</span>
+                  <span className="text-[10px] text-muted-foreground truncate max-w-full">{userRole}</span>
+                </div>
+                <ChevronDown className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${profileOpen ? "rotate-180" : ""}`} />
+              </button>
+
+              {profileOpen && (
+                <div
+                  role="menu"
+                  aria-label="User Profile Menu"
+                  className="absolute right-0 top-12 z-50 w-72 rounded-2xl border border-border bg-background shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150"
+                >
+                  {/* User Header */}
+                  <div className="p-4 bg-surface-elevated border-b border-border flex items-center gap-3">
+                    <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-primary to-[oklch(0.62_0.2_260)] text-primary-foreground text-sm font-bold shadow-sm">
+                      {userInitials}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-sm font-bold text-foreground truncate">{userName}</span>
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 shrink-0">
+                          <CheckCircle2 className="h-2.5 w-2.5" />
+                          {accountStatus}
+                        </span>
+                      </div>
+                      <div className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground truncate" title={userEmail}>
+                        <Mail className="h-3 w-3 shrink-0" />
+                        <span className="truncate">{userEmail}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Role & Workspace Details */}
+                  <div className="p-3.5 space-y-2.5 text-xs border-b border-border">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+                        <ShieldCheck className="h-3.5 w-3.5 text-primary" />
+                        Role
+                      </span>
+                      <span className="font-semibold text-foreground">{userRole}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+                        <UserIcon className="h-3.5 w-3.5 text-primary" />
+                        Account Status
+                      </span>
+                      <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                        {isVerified ? "Verified · Active" : accountStatus}
+                      </span>
+                    </div>
+                    <div className="rounded-xl border border-border bg-surface-elevated/60 p-2.5 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="inline-flex items-center gap-1.5 font-semibold text-foreground">
+                          <Layers className="h-3.5 w-3.5 text-primary" />
+                          Production Workspace
+                        </span>
+                        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${workspaceActive ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" : "bg-muted text-muted-foreground"}`}>
+                          {workspaceActive ? "Active" : "Ready"}
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-muted-foreground flex items-center justify-between pt-0.5">
+                        <span>{enterpriseFiles.length} file(s) loaded</span>
+                        <span>{enterpriseAnalysis?.finalTables.length ?? 0} final table(s)</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Account Actions */}
+                  <div className="p-1.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setProfileOpen(false);
+                        navigate({ to: "/app/logs" });
+                      }}
+                      className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium text-foreground hover:bg-muted transition-colors cursor-pointer"
+                    >
+                      <Layers className="h-3.5 w-3.5 text-muted-foreground" />
+                      Pipeline Logs
+                    </button>
+                    <button
+                      type="button"
+                      id="profile-logout-btn"
+                      onClick={() => {
+                        setProfileOpen(false);
+                        handleLogout();
+                      }}
+                      className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold text-red-600 dark:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
+                    >
+                      <LogOut className="h-3.5 w-3.5" />
+                      Logout
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
