@@ -1899,7 +1899,16 @@ const KEY_RE_M = /(id$|_id$|key$|_key$|code$|number$|no$|guid$)/i;
 const UNSAFE_M_RE = /\b(LOAD|RESIDENT|ApplyMap|IntervalMatch|CrossTable|Generic Load|Peek|Previous|Autonumber)\b/i;
 
 function esc(s: string): string {
-  return '"' + (s || '').replace(/"/g, '""').replace(/\r\n/g, '#(cr)#(lf)').replace(/\r/g, '#(cr)').replace(/\n/g, '#(lf)') + '"';
+  return (
+    '"' +
+    (s || '')
+      .replace(/"/g, '""')
+      .replace(/\r\n/g, '#(cr)#(lf)')
+      .replace(/\r/g, '#(cr)')
+      .replace(/\n/g, '#(lf)')
+      .replace(/#\((?!(?:cr|lf|tab|#|[0-9a-fA-F]{4}|[0-9a-fA-F]{8})\))/g, '#(#)(') +
+    '"'
+  );
 }
 function qname(n: string): string { return '#"' + String(n).replace(/"/g, '""') + '"'; }
 function lit(v: string): string {

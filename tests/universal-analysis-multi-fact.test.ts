@@ -205,9 +205,12 @@ FROM [../SourceData/OperationalTargets.xlsx] (ooxml, embedded labels, table is F
     }
     expect(pqErrors).toEqual([]);
     // Ensure no single M string literal exceeds Power BI Desktop's literal length limit
+    // and no unescaped #(...) sequence (e.g. Qlik Date#(...) inside M strings) remains.
     for (const block of tmdlMBlocks) {
       const longLiterals = (block.m.match(/"(?:[^"]|""){20001,}"/g) || []);
       expect(longLiterals).toEqual([]);
+      const badEscapes = (block.m.match(/"(?:[^"]|"")*#\((?!(?:cr|lf|tab|#|[0-9a-fA-F]{4}|[0-9a-fA-F]{8})\))/g) || []);
+      expect(badEscapes).toEqual([]);
     }
   });
 });
