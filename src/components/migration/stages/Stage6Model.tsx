@@ -1,6 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMigration } from "@/lib/migration/store";
-import { Calendar, Layers, ArrowRight, RotateCcw } from "lucide-react";
+import {
+  Calendar,
+  Layers,
+  ArrowRight,
+  RotateCcw,
+  GitBranch,
+  Link2,
+  Search,
+  Table2,
+  KeyRound,
+  ZoomIn,
+  ZoomOut,
+  Maximize2,
+  Settings,
+} from "lucide-react";
 import type { FinalTable } from "@/lib/migration/types";
 import type { EnterpriseAnalysis } from "@/lib/migration/enterprise-parser";
 import { toast } from "sonner";
@@ -84,6 +98,7 @@ export function Stage6Model({ onNext, analysis }: { onNext?: () => void, analysi
             dataType: c.dataType,
             derived: c.kind === "calculated",
           })),
+          measures: t.measures.map((m) => ({ name: m.name })),
           keys: t.columns.filter((c) => c.isKey).map((c) => c.name),
           sourceTables: [],
           isFinal: true,
@@ -268,7 +283,7 @@ export function Stage6Model({ onNext, analysis }: { onNext?: () => void, analysi
 
       <div className="grid grid-cols-1 gap-6">
         <ModelPanel title="Qlik Data Model Viewer (Associative)" tables={finalTables} relationships={qlikAssociations} variant="qlik" />
-        <ModelPanel title="Power BI Model View (Tabular Star Schema)" tables={allTables} relationships={pbiRelationships} variant="pbi" facts={facts} others={others} />
+        <InteractivePowerBiModelPanel title="Power BI Model View (Tabular Star Schema)" tables={allTables} relationships={pbiRelationships} />
       </div>
     </div>
   );
@@ -676,5 +691,614 @@ function RelationshipLines({
         );
       })}
     </svg>
+  );
+}
+
+type PbiRelTab = "diagram" | "list" | "tables" | "properties";
+type NodePos = { x: number; y: number };
+type PbiTableWithMeasures = FinalTable & { measures?: { name: string }[] };
+
+const PBI_CARD_W = 216;
+const PBI_CARD_H = 196;
+const PBI_GAP_X = 96;
+const PBI_GAP_Y = 74;
+
+function computeInitialPositions(tables: PbiTableWithMeasures[], rels: any[]): Record<string, NodePos> {
+  const positions: Record<string, NodePos> = {};
+  if (!tables.length) return positions;
+
+  const adj = new Map<string, Set<string>>();
+  const degree = new Map<string, number>();
+  tables.forEach((t) => {
+    adj.set(t.name, new Set());
+    degree.set(t.name, 0);
+  });
+  rels.forEach((r) => {
+    if (adj.has(r.fromTable) && adj.has(r.toTable) && r.fromTable !== r.toTable) {
+      adj.get(r.fromTable)!.add(r.toTable);
+      adj.get(r.toTable)!.add(r.fromTable);
+      degree.set(r.fromTable, (degree.get(r.fromTable) || 0) + 1);
+      degree.set(r.toTable, (degree.get(r.toTable) || 0) + 1);
+    }
+  });
+
+  const visited = new Set<string>();
+  const components: PbiTableWithMeasures[][] = [];
+  const standalone: PbiTableWithMeasures[] = [];
+
+  tables.forEach((t) => {
+    if (visited.has(t.name)) return;
+    if ((adj.get(t.name)?.size || 0) === 0) {
+      visited.add(t.name);
+      standalone.push(t);
+      return;
+    }
+    const comp: PbiTableWithMeasures[] = [];
+    const queue = [t.name];
+    visited.add(t.name);
+    while (queue.length) {
+      const curr = queue.shift()!;
+      const tbl = tables.find((x) => x.name === curr);
+      if (tbl) comp.push(tbl);
+      adj.get(curr)?.forEach((nxt) => {
+        if (!visited.has(nxt)) {
+          visited.add(nxt);
+          queue.push(nxt);
+        }
+      });
+    }
+    components.push(comp);
+  });
+
+  components.sort((a, b) => b.length - a.length);
+
+  let cursorY = 28;
+  const maxCols = 4;
+
+  components.forEach((comp) => {
+    const sorted = [...comp].sort((a, b) => (degree.get(b.name) || 0) - (degree.get(a.name) || 0));
+    const colsCount = Math.min(maxCols, Math.max(2, Math.ceil(Math.sqrt(sorted.length * 1.4))));
+    if (sorted.length >= 3) {
+      const hub = sorted.shift()!;
+      const midIdx = Math.floor(Math.min(colsCount, sorted.length + 1) / 2);
+      sorted.splice(midIdx, 0, hub);
+    }
+    sorted.forEach((t, idx) => {
+      const col = idx % colsCount;
+      const row = Math.floor(idx / colsCount);
+      positions[t.name] = {
+        x: 28 + col * (PBI_CARD_W + PBI_GAP_X),
+        y: cursorY + row * (PBI_CARD_H + PBI_GAP_Y),
+      };
+    });
+    const rowsUsed = Math.ceil(sorted.length / colsCount);
+    cursorY += rowsUsed * (PBI_CARD_H + PBI_GAP_Y);
+  });
+
+  if (standalone.length) {
+    standalone.forEach((t, idx) => {
+      const col = idx % maxCols;
+      const row = Math.floor(idx / maxCols);
+      positions[t.name] = {
+        x: 28 + col * (PBI_CARD_W + PBI_GAP_X),
+        y: cursorY + row * (PBI_CARD_H + PBI_GAP_Y),
+      };
+    });
+  }
+
+  return positions;
+}
+
+function InteractivePowerBiModelPanel({
+  title,
+  tables,
+  relationships,
+}: {
+  title: string;
+  tables: PbiTableWithMeasures[];
+  relationships: any[];
+}) {
+  const [activeTab, setActiveTab] = useState<PbiRelTab>("diagram");
+  const [tableSearch, setTableSearch] = useState("");
+  const [selectedTableName, setSelectedTableName] = useState<string>("");
+  const [selectedRelId, setSelectedRelId] = useState<string>("");
+  const [zoom, setZoom] = useState(0.85);
+  const [nodePositions, setNodePositions] = useState<Record<string, NodePos>>({});
+  const dragRef = useRef<{ name: string; startX: number; startY: number; origX: number; origY: number } | null>(null);
+  const canvasViewportRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setNodePositions(computeInitialPositions(tables, relationships));
+  }, [tables, relationships]);
+
+  useEffect(() => {
+    if (!tables.length) return;
+    if (selectedTableName && tables.some((t) => t.name === selectedTableName)) return;
+    const counts: Record<string, number> = {};
+    relationships.forEach((r) => {
+      counts[r.fromTable] = (counts[r.fromTable] || 0) + 2;
+      counts[r.toTable] = (counts[r.toTable] || 0) + 1;
+    });
+    const best = [...tables].sort((a, b) => (counts[b.name] || 0) - (counts[a.name] || 0))[0];
+    if (best) setSelectedTableName(best.name);
+  }, [tables, relationships, selectedTableName]);
+
+  const selectTable = (name: string) => {
+    setSelectedTableName(name);
+    const matching = relationships.find((r) => r.fromTable === name || r.toTable === name);
+    setSelectedRelId(matching ? matching.id : "");
+  };
+
+  const canvasBounds = useMemo(() => {
+    const vals = Object.values(nodePositions);
+    if (!vals.length) return { width: 900, height: 520 };
+    const maxX = Math.max(...vals.map((p) => p.x)) + PBI_CARD_W + 40;
+    const maxY = Math.max(...vals.map((p) => p.y)) + PBI_CARD_H + 40;
+    return { width: Math.max(760, maxX), height: Math.max(460, maxY) };
+  }, [nodePositions]);
+
+  const fitToView = () => {
+    const el = canvasViewportRef.current;
+    if (!el) {
+      setZoom(0.85);
+      return;
+    }
+    const availW = Math.max(320, el.clientWidth - 24);
+    const availH = Math.max(320, el.clientHeight - 24);
+    const ratio = Math.min(1, availW / canvasBounds.width, availH / canvasBounds.height);
+    setZoom(Math.max(0.45, +ratio.toFixed(2)));
+  };
+
+  useEffect(() => {
+    if (activeTab === "diagram") {
+      const timer = setTimeout(fitToView, 60);
+      return () => clearTimeout(timer);
+    }
+  }, [activeTab, canvasBounds.width, canvasBounds.height]);
+
+  const onNodeMouseDown = (e: React.MouseEvent, name: string) => {
+    e.stopPropagation();
+    selectTable(name);
+    const pos = nodePositions[name] || { x: 24, y: 24 };
+    dragRef.current = { name, startX: e.clientX, startY: e.clientY, origX: pos.x, origY: pos.y };
+
+    const handleMove = (ev: MouseEvent) => {
+      if (!dragRef.current) return;
+      const dx = (ev.clientX - dragRef.current.startX) / zoom;
+      const dy = (ev.clientY - dragRef.current.startY) / zoom;
+      const nx = Math.max(12, Math.round(dragRef.current.origX + dx));
+      const ny = Math.max(12, Math.round(dragRef.current.origY + dy));
+      const targetName = dragRef.current.name;
+      setNodePositions((prev) => ({ ...prev, [targetName]: { x: nx, y: ny } }));
+    };
+
+    const handleUp = () => {
+      dragRef.current = null;
+      window.removeEventListener("mousemove", handleMove);
+      window.removeEventListener("mouseup", handleUp);
+    };
+
+    window.addEventListener("mousemove", handleMove);
+    window.addEventListener("mouseup", handleUp);
+  };
+
+  const filteredTables = useMemo(() => {
+    const q = tableSearch.trim().toLowerCase();
+    if (!q) return tables;
+    return tables.filter((t) => t.name.toLowerCase().includes(q));
+  }, [tables, tableSearch]);
+
+  const keyColsSet = useMemo(() => {
+    const s = new Set<string>();
+    tables.forEach((t) => {
+      (t.keys || []).forEach((k) => s.add(`${t.name}.${k}`));
+    });
+    relationships.forEach((r) => {
+      if (r.fromTable && r.fromColumn) s.add(`${r.fromTable}.${r.fromColumn}`);
+      if (r.toTable && r.toColumn) s.add(`${r.toTable}.${r.toColumn}`);
+    });
+    return s;
+  }, [tables, relationships]);
+
+  const factTablesSet = useMemo(() => {
+    const s = new Set<string>();
+    tables.forEach((t) => {
+      if (t.type === "Fact") s.add(t.name);
+    });
+    relationships.forEach((r) => {
+      if (r.fromTable) s.add(r.fromTable);
+    });
+    return s;
+  }, [tables, relationships]);
+
+  return (
+    <div className="surface-card overflow-hidden flex flex-col">
+      {/* Header */}
+      <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3 border-b border-border bg-surface-elevated">
+        <div className="flex items-center gap-2">
+          <Layers className="h-4 w-4 text-primary" />
+          <span className="font-semibold text-sm">{title}</span>
+        </div>
+        <span className="chip text-[10px]">{tables.length} Active Tables</span>
+      </div>
+
+      {/* Tabs Row */}
+      <div className="flex flex-wrap items-center gap-2 px-4 py-2.5 border-b border-border bg-surface/60">
+        <button
+          type="button"
+          onClick={() => setActiveTab("diagram")}
+          className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors cursor-pointer ${
+            activeTab === "diagram" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+          }`}
+        >
+          <GitBranch className="h-3.5 w-3.5" />
+          <span>Model Diagram</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("list")}
+          className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors cursor-pointer ${
+            activeTab === "list" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+          }`}
+        >
+          <Link2 className="h-3.5 w-3.5" />
+          <span>Relationships ({relationships.length})</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("tables")}
+          className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors cursor-pointer ${
+            activeTab === "tables" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+          }`}
+        >
+          <Table2 className="h-3.5 w-3.5" />
+          <span>Tables &amp; Columns</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("properties")}
+          className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors cursor-pointer ${
+            activeTab === "properties" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+          }`}
+        >
+          <Settings className="h-3.5 w-3.5" />
+          <span>Model Properties</span>
+        </button>
+      </div>
+
+      {/* TAB 1: MODEL DIAGRAM */}
+      {activeTab === "diagram" && (
+        <div className="grid grid-cols-1 lg:grid-cols-[220px_1fr] min-h-[540px]">
+          {/* Left Tables Sidebar */}
+          <div className="border-b lg:border-b-0 lg:border-r border-border bg-surface/50 p-3 flex flex-col gap-2.5">
+            <div className="text-xs font-bold text-foreground">Tables ({tables.length})</div>
+            <div className="relative">
+              <Search className="h-3.5 w-3.5 text-muted-foreground absolute left-2.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={tableSearch}
+                onChange={(e) => setTableSearch(e.target.value)}
+                placeholder="Search tables..."
+                className="w-full rounded-lg border border-border bg-background pl-8 pr-2.5 py-1.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+              />
+            </div>
+            <div className="flex-1 overflow-y-auto space-y-1 max-h-[440px]">
+              {filteredTables.map((t) => {
+                const isSelected = selectedTableName === t.name;
+                return (
+                  <button
+                    key={t.name}
+                    type="button"
+                    onClick={() => selectTable(t.name)}
+                    className={`w-full flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs font-medium transition-colors cursor-pointer ${
+                      isSelected
+                        ? "bg-primary/10 text-primary border border-primary/30 font-semibold"
+                        : "text-foreground/80 hover:bg-muted/60 border border-transparent"
+                    }`}
+                  >
+                    <Table2 className="h-3.5 w-3.5 text-primary shrink-0" />
+                    <span className="truncate" title={t.name}>{t.name}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Center Interactive Canvas */}
+          <div className="flex flex-col min-w-0">
+            <div className="relative flex-1 min-h-[480px] overflow-auto bg-[radial-gradient(#e2e8f0_1px,transparent_1px)] dark:bg-[radial-gradient(#334155_1px,transparent_1px)] [background-size:20px_20px]" ref={canvasViewportRef}>
+              {/* Top-Right Controls */}
+              <div className="sticky top-3 float-right mr-3 z-20 flex flex-col gap-1 rounded-xl border border-border bg-background/95 p-1 shadow-sm backdrop-blur-xs">
+                <button type="button" onClick={fitToView} title="Fit all tables to view" className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground cursor-pointer">
+                  <Maximize2 className="h-3.5 w-3.5" />
+                </button>
+                <button type="button" onClick={() => setZoom((z) => Math.min(1.25, +(z + 0.1).toFixed(2)))} title="Zoom in" className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground cursor-pointer">
+                  <ZoomIn className="h-3.5 w-3.5" />
+                </button>
+                <button type="button" onClick={() => setZoom((z) => Math.max(0.4, +(z - 0.1).toFixed(2)))} title="Zoom out" className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground cursor-pointer">
+                  <ZoomOut className="h-3.5 w-3.5" />
+                </button>
+                <button type="button" onClick={() => setNodePositions(computeInitialPositions(tables, relationships))} title="Reset layout" className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground cursor-pointer">
+                  <RotateCcw className="h-3.5 w-3.5" />
+                </button>
+              </div>
+
+              {tables.length > 0 ? (
+                <div
+                  style={{
+                    width: canvasBounds.width * zoom,
+                    height: canvasBounds.height * zoom,
+                  }}
+                >
+                  <div
+                    className="relative"
+                    style={{
+                      width: canvasBounds.width,
+                      height: canvasBounds.height,
+                      transform: `scale(${zoom})`,
+                      transformOrigin: "top left",
+                    }}
+                  >
+                    <svg className="absolute inset-0 pointer-events-none" width={canvasBounds.width} height={canvasBounds.height}>
+                      {relationships.map((r) => {
+                        const p1 = nodePositions[r.fromTable];
+                        const p2 = nodePositions[r.toTable];
+                        if (!p1 || !p2) return null;
+
+                        const c1x = p1.x + PBI_CARD_W / 2;
+                        const c1y = p1.y + PBI_CARD_H / 2;
+                        const c2x = p2.x + PBI_CARD_W / 2;
+                        const c2y = p2.y + PBI_CARD_H / 2;
+                        const dx = c2x - c1x;
+                        const dy = c2y - c1y;
+
+                        let x1 = c1x;
+                        let y1 = c1y;
+                        let x2 = c2x;
+                        let y2 = c2y;
+
+                        if (Math.abs(dx) >= Math.abs(dy)) {
+                          x1 = dx >= 0 ? p1.x + PBI_CARD_W : p1.x;
+                          x2 = dx >= 0 ? p2.x : p2.x + PBI_CARD_W;
+                        } else {
+                          y1 = dy >= 0 ? p1.y + PBI_CARD_H : p1.y;
+                          y2 = dy >= 0 ? p2.y : p2.y + PBI_CARD_H;
+                        }
+
+                        const midX = (x1 + x2) / 2;
+                        const midY = (y1 + y2) / 2;
+                        const pathD =
+                          Math.abs(dx) >= Math.abs(dy)
+                            ? `M ${x1} ${y1} C ${midX} ${y1}, ${midX} ${y2}, ${x2} ${y2}`
+                            : `M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}`;
+
+                        const isHighlighted =
+                          selectedRelId === r.id ||
+                          r.fromTable === selectedTableName ||
+                          r.toTable === selectedTableName;
+
+                        const fromLabel = r.cardinality === "1:1" ? "1" : "*";
+                        const toLabel = "1";
+                        const lbl1X = x1 + (x2 - x1) * 0.14;
+                        const lbl1Y = y1 + (y2 - y1) * 0.14;
+                        const lbl2X = x2 - (x2 - x1) * 0.14;
+                        const lbl2Y = y2 - (y2 - y1) * 0.14;
+
+                        return (
+                          <g
+                            key={r.id}
+                            className="pointer-events-auto cursor-pointer"
+                            onClick={() => {
+                              setSelectedRelId(r.id);
+                              if (r.fromTable) setSelectedTableName(r.fromTable);
+                            }}
+                          >
+                            <path d={pathD} fill="none" stroke="transparent" strokeWidth={12} />
+                            <path
+                              d={pathD}
+                              fill="none"
+                              stroke={isHighlighted ? "#4f46e5" : "#94a3b8"}
+                              strokeWidth={isHighlighted ? 2.2 : 1.5}
+                              opacity={isHighlighted ? 1 : 0.6}
+                            />
+                            <circle cx={lbl1X} cy={lbl1Y} r={9.5} fill="#ffffff" stroke={isHighlighted ? "#4f46e5" : "#94a3b8"} strokeWidth={1.3} />
+                            <text x={lbl1X} y={lbl1Y + 3.5} textAnchor="middle" fontSize="10" fontWeight="bold" fill="#334155">
+                              {fromLabel}
+                            </text>
+                            <circle cx={lbl2X} cy={lbl2Y} r={9.5} fill="#ffffff" stroke={isHighlighted ? "#4f46e5" : "#94a3b8"} strokeWidth={1.3} />
+                            <text x={lbl2X} y={lbl2Y + 3.5} textAnchor="middle" fontSize="10" fontWeight="bold" fill="#334155">
+                              {toLabel}
+                            </text>
+                          </g>
+                        );
+                      })}
+                    </svg>
+
+                    {tables.map((t) => {
+                      const pos = nodePositions[t.name] || { x: 24, y: 24 };
+                      const isSelected = selectedTableName === t.name;
+                      const isFact = factTablesSet.has(t.name);
+                      const visibleCols = (t.columns || []).slice(0, 5);
+                      const visibleMeasures = (t.measures || []).slice(0, 2);
+                      const extraCount =
+                        Math.max(0, (t.columns || []).length - visibleCols.length) +
+                        Math.max(0, (t.measures || []).length - visibleMeasures.length);
+
+                      return (
+                        <div
+                          key={t.name}
+                          onMouseDown={(e) => onNodeMouseDown(e, t.name)}
+                          style={{ left: pos.x, top: pos.y, width: PBI_CARD_W }}
+                          className={`absolute rounded-xl border bg-background shadow-sm select-none cursor-grab active:cursor-grabbing overflow-hidden transition-shadow ${
+                            isSelected ? "ring-2 ring-primary border-primary shadow-md" : "border-border hover:border-primary/50"
+                          }`}
+                        >
+                          <div
+                            className={`flex items-center gap-1.5 px-3 py-2 text-xs font-bold ${
+                              isFact
+                                ? "bg-gradient-to-r from-indigo-600 to-violet-600 text-white"
+                                : "bg-sky-50 dark:bg-sky-950/50 text-sky-950 dark:text-sky-100 border-b border-border/60"
+                            }`}
+                          >
+                            <Table2 className="h-3.5 w-3.5 shrink-0" />
+                            <span className="truncate" title={t.name}>{t.name}</span>
+                          </div>
+                          <div className="divide-y divide-border/40 text-[11px] bg-background">
+                            {visibleCols.map((c, idx) => {
+                              const colName = String(c.name || c);
+                              const isKey = keyColsSet.has(`${t.name}.${colName}`);
+                              return (
+                                <div key={`${colName}-${idx}`} className="flex items-center gap-1.5 px-2.5 py-1 text-foreground/85">
+                                  {isKey ? (
+                                    <KeyRound className="h-3 w-3 text-amber-500 shrink-0" />
+                                  ) : (
+                                    <span className="w-3 shrink-0" />
+                                  )}
+                                  <span className="truncate">{colName}</span>
+                                </div>
+                              );
+                            })}
+                            {visibleMeasures.map((m, idx) => (
+                              <div key={`m-${m.name}-${idx}`} className="flex items-center gap-1.5 px-2.5 py-1 text-primary font-medium">
+                                <span className="w-3 text-center font-bold shrink-0">Σ</span>
+                                <span className="truncate">{m.name}</span>
+                              </div>
+                            ))}
+                            {extraCount > 0 && (
+                              <div className="px-2.5 py-1 text-[10px] text-muted-foreground text-center bg-muted/30">
+                                +{extraCount} more fields
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : (
+                <div className="p-8 text-center text-xs text-muted-foreground">No tables in semantic model.</div>
+              )}
+            </div>
+
+            {/* Bottom Legend Bar */}
+            <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 border-t border-border bg-surface-elevated text-[11px] text-muted-foreground">
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="font-semibold text-foreground">Legend:</span>
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-xs bg-indigo-600 inline-block" /> Fact / Source Table
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-xs bg-sky-200 border border-sky-400 inline-block" /> Dimension Table
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="h-0.5 w-3.5 bg-indigo-500 inline-block" /> Relationship ({relationships.length})
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <span className="inline-grid h-4 w-4 place-items-center rounded-full border border-border bg-background text-[10px] font-bold text-foreground">1</span> One
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <span className="inline-grid h-4 w-4 place-items-center rounded-full border border-border bg-background text-[10px] font-bold text-foreground">*</span> Many
+                </span>
+                <span className="hidden sm:inline text-muted-foreground/80">Tip: Drag tables to arrange</span>
+              </div>
+              <button
+                type="button"
+                onClick={fitToView}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 py-1 text-[11px] font-medium text-foreground hover:bg-muted cursor-pointer"
+              >
+                <Maximize2 className="h-3 w-3" /> Fit to View ({Math.round(zoom * 100)}%)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 2: RELATIONSHIPS LIST */}
+      {activeTab === "list" && (
+        <div className="p-4 space-y-2.5">
+          {relationships.length === 0 ? (
+            <div className="p-6 text-center text-xs text-muted-foreground">No relationships in semantic model.</div>
+          ) : (
+            relationships.map((r) => (
+              <div key={r.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-surface p-3 text-xs">
+                <div className="flex flex-wrap items-center gap-3">
+                  <div>
+                    <div className="text-[10px] uppercase text-muted-foreground">Many / From</div>
+                    <div className="font-semibold text-foreground">{r.fromTable}</div>
+                    <div className="font-mono text-[11px] text-primary">{r.fromColumn}</div>
+                  </div>
+                  <div className="flex items-center gap-1.5 px-2 text-muted-foreground">
+                    <Link2 className="h-4 w-4 text-primary" />
+                    <span className="font-semibold">{r.cardinality || "N:1"}</span>
+                  </div>
+                  <div>
+                    <div className="text-[10px] uppercase text-muted-foreground">One / To</div>
+                    <div className="font-semibold text-foreground">{r.toTable}</div>
+                    <div className="font-mono text-[11px] text-primary">{r.toColumn}</div>
+                  </div>
+                </div>
+                <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-[10px] font-semibold text-emerald-700 dark:text-emerald-400">
+                  {r.active === false ? "Inactive" : "Active"}
+                </span>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      {/* TAB 3: TABLES & COLUMNS */}
+      {activeTab === "tables" && (
+        <div className="p-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+          {tables.map((t) => (
+            <div key={t.name} className="rounded-xl border border-border bg-surface p-3 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5 font-semibold text-xs text-foreground">
+                  <Table2 className="h-3.5 w-3.5 text-primary" />
+                  <span>{t.name}</span>
+                </div>
+                <span className="text-[10px] text-muted-foreground">
+                  {t.columns.length} cols · {(t.measures || []).length} measures
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {t.columns.map((c, i) => (
+                  <span key={`${c.name}-${i}`} className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-2 py-0.5 text-[11px]">
+                    {keyColsSet.has(`${t.name}.${c.name}`) && <KeyRound className="h-3 w-3 text-amber-500" />}
+                    {c.name}
+                  </span>
+                ))}
+                {(t.measures || []).map((m, i) => (
+                  <span key={`m-${m.name}-${i}`} className="inline-flex items-center gap-1 rounded-md border border-primary/30 bg-primary/5 px-2 py-0.5 text-[11px] text-primary font-medium">
+                    Σ {m.name}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* TAB 4: MODEL PROPERTIES */}
+      {activeTab === "properties" && (
+        <div className="p-4 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+          <div className="rounded-xl border border-border bg-surface p-3">
+            <div className="text-muted-foreground">Final Tables</div>
+            <div className="text-lg font-bold text-foreground mt-0.5">{tables.length}</div>
+          </div>
+          <div className="rounded-xl border border-border bg-surface p-3">
+            <div className="text-muted-foreground">Final Relationships</div>
+            <div className="text-lg font-bold text-foreground mt-0.5">{relationships.length}</div>
+          </div>
+          <div className="rounded-xl border border-border bg-surface p-3">
+            <div className="text-muted-foreground">Filter Direction</div>
+            <div className="text-lg font-bold text-foreground mt-0.5">Single</div>
+          </div>
+          <div className="rounded-xl border border-border bg-surface p-3">
+            <div className="text-muted-foreground">Ambiguous Paths</div>
+            <div className="text-lg font-bold text-foreground mt-0.5">Prevented</div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
