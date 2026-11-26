@@ -4,7 +4,7 @@ import { StageNav } from "@/components/migration/StageNav";
 import { useMigration } from "@/lib/migration/store";
 import { Outlet } from "@tanstack/react-router";
 import { useAuth } from "@/contexts/AuthContext";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { FloatingWorkflowNav } from "@/components/migration/FloatingWorkflowNav";
 import { DemoEndedModal } from "@/components/migration/DemoEndedModal";
 import { TourProvider } from "@/contexts/TourContext";
