@@ -1584,10 +1584,16 @@ type StarValidationItem = {
   severity: "error" | "warning" | "info";
   workflowStep: string;
   tableOrComponent: string;
+  tableName?: string;
   column?: string;
   issue: string;
   reason: string;
+  rootCause?: string;
+  affectedColumns?: string[];
+  affectedRelationships?: string[];
   suggestedFix: string;
+  recommendedAction?: string;
+  canAutoFix?: "deactivate-rel" | "mark-key" | null;
   status: "Open" | "Valid";
   relId?: string;
 };
@@ -1698,6 +1704,8 @@ export function InteractivePowerBiModelPanel({
   const [showInspector, setShowInspector] = useState(true);
   const [showValidation, setShowValidation] = useState(true);
   const [validationFilter, setValidationFilter] = useState<"all" | "error" | "warning" | "info">("all");
+  const [selectedValidationId, setSelectedValidationId] = useState<string | null>(null);
+  const [detailItem, setDetailItem] = useState<StarValidationItem | null>(null);
   const [zoom, setZoom] = useState(0.88);
   const [nodePositions, setNodePositions] = useState<Record<string, NodePos>>({});
   const dragRef = useRef<{ name: string; startX: number; startY: number; origX: number; origY: number } | null>(null);
@@ -1856,10 +1864,17 @@ export function InteractivePowerBiModelPanel({
           severity: "error",
           workflowStep: "Star Schema",
           tableOrComponent: `${r.fromTable}.${r.fromColumn} → ${r.toTable}.${r.toColumn}`,
+          tableName: r.fromTable,
           column: r.fromColumn,
           issue: "Unmatched relationship column",
           reason: "The source or target column does not exist in the Power BI model table.",
+          rootCause: !ft || !tt
+            ? `Table '${!ft ? r.fromTable : r.toTable}' is missing from the current semantic model.`
+            : `Column '${!fcExists ? `${r.fromTable}.${r.fromColumn}` : `${r.toTable}.${r.toColumn}`}' was not found in the table schema.`,
+          affectedColumns: [`${r.fromTable}.${r.fromColumn}`, `${r.toTable}.${r.toColumn}`],
+          affectedRelationships: [`${r.fromTable}.${r.fromColumn} → ${r.toTable}.${r.toColumn}`],
           suggestedFix: "Update the relationship column mapping in Relationships or re-run ETL Analysis.",
+          recommendedAction: "Open the Relationships tab or re-run ETL Analysis so both join columns exist with matching names and types.",
           status: "Open",
           relId: r.id,
         });
@@ -1869,10 +1884,16 @@ export function InteractivePowerBiModelPanel({
           severity: "warning",
           workflowStep: "Star Schema",
           tableOrComponent: r.fromTable,
+          tableName: r.fromTable,
           column: r.fromColumn,
           issue: "Circular / self-referencing relationship",
           reason: "A table cannot have an active relationship to itself in Power BI.",
+          rootCause: `Relationship '${r.fromTable}.${r.fromColumn} → ${r.toTable}.${r.toColumn}' references the same table on both sides, creating a self-loop.`,
+          affectedColumns: [`${r.fromTable}.${r.fromColumn}`, `${r.toTable}.${r.toColumn}`],
+          affectedRelationships: [`${r.fromTable}.${r.fromColumn} → ${r.toTable}.${r.toColumn}`],
           suggestedFix: "Create a role-playing dimension or mark the relationship inactive.",
+          recommendedAction: "Deactivate this relationship or split the role-playing entity into a separate dimension table.",
+          canAutoFix: r.active !== false ? "deactivate-rel" : null,
           status: "Open",
           relId: r.id,
         });
@@ -1882,10 +1903,35 @@ export function InteractivePowerBiModelPanel({
           severity: "warning",
           workflowStep: "Star Schema",
           tableOrComponent: `${r.fromTable} ↔ ${r.toTable}`,
+          tableName: r.fromTable,
           column: r.fromColumn,
           issue: "Ambiguous active relationship path",
           reason: "Multiple active relationships exist between the same pair of tables.",
+          rootCause: `Power BI allows only one active filter propagation path between '${r.fromTable}' and '${r.toTable}'.`,
+          affectedColumns: [`${r.fromTable}.${r.fromColumn}`, `${r.toTable}.${r.toColumn}`],
+          affectedRelationships: [`${r.fromTable}.${r.fromColumn} → ${r.toTable}.${r.toColumn}`],
           suggestedFix: "Keep one primary relationship active and set secondary paths inactive for USERELATIONSHIP().",
+          recommendedAction: "Mark secondary relationships as inactive and reference them in DAX using USERELATIONSHIP().",
+          canAutoFix: "deactivate-rel",
+          status: "Open",
+          relId: r.id,
+        });
+      } else if (r.cardinality === "Many-to-Many" || r.cardinality === "*:*") {
+        items.push({
+          id: `rel-m2m-${r.id}`,
+          severity: "warning",
+          workflowStep: "Star Schema",
+          tableOrComponent: `${r.fromTable} ↔ ${r.toTable}`,
+          tableName: r.fromTable,
+          column: r.fromColumn,
+          issue: "Many-to-many relationship cardinality",
+          reason: "Neither side of this relationship has a guaranteed unique key.",
+          rootCause: `Both '${r.fromTable}.${r.fromColumn}' and '${r.toTable}.${r.toColumn}' contain non-unique values, which can cause ambiguous aggregations.`,
+          affectedColumns: [`${r.fromTable}.${r.fromColumn}`, `${r.toTable}.${r.toColumn}`],
+          affectedRelationships: [`${r.fromTable}.${r.fromColumn} → ${r.toTable}.${r.toColumn} (${r.cardinality})`],
+          suggestedFix: "Introduce a bridge/lookup table or designate a unique primary key on the 1-side.",
+          recommendedAction: "Verify uniqueness on the lookup side or keep the relationship inactive until a bridge table is added.",
+          canAutoFix: r.active !== false ? "deactivate-rel" : null,
           status: "Open",
           relId: r.id,
         });
@@ -1896,43 +1942,100 @@ export function InteractivePowerBiModelPanel({
     tables.forEach((t) => {
       const role = getTableRoleLabel(t);
       const colNames = t.columns.map((c) => c.name.toLowerCase());
-      const hasDuplicates = new Set(colNames).size !== colNames.length;
+      const dupCols = t.columns.filter((c, idx) => colNames.indexOf(c.name.toLowerCase()) !== idx).map((c) => `${t.name}.${c.name}`);
+      const hasDuplicates = dupCols.length > 0;
+      const tableRels = relationships
+        .filter((r) => r.fromTable === t.name || r.toTable === t.name)
+        .map((r) => `${r.fromTable}.${r.fromColumn} → ${r.toTable}.${r.toColumn}`);
       if (hasDuplicates) {
         items.push({
           id: `tbl-dup-${t.name}`,
           severity: "error",
           workflowStep: "Star Schema",
           tableOrComponent: t.name,
+          tableName: t.name,
           issue: "Duplicate column names detected",
           reason: `Table '${t.name}' contains duplicate column names which Power BI Semantic Model rejects.`,
+          rootCause: `Multiple columns in '${t.name}' resolve to the same case-insensitive name: ${dupCols.join(", ")}.`,
+          affectedColumns: dupCols,
+          affectedRelationships: tableRels,
           suggestedFix: "Rename or deduplicate the affected columns in ETL Analysis or Power Query.",
+          recommendedAction: "Open Power Query or ETL Analysis and rename or remove duplicate columns before exporting PBIP.",
           status: "Open",
         });
       }
       if ((role === "Dimension" || role === "Date") && (t.keys || []).length === 0) {
+        const candidateKey = t.columns.find((c) => /(id|key)$/i.test(c.name));
         items.push({
           id: `tbl-nokey-${t.name}`,
           severity: "warning",
           workflowStep: "Star Schema",
           tableOrComponent: t.name,
+          tableName: t.name,
+          column: candidateKey?.name,
           issue: "No row identifier designated",
           reason: `Lookup-side table '${t.name}' has no primary key column marked for 1-side relationships.`,
+          rootCause: `No primary key was designated for '${t.name}', preventing automatic 1-to-many validation on lookup joins.`,
+          affectedColumns: candidateKey ? [`${t.name}.${candidateKey.name}`] : t.columns.slice(0, 3).map((c) => `${t.name}.${c.name}`),
+          affectedRelationships: tableRels,
           suggestedFix: "Select the unique key column in Tables & Keys or verify its key column.",
+          recommendedAction: candidateKey
+            ? `Designate '${candidateKey.name}' (or the true unique identifier) as the primary key for '${t.name}'.`
+            : `Select a unique identifier column for '${t.name}' in the Tables & Columns section.`,
+          canAutoFix: candidateKey ? "mark-key" : null,
           status: "Open",
         });
       }
       if (role === "Supporting" && !/qlik variables/i.test(t.name)) {
+        const sharedKey = mainFact
+          ? t.columns.find((c) => mainFact.columns.some((fc) => fc.name.toLowerCase() === c.name.toLowerCase() && /(id|key|code)$/i.test(c.name)))
+          : undefined;
         items.push({
           id: `tbl-disc-${t.name}`,
           severity: "warning",
           workflowStep: "Star Schema",
           tableOrComponent: t.name,
+          tableName: t.name,
+          column: sharedKey?.name,
           issue: mainFact ? `No direct relationship with ${mainFact.name}` : "Disconnected supporting table",
           reason: `${t.name} table is not connected to the main fact table.`,
+          rootCause: sharedKey && mainFact
+            ? `'${t.name}' shares candidate key '${sharedKey.name}' with '${mainFact.name}', but no active relationship is currently linked in the model.`
+            : `'${t.name}' has no active relationship connecting it to '${mainFact?.name || "any fact table"}'.`,
+          affectedColumns: sharedKey
+            ? [`${t.name}.${sharedKey.name}`, ...(mainFact ? [`${mainFact.name}.${sharedKey.name}`] : [])]
+            : (t.keys || []).map((k) => `${t.name}.${k}`),
+          affectedRelationships: [],
           suggestedFix: "Check if this table is required or create a proper relationship.",
+          recommendedAction: sharedKey && mainFact
+            ? `Create a relationship between '${t.name}.${sharedKey.name}' and '${mainFact.name}.${sharedKey.name}' in the Relationships stage, or confirm it is a standalone parameter table.`
+            : `Review '${t.name}' in the Model Diagram: link it via a shared key or exclude it if it is only an intermediate Qlik helper.`,
           status: "Open",
         });
       }
+    });
+
+    // 3. Store-level semantic model diagnostics (e.g., data type mismatches, duplicate keys)
+    (store.powerBiModel?.diagnostics || []).forEach((diag, idx) => {
+      if (diag.approved) return;
+      const alreadyTracked = items.some((i) => i.tableName === diag.table && i.issue === diag.title);
+      if (alreadyTracked) return;
+      items.push({
+        id: `diag-${diag.id || idx}`,
+        severity: diag.severity === "blocking-error" || diag.severity === "error" ? "error" : "warning",
+        workflowStep: "Power BI Model",
+        tableOrComponent: diag.table || diag.area || "Semantic Model",
+        tableName: diag.table,
+        column: diag.column,
+        issue: diag.title,
+        reason: diag.message,
+        rootCause: diag.message,
+        affectedColumns: diag.table && diag.column ? [`${diag.table}.${diag.column}`] : [],
+        affectedRelationships: [],
+        suggestedFix: diag.resolution || "Review the affected table/column in Power BI Model or Power Query.",
+        recommendedAction: diag.resolution || "Adjust the column data type or key configuration and click Revalidate.",
+        status: "Open",
+      });
     });
 
     if (items.length === 0) {
@@ -1943,13 +2046,17 @@ export function InteractivePowerBiModelPanel({
         tableOrComponent: "All Tables & Relationships",
         issue: `${relationships.length} valid relationship(s) verified`,
         reason: "All star-schema tables, keys, and single-direction relationships passed validation.",
+        rootCause: "No structural, key, or relationship conflicts were detected in the semantic model.",
+        affectedColumns: [],
+        affectedRelationships: relationships.map((r) => `${r.fromTable}.${r.fromColumn} → ${r.toTable}.${r.toColumn}`),
         suggestedFix: "No action required — ready for PBIP export.",
+        recommendedAction: "Proceed to Relationships and Validation & Export.",
         status: "Valid",
       });
     }
 
     return items;
-  }, [tables, relationships]);
+  }, [tables, relationships, store.powerBiModel?.diagnostics]);
 
   const filteredValidationItems = useMemo(() => {
     if (validationFilter === "all") return validationItems;
@@ -2646,7 +2753,12 @@ export function InteractivePowerBiModelPanel({
               </thead>
               <tbody className="divide-y divide-border/50">
                 {filteredValidationItems.map((item) => (
-                  <tr key={item.id} className="hover:bg-muted/30">
+                  <tr
+                    key={item.id}
+                    className={`hover:bg-muted/30 transition-colors ${
+                      selectedValidationId === item.id ? "bg-primary/10 ring-1 ring-inset ring-primary/30" : ""
+                    }`}
+                  >
                     <td className="px-3 py-2">
                       <span
                         className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
@@ -2680,9 +2792,11 @@ export function InteractivePowerBiModelPanel({
                       <button
                         type="button"
                         onClick={() => {
-                          setActiveTab("diagram");
+                          setSelectedValidationId(item.id);
+                          setDetailItem(item);
                           if (item.relId) setSelectedRelId(item.relId);
-                          const tbl = tables.find((t) => t.name === item.tableOrComponent);
+                          const targetName = item.tableName || item.tableOrComponent;
+                          const tbl = tables.find((t) => t.name === targetName);
                           if (tbl) selectTable(tbl.name);
                         }}
                         className="rounded-lg border border-border bg-background px-2.5 py-1 text-[11px] font-medium hover:bg-muted cursor-pointer"
@@ -2697,6 +2811,206 @@ export function InteractivePowerBiModelPanel({
           </div>
         )}
       </div>
+
+      {/* Validation Issue Details Modal */}
+      {detailItem && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Validation Issue Details"
+        >
+          <div className="w-full max-w-2xl rounded-2xl border border-border bg-background shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="flex items-start justify-between gap-3 px-5 py-4 border-b border-border bg-surface-elevated">
+              <div className="flex items-start gap-3">
+                <div
+                  className={`mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl ${
+                    detailItem.severity === "error"
+                      ? "bg-destructive/15 text-destructive"
+                      : detailItem.severity === "warning"
+                      ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+                      : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                  }`}
+                >
+                  {detailItem.severity === "info" ? (
+                    <CheckCircle2 className="h-5 w-5" />
+                  ) : (
+                    <AlertTriangle className="h-5 w-5" />
+                  )}
+                </div>
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h4 className="font-display text-base font-bold text-foreground">{detailItem.issue}</h4>
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                        detailItem.status === "Valid"
+                          ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
+                          : "bg-amber-500/15 text-amber-700 dark:text-amber-300"
+                      }`}
+                    >
+                      {detailItem.status}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {detailItem.workflowStep} · {detailItem.tableOrComponent}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDetailItem(null)}
+                aria-label="Close issue details"
+                className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 overflow-y-auto text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="rounded-xl border border-border bg-surface-elevated/60 p-3">
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Table / Component</div>
+                  <div className="mt-1 font-semibold text-foreground">{detailItem.tableOrComponent}</div>
+                </div>
+                <div className="rounded-xl border border-border bg-surface-elevated/60 p-3">
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Workflow Step</div>
+                  <div className="mt-1 font-semibold text-foreground">{detailItem.workflowStep}</div>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-border bg-background p-3.5 space-y-2">
+                <div>
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Reason</div>
+                  <p className="mt-1 text-foreground leading-relaxed">{detailItem.reason}</p>
+                </div>
+                {detailItem.rootCause && (
+                  <div className="pt-2 border-t border-border/60">
+                    <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Root Cause</div>
+                    <p className="mt-1 text-muted-foreground leading-relaxed">{detailItem.rootCause}</p>
+                  </div>
+                )}
+              </div>
+
+              {(detailItem.affectedColumns?.length || detailItem.affectedRelationships?.length) ? (
+                <div className="rounded-xl border border-border bg-background p-3.5 space-y-2.5">
+                  {detailItem.affectedColumns && detailItem.affectedColumns.length > 0 && (
+                    <div>
+                      <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Affected Columns</div>
+                      <div className="mt-1.5 flex flex-wrap gap-1.5">
+                        {detailItem.affectedColumns.map((col) => (
+                          <span key={col} className="rounded-md border border-border bg-surface-elevated px-2 py-0.5 font-mono text-[11px] text-foreground">
+                            {col}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {detailItem.affectedRelationships && detailItem.affectedRelationships.length > 0 && (
+                    <div>
+                      <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Affected Relationships</div>
+                      <div className="mt-1.5 flex flex-wrap gap-1.5">
+                        {detailItem.affectedRelationships.map((rel) => (
+                          <span key={rel} className="rounded-md border border-border bg-surface-elevated px-2 py-0.5 font-mono text-[11px] text-foreground">
+                            {rel}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : null}
+
+              <div className="rounded-xl border border-primary/25 bg-primary/5 p-3.5 space-y-1.5">
+                <div className="text-[11px] font-semibold uppercase tracking-wider text-primary">Suggested Fix & Recommended Action</div>
+                <p className="text-foreground font-medium">{detailItem.suggestedFix}</p>
+                {detailItem.recommendedAction && (
+                  <p className="text-muted-foreground leading-relaxed">{detailItem.recommendedAction}</p>
+                )}
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-2 px-5 py-3.5 border-t border-border bg-surface-elevated">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab("diagram");
+                    if (detailItem.relId) setSelectedRelId(detailItem.relId);
+                    const targetName = detailItem.tableName || detailItem.tableOrComponent;
+                    const tbl = tables.find((t) => t.name === targetName);
+                    if (tbl) {
+                      selectTable(tbl.name);
+                      const pos = nodePositions[tbl.name];
+                      if (pos && canvasViewportRef.current) {
+                        canvasViewportRef.current.scrollTo({
+                          left: Math.max(0, pos.x * zoom - 120),
+                          top: Math.max(0, pos.y * zoom - 80),
+                          behavior: "smooth",
+                        });
+                      }
+                    }
+                    setDetailItem(null);
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:opacity-90 cursor-pointer"
+                >
+                  <Table2 className="h-3.5 w-3.5" /> Highlight in Model Diagram
+                </button>
+
+                {detailItem.canAutoFix === "deactivate-rel" && detailItem.relId && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const res = store.updateRelationship(detailItem.relId!, { active: false });
+                      if (res.ok) {
+                        toast.success("Relationship marked inactive. Click Revalidate to verify the model.");
+                        setDetailItem(null);
+                      } else {
+                        toast.error(res.messages.join("; ") || "Unable to update relationship.");
+                      }
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/20 cursor-pointer"
+                  >
+                    Set Relationship Inactive
+                  </button>
+                )}
+
+                {detailItem.canAutoFix === "mark-key" && detailItem.tableName && detailItem.column && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      store.setTablePrimaryKey(detailItem.tableName!, detailItem.column!);
+                      toast.success(`Set '${detailItem.column}' as row identifier for '${detailItem.tableName}'.`);
+                      setDetailItem(null);
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/20 cursor-pointer"
+                  >
+                    <KeyRound className="h-3.5 w-3.5" /> Set Recommended Row Key
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleRefreshModel();
+                    setDetailItem(null);
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-semibold hover:bg-muted cursor-pointer"
+                >
+                  <RefreshCw className="h-3.5 w-3.5 text-primary" /> Revalidate
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setDetailItem(null)}
+                className="rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-semibold hover:bg-muted cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
