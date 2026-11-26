@@ -211,6 +211,7 @@ FROM [../SourceData/OperationalTargets.xlsx] (ooxml, embedded labels, table is F
       expect(longLiterals).toEqual([]);
       const badEscapes = (block.m.match(/"(?:[^"]|"")*#\((?!(?:cr|lf|tab|#|[0-9a-fA-F]{4}|[0-9a-fA-F]{8})\))/g) || []);
       expect(badEscapes).toEqual([]);
+      expect(block.m).not.toContain("QLIK2PBI.UnsupportedExpression");
     }
   });
 });

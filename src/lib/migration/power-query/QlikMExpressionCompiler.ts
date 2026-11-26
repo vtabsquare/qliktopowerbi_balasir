@@ -261,9 +261,16 @@ class Parser {
     while (this.current().kind === "operator" && ["+", "-"].includes(this.current().value)) {
       const op = this.consume().value;
       const right = this.parseMultiplicative();
-      const safeLeft = `(try Number.From(${left.code}) otherwise ${left.code})`;
-      const safeRight = `(try Number.From(${right.code}) otherwise ${right.code})`;
-      left = { code: `(${safeLeft} ${op} ${safeRight})`, ...merge(left, right) };
+      if (op === "-") {
+        left = {
+          code: `(let _l = ${left.code}, _r = ${right.code} in if Value.Is(_l, type date) and Value.Is(_r, type date) then Duration.Days(_l - _r) else (try Number.From(_l) otherwise _l) - (try Number.From(_r) otherwise _r))`,
+          ...merge(left, right),
+        };
+      } else {
+        const safeLeft = `(try Number.From(${left.code}) otherwise ${left.code})`;
+        const safeRight = `(try Number.From(${right.code}) otherwise ${right.code})`;
+        left = { code: `(${safeLeft} ${op} ${safeRight})`, ...merge(left, right) };
+      }
     }
     return left;
   }
@@ -322,7 +329,12 @@ class Parser {
     if (token.kind === "identifier") {
       this.consume();
       const low = token.value.toLowerCase();
-      if (low === "null" || low === "null()") return { code: "null", fields: [], variables: [], warnings: [] };
+      if (low === "null" || low === "null()") {
+        if (this.match("lparen") && !this.match("rparen")) {
+          throw new Error(`Null() does not accept arguments near position ${this.current().position + 1}.`);
+        }
+        return { code: "null", fields: [], variables: [], warnings: [] };
+      }
       if (low === "true" || low === "false") return { code: low, fields: [], variables: [], warnings: [] };
       if (this.match("lparen")) return this.parseFunction(token.value);
       return { code: recordField(token.value), fields: [token.value], variables: [], warnings: [] };
