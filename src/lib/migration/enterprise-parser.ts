@@ -3055,7 +3055,7 @@ in
     }
     if (direct.length && !hasWildcard) {
       const nm = this.nextStep('SelectedColumns');
-      this.addStep(nm, `Table.SelectColumns(${prev}, {${uniq(direct).map(esc).join(', ')}}, MissingField.Error)`);
+      this.addStep(nm, `Table.SelectColumns(${prev}, {${uniq(direct).map(esc).join(', ')}}, MissingField.UseNull)`);
       prev = nm;
     }
     // Qlik evaluates every expression in one LOAD against the same immutable

@@ -263,13 +263,14 @@ export function UploadPage() {
       });
 
       const projectFiles = files
-        .filter((file) => file.parsedAsText)
+        .filter((file) => file.parsedAsText || Boolean(file.binaryBase64))
         .map((file) => ({
           path: file.path || file.name,
           ext: file.extension || "",
           size: Math.round((file.sizeKb || 0) * 1024),
-          isText: true,
+          isText: Boolean(file.parsedAsText),
           content: file.text || "",
+          binaryBase64: file.binaryBase64,
           note: "",
         }));
       const enterprise = runEnterpriseAnalysis(projectFiles);

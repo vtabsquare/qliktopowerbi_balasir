@@ -61,13 +61,14 @@ export function AnalysisPage() {
 
   function toProjectFiles(files: typeof enterpriseFiles) {
     return files
-      .filter(f => f.parsedAsText)
+      .filter(f => f.parsedAsText || Boolean(f.binaryBase64))
       .map(f => ({
         path: f.path || f.name,
         ext: f.extension || "",
         size: Math.round((f.sizeKb || 0) * 1024),
-        isText: true,
+        isText: Boolean(f.parsedAsText),
         content: f.text || "",
+        binaryBase64: f.binaryBase64,
         note: "",
       }));
   }
