@@ -98,6 +98,7 @@ export interface SourceMap {
   effectiveRef: string;
   qvdProducerTable: string;
   bypassQvd: boolean;
+  sheetName?: string;
 }
 
 export interface DaxMeasure {
@@ -1121,21 +1122,21 @@ function physicalStatus(ref: string, mapped: string, ct: string, explicitStatus 
   return (unsupported || stillQlikLogical || dbIncomplete) ? 'Needs review' : 'Mapped';
 }
 
-export function buildSourceMappings(operations: Operation[], updates: Record<string, { mappedRef?: string; connectorType?: string; status?: string; notes?: string }> = {}, files: ProjectFile[] = []): SourceMap[] {
+export function buildSourceMappings(operations: Operation[], updates: Record<string, { mappedRef?: string; connectorType?: string; status?: string; notes?: string; sheetName?: string }> = {}, files: ProjectFile[] = []): SourceMap[] {
   const resolver = new QvdLineageResolver(operations);
   const rows: SourceMap[] = [];
   const seen = new Set<string>();
 
-  function getUpdate(ref: string) {
-    return updates[ref] || updates[canonicalRef(ref)] || updates[basenameRef(ref)] || {};
+  function getUpdate(ref: string, table = '') {
+    return (table ? updates[`${ref}::${table}`] : undefined) || updates[ref] || updates[canonicalRef(ref)] || updates[basenameRef(ref)] || {};
   }
 
-  function add(ref: string, table = '', role = 'physical source', effectiveRef?: string, producerTable = '', bypass = false, notes = '') {
+  function add(ref: string, table = '', role = 'physical source', effectiveRef?: string, producerTable = '', bypass = false, notes = '', detectedSheet = '') {
     if (!ref) return;
     const key = `${ref}||${table}||${role}`;
     if (seen.has(key)) return;
     seen.add(key);
-    const u = getUpdate(ref);
+    const u = getUpdate(ref, table);
     if (bypass) {
       const upstream = effectiveRef || resolver.upstreamSources(ref).join('; ');
       rows.push({ originalRef: ref, mappedRef: u.mappedRef || upstream || ref, connectorType: u.connectorType || 'QVD bypassed via lineage', status: u.status || 'Bypassed', notes: u.notes || notes || 'QVD is not loaded directly. Power Query rebuilds this step from the producer table and original source lineage.', table, sourceRole: role, effectiveRef: upstream || ref, qvdProducerTable: producerTable, bypassQvd: true });
@@ -1173,22 +1174,26 @@ export function buildSourceMappings(operations: Operation[], updates: Record<str
     if (['Unknown','QVD - map to supported source'].includes(ct) && mapped && mapped !== ref) ct = connector(mapped);
     const status = u.status || (autoMappedQvd ? 'Mapped' : physicalStatus(ref, mapped, ct, u.status || ''));
     const effectiveNotes = autoMappedQvd ? 'Auto-mapped QVD to CSV for Power BI compatibility. Ensure converted CSV files are placed in this path.' : (u.notes || notes);
-    rows.push({ originalRef: ref, mappedRef: mapped, connectorType: ct, status, notes: effectiveNotes, table, sourceRole: autoMappedQvd ? 'qvd source (auto-mapped to csv)' : role, effectiveRef: mapped, qvdProducerTable: producerTable, bypassQvd: false });
+    const isExcelRow = ct === 'Excel' || /\.xlsx?$/i.test(mapped || ref);
+    const sheetName = isExcelRow ? (u.sheetName ?? (detectedSheet || table)) : undefined;
+    rows.push({ originalRef: ref, mappedRef: mapped, connectorType: ct, status, notes: effectiveNotes, table, sourceRole: autoMappedQvd ? 'qvd source (auto-mapped to csv)' : role, effectiveRef: mapped, qvdProducerTable: producerTable, bypassQvd: false, sheetName });
   }
 
   for (const o of operations) {
+    const sheetMatch = String(o.raw || '').match(/\btable\s+is\s+(?:"([^"]+)"|'([^']+)'|\[([^\]]+)\]|([A-Za-z0-9_.$@-]+))/i);
+    const opSheet = (sheetMatch?.[1] || sheetMatch?.[2] || sheetMatch?.[3] || sheetMatch?.[4] || '').trim();
     for (const src of o.sourceRefs) {
       if (isQvd(src)) {
         const prodTable = resolver.producerTable(src);
         const upstream = resolver.upstreamSources(src);
         if (prodTable && upstream.length) {
           add(src, o.table, 'qvd bypass / intermediate handoff', upstream.join('; '), prodTable, true);
-          for (const uref of upstream) add(uref, prodTable, 'original source for bypassed QVD', uref, prodTable, false);
+          for (const uref of upstream) add(uref, prodTable, 'original source for bypassed QVD', uref, prodTable, false, '', opSheet);
         } else {
           add(src, o.table, 'unresolved qvd source', src, '', false, 'No STORE producer found in uploaded scripts. Map this QVD to CSV/Excel/Parquet/SQL or upload the generator script.');
         }
       } else {
-        add(src, o.table, 'direct source', src);
+        add(src, o.table, 'direct source', src, '', false, '', opSheet);
       }
     }
     for (const qvd of o.qvdInputs) {
@@ -2118,6 +2123,9 @@ function buildSourceStagingPlan(
   for (const mapping of mappings) {
     if (mapping.bypassQvd) continue;
     for (const key of [mapping.originalRef, canonicalRef(mapping.originalRef), basenameRef(mapping.originalRef)]) {
+      if (key && mapping.table && !mappingLookup.has(`${key}::${mapping.table}`)) {
+        mappingLookup.set(`${key}::${mapping.table}`, mapping);
+      }
       if (key && !mappingLookup.has(key)) mappingLookup.set(key, mapping);
     }
   }
@@ -2131,12 +2139,15 @@ function buildSourceStagingPlan(
     if (!operation.sourceRefs.length) continue;
     const sourceRef = operation.sourceRefs[0];
     if (isQvd(sourceRef) && qvdResolver.producerOp(sourceRef)) continue;
-    const mapping = mappingLookup.get(sourceRef)
+    const mapping = mappingLookup.get(`${sourceRef}::${operation.table}`)
+      || mappingLookup.get(`${canonicalRef(sourceRef)}::${operation.table}`)
+      || mappingLookup.get(`${basenameRef(sourceRef)}::${operation.table}`)
+      || mappingLookup.get(sourceRef)
       || mappingLookup.get(canonicalRef(sourceRef))
       || mappingLookup.get(basenameRef(sourceRef))
       || null;
     const sheetMatch = String(operation.raw || "").match(/\btable\s+is\s+(?:"([^"]+)"|'([^']+)'|\[([^\]]+)\]|([A-Za-z0-9_.$@-]+))/i);
-    const explicitSheet = (sheetMatch?.[1] || sheetMatch?.[2] || sheetMatch?.[3] || sheetMatch?.[4] || "").trim();
+    const explicitSheet = (mapping?.sheetName || sheetMatch?.[1] || sheetMatch?.[2] || sheetMatch?.[3] || sheetMatch?.[4] || "").trim();
     const isExcelSource = mapping?.connectorType === "Excel" || /\.xlsx?$/i.test(sourceRef);
     const signature = [
       mapping?.connectorType || "Unknown",
@@ -4231,8 +4242,8 @@ export function combinedMQueriesText(mQueries: Record<string, string>): string {
 // SECTION 17: Rows-to-Updates helpers
 // ──────────────────────────────────────────────────────────────
 
-export function rowsToUpdates(rows: Record<string, string>[]): Record<string, { mappedRef: string; connectorType: string; status: string; notes: string }> {
-  const updates: Record<string, { mappedRef: string; connectorType: string; status: string; notes: string }> = {};
+export function rowsToUpdates(rows: Record<string, string>[]): Record<string, { mappedRef: string; connectorType: string; status: string; notes: string; sheetName?: string }> {
+  const updates: Record<string, { mappedRef: string; connectorType: string; status: string; notes: string; sheetName?: string }> = {};
   for (const r of rows || []) {
     const bypass = String(r['bypass_qvd'] || '').toLowerCase();
     if (bypass === 'true' || bypass === '1' || r['status'] === 'Bypassed') continue;
@@ -4247,7 +4258,10 @@ export function rowsToUpdates(rows: Record<string, string>[]): Record<string, { 
       if (mapped && mapped !== original && !['Unknown','QVD - map to supported source'].includes(ct) && !mapped.toLowerCase().endsWith('.qvd') && !db_incomplete) status = 'Mapped';
     }
     const notes = (r['notes'] || '').trim();
-    const update = { mappedRef: mapped, connectorType: ct, status, notes };
+    const sheetName = (r['sheet_name'] || r['sheetName'] || '').trim() || undefined;
+    const tableName = (r['table'] || '').trim();
+    const update = { mappedRef: mapped, connectorType: ct, status, notes, ...(sheetName ? { sheetName } : {}) };
+    if (tableName) updates[`${original}::${tableName}`] = update;
     updates[original] = update;
     updates[canonicalRef(original)] = update;
     const base = basenameRef(original);

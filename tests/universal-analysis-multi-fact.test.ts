@@ -2,7 +2,7 @@ import fs from "fs";
 import { describe, expect, it } from "vitest";
 import JSZip from "jszip";
 import { extractFilesFromRawList } from "@/components/migration/MultiFileDropzone";
-import { runEnterpriseAnalysis, tableRole, type ProjectFile, type TableProfile } from "@/lib/migration/enterprise-parser";
+import { rowsToUpdates, runEnterpriseAnalysis, tableRole, type ProjectFile, type TableProfile } from "@/lib/migration/enterprise-parser";
 import { buildPowerBiModel } from "@/lib/migration/model/PowerBiModelBuilder";
 import { deepValidatePowerQueries } from "@/lib/migration/power-query/MQueryDeepValidator";
 import { generatePbipZip } from "@/lib/migration/pbip-generator";
@@ -241,5 +241,26 @@ FROM [../SourceData/OperationalTargets.xlsx] (ooxml, embedded labels, table is F
     expect(exprTmdl).toContain("expression Source_MacroEconomicIndex");
     expect(exprTmdl).not.toContain('File.Contents("SourceData/OperationalTargets.xlsx")');
     expect(exprTmdl).not.toContain('File.Contents("../SourceData/OperationalTargets.xlsx")');
+  });
+
+  it("supports per-table Excel sheetName overrides via Source Mapping rowsToUpdates", () => {
+    const qvs = `
+SalesTargets:
+LOAD Month, TargetRevenue FROM [../SourceData/OperationalTargets.xlsx] (ooxml, embedded labels);
+
+MacroIndex:
+LOAD Month, CPI FROM [../SourceData/OperationalTargets.xlsx] (ooxml, embedded labels);
+`;
+    const updates = rowsToUpdates([
+      { original_ref: "../SourceData/OperationalTargets.xlsx", mapped_ref: "../SourceData/OperationalTargets.xlsx", connector_type: "Excel", status: "Mapped", notes: "", sheet_name: "CustomTargetsSheet", table: "SalesTargets", bypass_qvd: "false" },
+      { original_ref: "../SourceData/OperationalTargets.xlsx", mapped_ref: "../SourceData/OperationalTargets.xlsx", connector_type: "Excel", status: "Mapped", notes: "", sheet_name: "CustomMacroSheet", table: "MacroIndex", bypass_qvd: "false" },
+    ]);
+    const analysis = runEnterpriseAnalysis(
+      [{ path: "Load.qvs", ext: ".qvs", size: qvs.length, isText: true, content: qvs, note: "" },
+       { path: "SourceData/OperationalTargets.xlsx", ext: ".xlsx", size: 100, isText: false, content: "", binaryBase64: "UEsDBBQAAAA=", note: "" }],
+      updates,
+    );
+    expect(analysis.stagingQueries?.["Source_SalesTargets"]).toContain('"CustomTargetsSheet"');
+    expect(analysis.stagingQueries?.["Source_MacroIndex"]).toContain('"CustomMacroSheet"');
   });
 });

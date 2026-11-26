@@ -114,6 +114,7 @@ export function AnalysisPage() {
       const newUpdates = rowsToUpdates(enterpriseMappingRows.map(r => ({
         original_ref: r.originalRef, mapped_ref: r.mappedRef,
         connector_type: r.connectorType, status: r.status, notes: r.notes,
+        sheet_name: r.sheetName || "", table: r.table || "",
         bypass_qvd: r.bypassQvd ? "true" : "false",
       })));
       setEnterpriseMappingUpdates(newUpdates);

@@ -53,6 +53,7 @@ interface MappingRow {
   bypassQvd: boolean;
   effectiveRef: string;
   qvdProducerTable: string;
+  sheetName?: string;
 }
 
 const CONNECTOR_OPTIONS = [
@@ -653,6 +654,35 @@ export function TabSourceMapping({
   applying: boolean;
 }) {
   const { isDemo } = useAuth();
+  const { enterpriseFiles } = useMigration();
+  const [excelSheetsByRef, setExcelSheetsByRef] = useState<Map<string, string[]>>(() => new Map());
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const map = new Map<string, string[]>();
+      for (const f of enterpriseFiles || []) {
+        const ext = (f.extension || "").toLowerCase();
+        if ((ext === ".xlsx" || ext === ".xls") && f.binaryBase64) {
+          try {
+            const zip = await JSZip.loadAsync(f.binaryBase64, { base64: true });
+            const wbEntry = zip.file("xl/workbook.xml");
+            if (wbEntry) {
+              const xml = await wbEntry.async("string");
+              const names = Array.from(xml.matchAll(/<sheet\b[^>]*\bname="([^"]+)"/gi)).map((m) => m[1]).filter(Boolean);
+              if (names.length) {
+                map.set((f.path || f.name || "").replace(/\\/g, "/").toLowerCase(), names);
+                map.set((f.name || "").toLowerCase(), names);
+              }
+            }
+          } catch {
+            // ignore non-OOXML or unreadable xls
+          }
+        }
+      }
+      if (!cancelled) setExcelSheetsByRef(map);
+    })();
+    return () => { cancelled = true; };
+  }, [enterpriseFiles]);
   const storageKey = `qlik2pbi:bulkFolder:${isDemo ? "demo" : "prod"}`;
   const [bulkFolder, setBulkFolder] = useState(() => {
     if (typeof window === "undefined") return "";
@@ -958,13 +988,19 @@ export function TabSourceMapping({
           <table className="w-full text-xs">
             <thead className="bg-surface-elevated border-b border-border">
               <tr>
-                {["Table","Source Role","Original Qlik Ref","Connector Type","Mapped Power BI Path","Status","Bypass","Notes"].map(h =>
+                {["Table","Source Role","Original Qlik Ref","Connector Type","Mapped Power BI Path","Sheet Name","Status","Bypass","Notes"].map(h =>
                   <th key={h} className="px-3 py-2 text-left font-semibold text-muted-foreground whitespace-nowrap">{h}</th>
                 )}
               </tr>
             </thead>
             <tbody>
-              {mappingRows.map((row, i) => (
+              {mappingRows.map((row, i) => {
+                const isExcelRow = row.connectorType === "Excel" || /\.xlsx?$/i.test(row.mappedRef || row.originalRef);
+                const refKey = (row.mappedRef || row.originalRef || "").replace(/\\/g, "/").replace(/^(\.\.?\/)+/, "").toLowerCase();
+                const refBase = refKey.split("/").pop() || "";
+                const sheetSuggestions = excelSheetsByRef.get(refKey) || excelSheetsByRef.get(refBase) || [];
+                const listId = `excel-sheets-${i}`;
+                return (
                 <tr key={i} id={repairDomId("source-mapping", row.originalRef)} data-repair-object={row.originalRef} className={cn("border-b border-border/30", row.bypassQvd && "opacity-60")}>
                   <td className="px-3 py-1.5 text-foreground/70 max-w-[120px] truncate">{row.table}</td>
                   <td className="px-3 py-1.5 text-muted-foreground max-w-[100px] truncate">{row.sourceRole}</td>
@@ -989,6 +1025,32 @@ export function TabSourceMapping({
                     )}
                   </td>
                   <td className="px-3 py-1.5">
+                    {!row.bypassQvd && isExcelRow ? (
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          value={row.sheetName ?? ""}
+                          list={sheetSuggestions.length ? listId : undefined}
+                          placeholder={row.table || "Sheet1"}
+                          onChange={e => handleCellChange(i, "sheetName", e.target.value)}
+                          className="w-full min-w-[125px] px-2 py-1 rounded border border-border bg-surface text-xs text-foreground font-mono"
+                          title="Enter or select the Excel sheet name for this table"
+                        />
+                        {sheetSuggestions.length > 0 && (
+                          <>
+                            <datalist id={listId}>
+                              {sheetSuggestions.map(s => <option key={s} value={s} />)}
+                            </datalist>
+                            <span className="shrink-0 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary" title={`Detected ${sheetSuggestions.length} sheet(s): ${sheetSuggestions.join(", ")}`}>
+                              {sheetSuggestions.length}
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-muted-foreground text-xs">—</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-1.5">
                     {row.bypassQvd ? <Badge label="Bypassed" variant="info" /> : (
                       <select value={row.status} onChange={e => handleCellChange(i, "status", e.target.value)}
                         className="px-2 py-1 rounded border border-border bg-surface text-xs text-foreground">
@@ -1002,7 +1064,8 @@ export function TabSourceMapping({
                       className="w-full min-w-[120px] px-2 py-1 rounded border border-border bg-surface text-xs text-foreground" />
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -3104,7 +3167,8 @@ export function EnterpriseAnalysisPanel({ files, onAnalysisComplete }: { files: 
     setApplying(true);
     const newUpdates = rowsToUpdates(mappingRows.map(r => ({
       original_ref: r.originalRef, mapped_ref: r.mappedRef, connector_type: r.connectorType,
-      status: r.status, notes: r.notes, bypass_qvd: r.bypassQvd ? "true" : "false",
+      status: r.status, notes: r.notes, sheet_name: r.sheetName || "", table: r.table || "",
+      bypass_qvd: r.bypassQvd ? "true" : "false",
     })));
     setMappingUpdates(newUpdates);
     await runAnalysis(newUpdates, columnTypeEdits);

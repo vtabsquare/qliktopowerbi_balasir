@@ -94,7 +94,7 @@ export interface WorkspaceBackupPayload {
   enterpriseFiles: ExtractedFile[];
   enterpriseAnalysis: EnterpriseAnalysis | null;
   enterpriseMappingRows: MappingRow[];
-  enterpriseMappingUpdates: Record<string, { mappedRef?: string; connectorType?: string; status?: string; notes?: string }>;
+  enterpriseMappingUpdates: Record<string, { mappedRef?: string; connectorType?: string; status?: string; notes?: string; sheetName?: string }>;
   enterpriseColumnTypeEdits: Record<string, string>;
   qvwAnalysis: QvwAnalysis | null;
   expressionInventory: ExpressionInventory | null;
@@ -118,7 +118,7 @@ interface MigrationStore extends MigrationMetadata {
   enterpriseFiles: ExtractedFile[];
   enterpriseAnalysis: EnterpriseAnalysis | null;
   enterpriseMappingRows: MappingRow[];
-  enterpriseMappingUpdates: Record<string, { mappedRef?: string; connectorType?: string; status?: string; notes?: string }>;
+  enterpriseMappingUpdates: Record<string, { mappedRef?: string; connectorType?: string; status?: string; notes?: string; sheetName?: string }>;
   enterpriseColumnTypeEdits: Record<string, string>;
   qvwAnalysis: QvwAnalysis | null;
   expressionInventory: ExpressionInventory | null;
@@ -146,7 +146,7 @@ interface MigrationStore extends MigrationMetadata {
   setEnterpriseFiles: (files: ExtractedFile[]) => void;
   setEnterpriseAnalysis: (analysis: EnterpriseAnalysis | null) => void;
   setEnterpriseMappingRows: (rows: MappingRow[]) => void;
-  setEnterpriseMappingUpdates: (updates: Record<string, { mappedRef?: string; connectorType?: string; status?: string; notes?: string }>) => void;
+  setEnterpriseMappingUpdates: (updates: Record<string, { mappedRef?: string; connectorType?: string; status?: string; notes?: string; sheetName?: string }>) => void;
   setEnterpriseColumnTypeEdits: (edits: Record<string, string>) => void;
   setQvwAnalysis: (analysis: QvwAnalysis | null) => void;
   initializeExpressionConversion: () => void;
@@ -181,7 +181,7 @@ const initial: MigrationMetadata & {
   enterpriseFiles: ExtractedFile[];
   enterpriseAnalysis: EnterpriseAnalysis | null;
   enterpriseMappingRows: MappingRow[];
-  enterpriseMappingUpdates: Record<string, { mappedRef?: string; connectorType?: string; status?: string; notes?: string }>;
+  enterpriseMappingUpdates: Record<string, { mappedRef?: string; connectorType?: string; status?: string; notes?: string; sheetName?: string }>;
   enterpriseColumnTypeEdits: Record<string, string>;
   qvwAnalysis: QvwAnalysis | null;
   expressionInventory: ExpressionInventory | null;
