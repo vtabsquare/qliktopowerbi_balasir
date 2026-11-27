@@ -1592,7 +1592,7 @@ function buildRawSampleRows(
 function inferDataTypeFromSamples(values: unknown[]): string | null {
   const nonBlank = values.map((value) => value == null ? "" : String(value).trim()).filter(Boolean);
   if (!nonBlank.length) return null;
-  if (nonBlank.every((value) => /^(true|false|yes|no|y|n|0|1)$/i.test(value))) return "True/False";
+  if (nonBlank.every((value) => /^(true|false|yes|no|y|n)$/i.test(value))) return "True/False";
   if (nonBlank.every((value) => /^-?\d+$/.test(value))) return "Whole Number";
   if (nonBlank.every((value) => /^-?(?:\d+|\d*\.\d+)$/.test(value.replace(/,/g, "")))) return "Decimal Number";
   if (nonBlank.every((value) => !Number.isNaN(Date.parse(value))) && nonBlank.some((value) => /[-/]/.test(value))) {
@@ -1917,10 +1917,15 @@ export function buildColumnTypes(profiles: Record<string, TableProfile>, operati
         result[table][col] = normalizeType(updates[insensitiveKey]);
         meta[table][col] = { source: 'User override', confidence: 100, reason: 'Selected by user and treated as authoritative at the source, intermediate and final M stages.', sampleValues };
       } else {
+        const expression = exprByTableCol[`${table}|${col}`] || '';
+        const expressionType = inferDataType(col, expression);
+        const numericCalculatedFlag = Boolean(expression) && ['Whole Number', 'Decimal Number'].includes(expressionType) && /\b(?:if|num)\s*\(/i.test(expression);
         const sampledType = inferDataTypeFromSamples(sampleValues);
-        const dtype = sampledType || inferDataType(col, exprByTableCol[`${table}|${col}`] || '');
+        const dtype = numericCalculatedFlag ? expressionType : (sampledType || expressionType);
         result[table][col] = normalizeType(dtype);
-        meta[table][col] = sampledType
+        meta[table][col] = numericCalculatedFlag
+          ? { source: 'Qlik calculated expression', confidence: 96, reason: 'Numeric If()/Num() branches define a numeric column.', sampleValues }
+          : sampledType
           ? { source: 'Uploaded data sample', confidence: 92, reason: `Inferred from ${sampleValues.length} non-blank uploaded sample value(s).`, sampleValues }
           : { source: 'Script heuristic', confidence: 60, reason: 'No source sample available; inferred from Qlik expression and column name.', sampleValues };
       }

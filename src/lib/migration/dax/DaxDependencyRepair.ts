@@ -235,8 +235,20 @@ function repairQlikFunctions(expression: string, tables: PowerBiTable[] = [], or
   for (const [aggFn, iterFn] of iteratorPairs) {
     result = replaceBalancedCalls(result, aggFn, (arg) => {
       const trimmed = arg.trim();
-      const isSingleCol = /^(?:'(?:[^']|'')+'|[A-Za-z_][A-Za-z0-9_ ]*)\s*\[[^\]]+\]$/.test(trimmed);
-      if (isSingleCol) return `${aggFn}(${trimmed})`;
+      const singleColMatch = trimmed.match(/^(?:'((?:[^']|'')+)'|([A-Za-z_][A-Za-z0-9_ ]*))\s*\[([^\]]+)\]$/);
+      if (singleColMatch) {
+        if (["SUM", "AVERAGE", "MIN", "MAX"].includes(aggFn)) {
+          const tName = (singleColMatch[1] || singleColMatch[2] || "").replace(/''/g, "'").trim();
+          const cName = (singleColMatch[3] || "").trim();
+          const tbl = tables.find((t) => nameKey(t.name) === nameKey(tName));
+          const col = tbl?.columns.find((c) => nameKey(c.name) === nameKey(cName));
+          if (col?.dataType === "boolean") {
+            const qt = `'${tbl!.name.replace(/'/g, "''")}'`;
+            return `${iterFn}(${qt}, IF(${qt}[${col.name}], 1, 0))`;
+          }
+        }
+        return `${aggFn}(${trimmed})`;
+      }
       const tableMatch = trimmed.match(/'((?:[^']|'')+)'\s*\[|([A-Za-z_][A-Za-z0-9_]*)\s*\[/);
       if (!tableMatch) return `${aggFn}(${trimmed})`;
       const tableName = (tableMatch[1] || tableMatch[2]).replace(/''/g, "'");

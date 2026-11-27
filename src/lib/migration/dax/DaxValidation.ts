@@ -168,8 +168,8 @@ export function validateDaxMeasures(measures: DaxMeasureInput[], tables: PowerBi
         }
         if (closeIdx > openIdx) {
           const inner = expression.slice(openIdx + 1, closeIdx).trim();
-          const isSingleColumn = /^(?:'(?:[^']|'')+'|[A-Za-z_][A-Za-z0-9_ ]*)\s*\[[^\]]+\]$/.test(inner);
-          if (inner && !isSingleColumn) {
+          const colMatch = inner.match(/^(?:'((?:[^']|'')+)'|([A-Za-z_][A-Za-z0-9_ ]*))\s*\[([^\]]+)\]$/);
+          if (inner && !colMatch) {
             addIssue(
               issues,
               expression,
@@ -179,6 +179,22 @@ export function validateDaxMeasures(measures: DaxMeasureInput[], tables: PowerBi
               `Rewrite ${name}(...) as ${name}X(Table, ...).`,
               match.index,
             );
+          } else if (colMatch && ["SUM", "AVERAGE", "MIN", "MAX"].includes(name)) {
+            const tName = (colMatch[1] || colMatch[2] || "").replace(/''/g, "'").trim();
+            const cName = (colMatch[3] || "").trim();
+            const targetTbl = tableMap.get(tableNameKey(tName));
+            const targetCol = targetTbl?.columns.find((c) => objectNameKey(c.name) === objectNameKey(cName));
+            if (targetCol?.dataType === "boolean") {
+              addIssue(
+                issues,
+                expression,
+                "DAX_BOOLEAN_AGGREGATION",
+                "error",
+                `The function ${name} cannot work with values of type Boolean ('${tName}'[${cName}]).`,
+                `Use ${name}X('${tName}', IF('${tName}'[${cName}], 1, 0)) or change the column data type to Whole Number.`,
+                match.index,
+              );
+            }
           }
         }
       }
