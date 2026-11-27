@@ -134,6 +134,10 @@ export async function loadDemoDatasetToStore(force = false): Promise<boolean> {
       store.setQvwAnalysis(qvw);
     }
 
+    useMigration.getState().initializeExpressionConversion();
+    useMigration.getState().initializePowerBiModel();
+    await useMigration.getState().runAutoFix();
+
     return true;
   } catch (err) {
     console.error("Failed to load demo dataset to store:", err);
