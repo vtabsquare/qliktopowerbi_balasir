@@ -378,16 +378,28 @@ class Parser {
     if (fn === "upper") return { code: `(try Text.Upper(Text.From(${arg(0, '""')})) otherwise null)`, ...all };
     if (fn === "lower") return { code: `(try Text.Lower(Text.From(${arg(0, '""')})) otherwise null)`, ...all };
     if (fn === "date" || fn === "date#") return { code: `(try Date.From(${arg(0)}) otherwise try Date.FromText(Text.From(${arg(0)}), [Culture="en-US"]) otherwise null)`, ...all };
+    if (fn === "timestamp" || fn === "timestamp#") return { code: `(try DateTime.From(${arg(0)}) otherwise try DateTime.FromText(Text.From(${arg(0)}), [Culture="en-US"]) otherwise null)`, ...all };
+    if (fn === "time" || fn === "time#") return { code: `(try Time.From(${arg(0)}) otherwise try Time.FromText(Text.From(${arg(0)}), [Culture="en-US"]) otherwise null)`, ...all };
+    if (fn === "text") return { code: `(if ${arg(0)} = null then null else Text.From(${arg(0)}, "en-US"))`, ...all };
     if (fn === "num" || fn === "num#") return { code: `(try Number.From(${arg(0)}) otherwise null)`, ...all };
     if (fn === "year") return { code: `let _d = try Date.From(${arg(0)}) otherwise null in if _d = null then null else Date.Year(_d)`, ...all };
     if (fn === "month") return { code: `let _d = try Date.From(${arg(0)}) otherwise null in if _d = null then null else Date.Month(_d)`, ...all };
     if (fn === "day") return { code: `let _d = try Date.From(${arg(0)}) otherwise null in if _d = null then null else Date.Day(_d)`, ...all };
+    if (fn === "hour") return { code: `let _dt = try DateTime.From(${arg(0)}) otherwise null in if _dt = null then null else Time.Hour(DateTime.Time(_dt))`, ...all };
+    if (fn === "minute") return { code: `let _dt = try DateTime.From(${arg(0)}) otherwise null in if _dt = null then null else Time.Minute(DateTime.Time(_dt))`, ...all };
+    if (fn === "second") return { code: `let _dt = try DateTime.From(${arg(0)}) otherwise null in if _dt = null then null else Time.Second(DateTime.Time(_dt))`, ...all };
     if (fn === "week") return { code: `let _d = try Date.From(${arg(0)}) otherwise null in if _d = null then null else Date.WeekOfYear(_d, Day.Monday)`, ...all };
     if (fn === "weekday") return { code: `let _d = try Date.From(${arg(0)}) otherwise null in if _d = null then null else Date.DayOfWeekName(_d, "en-US")`, ...all };
+    if (fn === "weekstart") return { code: `let _d = try Date.From(${arg(0)}) otherwise null in if _d = null then null else Date.StartOfWeek(_d, Day.Monday)`, ...all };
+    if (fn === "weekend") return { code: `let _d = try Date.From(${arg(0)}) otherwise null in if _d = null then null else Date.EndOfWeek(_d, Day.Monday)`, ...all };
     if (fn === "right") return { code: `(try Text.End(Text.From(${arg(0, '""')}), Int64.From(${arg(1, "0")})) otherwise null)`, ...all };
     if (fn === "left") return { code: `(try Text.Start(Text.From(${arg(0, '""')}), Int64.From(${arg(1, "0")})) otherwise null)`, ...all };
     if (fn === "mid") return { code: `(try Text.Middle(Text.From(${arg(0, '""')}), Number.Max(0, Int64.From(${arg(1, "1")}) - 1), Int64.From(${arg(2, "0")})) otherwise null)`, ...all };
+    if (fn === "replace") return { code: `(try Text.Replace(Text.From(${arg(0, '""')}), Text.From(${arg(1, '""')}), Text.From(${arg(2, '""')})) otherwise null)`, ...all };
+    if (fn === "index") return { code: `(let _pos = try Text.PositionOf(Text.From(${arg(0, '""')}), Text.From(${arg(1, '""')}), Occurrence.First, Comparer.OrdinalIgnoreCase) otherwise -1 in if _pos < 0 then 0 else _pos + 1)`, ...all };
+    if (fn === "subfield") return { code: `(let _parts = try Text.Split(Text.From(${arg(0, '""')}), Text.From(${arg(1, '","')})) otherwise {}, _idx = Int64.From(${arg(2, "1")}) in if _idx > 0 and _idx <= List.Count(_parts) then _parts{_idx - 1} else if _idx < 0 and Number.Abs(_idx) <= List.Count(_parts) then _parts{List.Count(_parts) + _idx} else null)`, ...all };
     if (fn === "makedate") return { code: `(try #date(Int64.From(${arg(0)}), Int64.From(${arg(1, "1")}), Int64.From(${arg(2, "1")})) otherwise null)`, ...all };
+    if (fn === "maketime") return { code: `(try #time(Int64.From(${arg(0, "0")}), Int64.From(${arg(1, "0")}), Int64.From(${arg(2, "0")})) otherwise null)`, ...all };
     if (fn === "monthstart") return { code: `let _d = try Date.From(${arg(0)}) otherwise null in if _d = null then null else Date.StartOfMonth(_d)`, ...all };
     if (fn === "monthend") return { code: `let _d = try Date.From(${arg(0)}) otherwise null in if _d = null then null else Date.EndOfMonth(_d)`, ...all };
     if (fn === "quarterstart") return { code: `let _d = try Date.From(${arg(0)}) otherwise null in if _d = null then null else Date.StartOfQuarter(_d)`, ...all };
@@ -401,7 +413,30 @@ class Parser {
     if (fn === "today") return { code: "Date.From(DateTime.LocalNow())", ...all };
     if (fn === "now") return { code: "DateTime.LocalNow()", ...all };
     if (fn === "isnull") return { code: `(${arg(0)} = null)`, ...all };
-    if (fn === "alt") return { code: `List.First(List.RemoveNulls({${args.map((item) => item.code).join(", ")}}), null)`, ...all };
+    if (fn === "alt" || fn === "coalesce") return { code: `List.First(List.RemoveNulls({${args.map((item) => item.code).join(", ")}}), null)`, ...all };
+    if (fn === "mod") return { code: `(try Number.Mod(Number.From(${arg(0, "0")}), Number.From(${arg(1, "1")})) otherwise null)`, ...all };
+    if (fn === "div") return { code: `(try Number.IntegerDivide(Number.From(${arg(0, "0")}), Number.From(${arg(1, "1")})) otherwise null)`, ...all };
+    if (fn === "sqrt") return { code: `(try Number.Sqrt(Number.From(${arg(0, "0")})) otherwise null)`, ...all };
+    if (fn === "pow") return { code: `(try Number.Power(Number.From(${arg(0, "0")}), Number.From(${arg(1, "1")})) otherwise null)`, ...all };
+    if (fn === "sign") return { code: `(try Number.Sign(Number.From(${arg(0, "0")})) otherwise null)`, ...all };
+    if (fn === "rangesum") return { code: `List.Sum(List.Transform(List.RemoveNulls({${args.map((item) => item.code).join(", ")}}), each try Number.From(_) otherwise 0))`, ...all };
+    if (fn === "rangeavg") return { code: `List.Average(List.RemoveNulls(List.Transform({${args.map((item) => item.code).join(", ")}}, each try Number.From(_) otherwise null)))`, ...all };
+    if (fn === "rangemin") return { code: `List.Min(List.RemoveNulls(List.Transform({${args.map((item) => item.code).join(", ")}}, each try Number.From(_) otherwise null)))`, ...all };
+    if (fn === "rangemax") return { code: `List.Max(List.RemoveNulls(List.Transform({${args.map((item) => item.code).join(", ")}}, each try Number.From(_) otherwise null)))`, ...all };
+    if (fn === "rangecount") return { code: `List.Count(List.RemoveNulls({${args.map((item) => item.code).join(", ")}}))`, ...all };
+    if (fn === "match" || fn === "mixmatch") {
+      const target = arg(0, "null");
+      const candidates = args.slice(1).map((item) => item.code).join(", ");
+      const eq = fn === "mixmatch"
+        ? `let _pos = List.PositionOf({${candidates}}, ${target}, Occurrence.First, Comparer.OrdinalIgnoreCase) in if _pos < 0 then 0 else _pos + 1`
+        : `let _pos = List.PositionOf({${candidates}}, ${target}, Occurrence.First) in if _pos < 0 then 0 else _pos + 1`;
+      return { code: `(${eq})`, ...all };
+    }
+    if (fn === "pick") {
+      const idx = arg(0, "0");
+      const choices = args.slice(1).map((item) => item.code).join(", ");
+      return { code: `(let _i = try Int64.From(${idx}) otherwise 0, _choices = {${choices}} in if _i >= 1 and _i <= List.Count(_choices) then _choices{_i - 1} else null)`, ...all };
+    }
     if (fn === "applymap") {
       if (args.length < 2) throw new Error("ApplyMap() requires a map name and lookup expression.");
       const mapToken = this.tokens[Math.max(0, this.index - 1)];
