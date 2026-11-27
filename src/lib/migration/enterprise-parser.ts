@@ -3185,6 +3185,15 @@ in
             if _sourceExists then Table.RenameColumns(_withoutTarget, {{${esc(sourceName)}, ${esc(targetName)}}}, MissingField.Error) else error Error.Record("QLIK2PBI.MissingRenameSource", "Rename source column was not found.", [SourceColumn=${esc(sourceName)}, TargetColumn=${esc(targetName)}, AvailableColumns=_columns])`;
   }
 
+  private safeDuplicateExpression(previousStep: string, sourceName: string, targetName: string): string {
+    return `let
+            _columns = Table.ColumnNames(${previousStep}),
+            _sourceExists = List.Contains(_columns, ${esc(sourceName)}),
+            _withoutTarget = if List.Contains(_columns, ${esc(targetName)}) and ${esc(sourceName)} <> ${esc(targetName)} then Table.RemoveColumns(${previousStep}, {${esc(targetName)}}, MissingField.Ignore) else ${previousStep}
+        in
+            if _sourceExists then Table.AddColumn(_withoutTarget, ${esc(targetName)}, each Record.FieldOrDefault(_, ${esc(sourceName)}, null)) else error Error.Record("QLIK2PBI.MissingRenameSource", "Source column was not found.", [SourceColumn=${esc(sourceName)}, TargetColumn=${esc(targetName)}, AvailableColumns=_columns])`;
+  }
+
   private requireColumnsExpression(tableExpression: string, columns: string[], context: string): string {
     const required = uniq(columns);
     return `let
@@ -3268,7 +3277,17 @@ in
     }
     if (renames.length) {
       const nm = this.nextStep('RenamedColumns');
-      this.addStep(nm, renames.reduce((expression, [source, target]) => this.safeRenameExpression(expression, source, target), prev));
+      const outputFieldSet = new Set(outputFields.map((f) => f.toLowerCase()));
+      const expr = renames.reduce((expression, [source, target], index) => {
+        const keepSource =
+          hasWildcard ||
+          outputFieldSet.has(source.toLowerCase()) ||
+          renames.slice(index + 1).some(([nextSource]) => nextSource.toLowerCase() === source.toLowerCase());
+        return keepSource
+          ? this.safeDuplicateExpression(expression, source, target)
+          : this.safeRenameExpression(expression, source, target);
+      }, prev);
+      this.addStep(nm, expr);
       prev = nm;
     }
     if (!outputFields.length || hasWildcard) return prev;
