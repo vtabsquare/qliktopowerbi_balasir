@@ -4,7 +4,7 @@ import { checkElementViewportVisibility } from "../src/components/tour/TourGuide
 
 describe("Interactive Tour Guide Configuration", () => {
   it("contains exactly 14 steps", () => {
-    expect(TOUR_STEPS).toHaveLength(14);
+    expect(TOUR_STEPS).toHaveLength(17);
   });
 
   it("maintains the exact 14 step titles and order specified in requirements", () => {
@@ -22,7 +22,10 @@ describe("Interactive Tour Guide Configuration", () => {
       "Generate M Query",
       "Apply and Regenerate Power Query",
       "DAX Measure",
-      "Semantic Model",
+      "Apply & Regenerate",
+      "Power BI Model",
+      "Continue to Validation & Export",
+      "Export & Downloads",
     ];
 
     TOUR_STEPS.forEach((step, idx) => {
@@ -47,6 +50,9 @@ describe("Interactive Tour Guide Configuration", () => {
       "/app/power-query",
       "/app/power-query",
       "/app/dax-measures",
+      "/app/dax-measures",
+      "/app/powerbi-model",
+      "/app/semantic-model",
     ];
 
     TOUR_STEPS.forEach((step, idx) => {
@@ -70,9 +76,9 @@ describe("Interactive Tour Guide Configuration", () => {
     expect(typeof step11?.prepareStep).toBe("function");
   });
 
-  it("verifies all 14 step selector identifiers are unique and correctly structured", () => {
+  it("verifies all 17 step selector identifiers are unique and correctly structured", () => {
     const ids = TOUR_STEPS.map((s) => s.id);
-    expect(new Set(ids).size).toBe(14);
+    expect(new Set(ids).size).toBe(17);
 
     TOUR_STEPS.forEach((step) => {
       expect(step.id).toBeTruthy();

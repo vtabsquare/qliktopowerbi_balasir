@@ -120,6 +120,7 @@ export function DaxMeasuresPage() {
         </div>
         <button
           type="button"
+          data-tour="apply-regenerate-dax"
           onClick={handleApplyAndRegenerateDax}
           disabled={applyingDax}
           className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold shadow-sm hover:opacity-90 disabled:opacity-50 transition-all sm:ml-auto shrink-0 cursor-pointer"

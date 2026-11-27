@@ -292,9 +292,6 @@ export function TourGuideOverlay() {
         // Advance tour immediately in parallel without artificial delay
         if (isLastStep) {
           closeTour();
-          if (typeof window !== "undefined") {
-            window.dispatchEvent(new CustomEvent("open-demo-ended-modal"));
-          }
         } else {
           nextStep();
         }
@@ -447,9 +444,6 @@ export function TourGuideOverlay() {
                 onClick={() => {
                   if (isLastStep) {
                     closeTour();
-                    if (typeof window !== "undefined") {
-                      window.dispatchEvent(new CustomEvent("open-demo-ended-modal"));
-                    }
                   } else {
                     nextStep();
                   }

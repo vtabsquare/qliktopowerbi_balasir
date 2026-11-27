@@ -331,6 +331,7 @@ export function SimplePowerBiModelPage({ forcedRelationshipsPage }: { forcedRela
         </button>
 
         <button
+          data-tour="continue-to-validation-export"
           onClick={() => {
             // Mark Step 8 (Power BI Model) and Step 9 (Relationships) completed
             markStepCompleted(7, isDemo);

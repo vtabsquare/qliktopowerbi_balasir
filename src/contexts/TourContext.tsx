@@ -39,7 +39,9 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
       if (currentPath.startsWith("/demo")) {
         const step = getStepByPath(targetRoute);
         if (step) {
-          markStepCompleted(Math.max(0, step.id - 1), true);
+          for (let s = 0; s < step.id; s += 1) {
+            markStepCompleted(s, true);
+          }
           window.dispatchEvent(new CustomEvent("demo-set-active-step", { detail: { stepId: step.id } }));
         }
         return;

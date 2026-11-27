@@ -136,7 +136,6 @@ function DemoWorkspace({ session, onLoggedOut }: { session?: unknown; onLoggedOu
 
     if (!unlocked) {
       if (targetStep.id >= 10) {
-        window.dispatchEvent(new CustomEvent("open-demo-ended-modal"));
         toast.info(`🔒 ${targetStep.label} is locked in Demo Version. Phase 3 access requires Production.`);
         return;
       }
@@ -211,7 +210,6 @@ function DemoWorkspace({ session, onLoggedOut }: { session?: unknown; onLoggedOu
     const next = WORKFLOW_STEPS[activeStepId + 1];
     if (!next) return;
     if (!isStepUnlocked(next.id, true)) {
-      if (next.id >= 10) window.dispatchEvent(new CustomEvent("open-demo-ended-modal"));
       toast.info(`🔒 ${next.label} is locked in Demo Version. Phase 3 access requires Production.`);
       return;
     }

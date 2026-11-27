@@ -106,8 +106,7 @@ export function StageNav({ activeStepId, onStepSelect, viewportDocked = false }:
 
       if (!unlocked) {
         if (isDemo && targetStage.id >= 10) {
-          window.dispatchEvent(new CustomEvent("open-demo-ended-modal"));
-          toast.info(`🔒 ${targetStage.label} is locked in Demo Version. Contact for Phase 3 access.`);
+          toast.info(`🔒 ${targetStage.label} is locked in Demo Version.`);
           return;
         }
 
@@ -380,8 +379,7 @@ export function StageNav({ activeStepId, onStepSelect, viewportDocked = false }:
                 key={phase.id}
                 onClick={() => {
                   if (isPhase3Locked) {
-                    window.dispatchEvent(new CustomEvent("open-demo-ended-modal"));
-                    toast.info("🔒 Demo ended at Phase 2 (DAX Measures). Phase 3 is locked in Demo Version.");
+                    toast.info("🔒 Phase 3 is locked in Demo Version.");
                     return;
                   }
                   setSelectedPhase(phase.id);

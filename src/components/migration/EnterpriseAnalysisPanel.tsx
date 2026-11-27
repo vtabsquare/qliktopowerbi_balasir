@@ -3086,7 +3086,7 @@ export function TabPbipExport({ analysis }: { analysis: EnterpriseAnalysis }) {
           {isDemo && (
             <button
               type="button"
-              onClick={() => window.dispatchEvent(new CustomEvent("open-demo-ended-modal"))}
+              onClick={() => toast.info("🔒 Export Settings are locked in Demo Version.")}
               className="inline-flex items-center gap-1.5 rounded-full border border-primary/25 bg-primary/5 px-2.5 py-1 text-[11px] font-medium text-primary/80 hover:border-primary/40 hover:opacity-100 opacity-85 transition-all shrink-0 cursor-pointer"
               title="Export Settings are locked in Demo Version — Contact for Full Access"
             >
@@ -3098,7 +3098,7 @@ export function TabPbipExport({ analysis }: { analysis: EnterpriseAnalysis }) {
         <label className="text-xs text-muted-foreground">Project Name</label>
         <div
           onClick={() => {
-            if (isDemo) window.dispatchEvent(new CustomEvent("open-demo-ended-modal"));
+            if (isDemo) toast.info("🔒 Project Name is locked in Demo Version.");
           }}
           className={isDemo ? "cursor-pointer" : undefined}
           title={isDemo ? "Project Name is locked in Demo Version — Contact for Full Access" : undefined}
@@ -3127,7 +3127,7 @@ export function TabPbipExport({ analysis }: { analysis: EnterpriseAnalysis }) {
               onClick={(event) => {
                 if (isDemo) {
                   event.preventDefault();
-                  window.dispatchEvent(new CustomEvent("open-demo-ended-modal"));
+                  toast.info("🔒 Export settings are locked in Demo Version.");
                 }
               }}
               title={isDemo ? "Export settings are locked in Demo Version — Contact for Full Access" : undefined}
@@ -3151,7 +3151,7 @@ export function TabPbipExport({ analysis }: { analysis: EnterpriseAnalysis }) {
         </div>
       </div>
 
-      <div className="surface-card p-4 space-y-3">
+      <div className="surface-card p-4 space-y-3" data-tour="demo-downloads">
         <SectionHeader title="Downloads" sub="Export your migration artifacts" />
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {isDemo ? (

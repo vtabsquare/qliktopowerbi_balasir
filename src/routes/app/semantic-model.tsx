@@ -76,8 +76,8 @@ export function SemanticModelPage() {
           {isDemo ? (
             <button
               type="button"
-              onClick={() => window.dispatchEvent(new CustomEvent("open-demo-ended-modal"))}
-              title="Pipeline Logs is locked in Demo Version — Contact for Full Access"
+              onClick={() => toast.info("🔒 Pipeline Logs is locked in Demo Version.")}
+              title="Pipeline Logs is locked in Demo Version"
               className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-primary/25 bg-primary/5 text-primary/80 text-sm font-semibold opacity-80 hover:opacity-100 hover:border-primary/40 transition-all cursor-pointer"
             >
               <Lock className="h-4 w-4" /> Pipeline Logs Locked

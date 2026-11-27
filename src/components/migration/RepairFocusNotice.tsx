@@ -83,10 +83,6 @@ export function RepairFocusNotice({ areas }: { areas: RepairArea[] }) {
         <div className="flex shrink-0 items-center gap-2">
           <button
             onClick={() => {
-              if (isDemo) {
-                window.dispatchEvent(new CustomEvent("open-demo-ended-modal"));
-                return;
-              }
               navigate({ to: "/app/semantic-model" });
             }}
             className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-[11px] font-semibold hover:bg-muted"
