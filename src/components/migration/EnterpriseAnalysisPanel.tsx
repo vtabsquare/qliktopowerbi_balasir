@@ -2956,7 +2956,7 @@ export function TabPbipExport({ analysis }: { analysis: EnterpriseAnalysis }) {
   ];
   const [name, setName] = useState("QLIK2PBI_Migration_Project");
   const [exporting, setExporting] = useState(false);
-  const [requireMicrosoftTom, setRequireMicrosoftTom] = useState(true);
+  const [requireMicrosoftTom, setRequireMicrosoftTom] = useState(false);
   const [tomStatus, setTomStatus] = useState<{ state: "checking" | "available" | "fallback"; detail?: string }>({ state: "checking" });
 
   useEffect(() => {
