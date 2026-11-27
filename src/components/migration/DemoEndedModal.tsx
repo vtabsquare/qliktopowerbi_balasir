@@ -85,16 +85,16 @@ export function DemoEndedModal({
             id="demo-ended-title"
             className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-white font-display"
           >
-            Demo Ended — Phase 1 &amp; Phase 2 Completed!
+            Demo Completed — Ready for Full Export!
           </h2>
           <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
-            You have successfully explored the interactive demo up to DAX Measures. Contact us for full access to Phase 3 and production deployment.
+            You have explored the interactive migration pipeline through Validation &amp; Export. Contact us to unlock artifact downloads and full production access.
           </p>
         </div>
 
         {/* Scrollable Body */}
         <div className="p-6 sm:p-8 space-y-6 overflow-y-auto">
-          {/* Summary Grid: What was completed vs Phase 3 */}
+          {/* Summary Grid: What was completed vs Full Edition */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {/* Unlocked in Demo */}
             <div className="p-4 rounded-xl border border-emerald-200/80 dark:border-emerald-900/50 bg-emerald-50/30 dark:bg-emerald-950/20 space-y-2.5">
@@ -105,37 +105,37 @@ export function DemoEndedModal({
               <ul className="text-xs text-slate-600 dark:text-slate-300 space-y-1.5 pl-1">
                 <li className="flex items-start gap-1.5">
                   <span className="text-emerald-600 font-bold">✓</span>
-                  <span><strong>Phase 1:</strong> Capture, QVS Parsing &amp; QVW Analysis</span>
+                  <span><strong>Phase 1:</strong> Qlik Upload, QVW Analysis &amp; Expression Conversion</span>
                 </li>
                 <li className="flex items-start gap-1.5">
                   <span className="text-emerald-600 font-bold">✓</span>
-                  <span><strong>Phase 2:</strong> Lineage, Power Query M &amp; DAX Measures</span>
+                  <span><strong>Phase 2:</strong> ETL Analysis, Power Query M &amp; DAX Measures</span>
                 </li>
                 <li className="flex items-start gap-1.5">
                   <span className="text-emerald-600 font-bold">✓</span>
-                  <span>Deterministic logic policy validation &amp; review</span>
+                  <span><strong>Phase 3:</strong> Power BI Model, Relationships &amp; Validation Readiness</span>
                 </li>
               </ul>
             </div>
 
-            {/* Enterprise Phase 3 */}
+            {/* Enterprise / Future Full Access */}
             <div className="p-4 rounded-xl border border-blue-200/80 dark:border-blue-900/50 bg-blue-50/30 dark:bg-blue-950/20 space-y-2.5">
               <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-blue-700 dark:text-blue-300">
                 <Lock className="h-3.5 w-3.5 text-blue-600" />
-                Phase 3 (Enterprise Edition)
+                Enterprise Edition (Full Access)
               </div>
               <ul className="text-xs text-slate-600 dark:text-slate-300 space-y-1.5 pl-1">
                 <li className="flex items-start gap-1.5">
                   <span className="text-blue-500 font-bold">🔒</span>
-                  <span><strong>Phase 3:</strong> Automated Semantic Model &amp; TMDL Generation</span>
+                  <span>Power BI Desktop <strong>PBIP (.zip)</strong> export &amp; TMDL/PBIR download</span>
                 </li>
                 <li className="flex items-start gap-1.5">
                   <span className="text-blue-500 font-bold">🔒</span>
-                  <span>Power BI Desktop PBIP (.zip) download</span>
+                  <span><strong>Power Query M Scripts (.txt)</strong> &amp; <strong>Full Analysis JSON</strong> downloads</span>
                 </li>
                 <li className="flex items-start gap-1.5">
                   <span className="text-blue-500 font-bold">🔒</span>
-                  <span>Direct Microsoft Fabric &amp; Power BI Service deployment</span>
+                  <span>Pipeline Logs, Calendars, Report Designer &amp; Production deployment</span>
                 </li>
               </ul>
             </div>
