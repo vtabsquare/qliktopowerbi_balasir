@@ -45,6 +45,8 @@ export interface ExtractedFile {
   qvdConverted?: boolean;
   /** Absolute path where the converted CSV was physically saved on disk */
   savedCsvPath?: string;
+  /** Extracted sheets when the file is a multi-sheet Excel workbook */
+  excelSheets?: Array<{ name: string; csvText: string }>;
 }
 
 export interface AutoAssignedFiles {
@@ -89,17 +91,22 @@ async function blobToBase64(blob: Blob): Promise<string> {
   return btoa(binary);
 }
 
-export async function parseExcelToCsvText(blobOrBuffer: Blob | ArrayBuffer): Promise<string | null> {
+export async function parseExcelWorkbookSheets(blobOrBuffer: Blob | ArrayBuffer): Promise<Array<{ name: string; csvText: string }>> {
   try {
     const buffer = blobOrBuffer instanceof ArrayBuffer ? blobOrBuffer : await blobOrBuffer.arrayBuffer();
     const workbook = XLSX.read(buffer, { type: "array" });
-    const firstSheetName = workbook.SheetNames[0];
-    if (!firstSheetName) return null;
-    return XLSX.utils.sheet_to_csv(workbook.Sheets[firstSheetName]);
+    return workbook.SheetNames
+      .filter((name) => Boolean(workbook.Sheets[name]))
+      .map((name) => ({ name, csvText: XLSX.utils.sheet_to_csv(workbook.Sheets[name]) }));
   } catch (err) {
-    console.warn("Failed to parse Excel sheet:", err);
-    return null;
+    console.warn("Failed to parse Excel workbook:", err);
+    return [];
   }
+}
+
+/** Backwards-compatible helper for callers that explicitly need one sheet. */
+export async function parseExcelToCsvText(blobOrBuffer: Blob | ArrayBuffer): Promise<string | null> {
+  return (await parseExcelWorkbookSheets(blobOrBuffer))[0]?.csvText ?? null;
 }
 
 export async function extractFilesFromRawList(
@@ -146,11 +153,13 @@ export async function extractFilesFromRawList(
             const entryWithSize = zipEntry as unknown as { _data?: { uncompressedSize?: number } };
             const sizeKb = parseFloat(((entryWithSize._data?.uncompressedSize ?? 0) / 1024).toFixed(2));
             let text: string | null = null;
+            let excelSheets: Array<{ name: string; csvText: string }> | undefined;
             if (isTextFile(entryExt)) {
               text = await zipEntry.async("text");
             } else if ([".xlsx", ".xls"].includes(entryExt)) {
               const buf = await zipEntry.async("arraybuffer");
-              text = await parseExcelToCsvText(buf);
+              excelSheets = await parseExcelWorkbookSheets(buf);
+              text = excelSheets[0]?.csvText ?? null;
             }
             const binaryBase64 = (entryExt === ".qvw" || entryExt === ".xlsx" || entryExt === ".xls") ? await zipEntry.async("base64") : undefined;
             const entry: ExtractedFile = {
@@ -162,6 +171,7 @@ export async function extractFilesFromRawList(
               parsedAsText: text !== null,
               binaryBase64,
               originPackage,
+              excelSheets,
             };
             result.push(entry);
             if (entryExt === ".qvd" && outputDir !== "__SKIP__") {
@@ -179,10 +189,12 @@ export async function extractFilesFromRawList(
     } else {
       const sizeKb = parseFloat((file.size / 1024).toFixed(2));
       let text: string | null = null;
+      let excelSheets: Array<{ name: string; csvText: string }> | undefined;
       if (isTextFile(ext)) {
         text = await file.text();
       } else if ([".xlsx", ".xls"].includes(ext)) {
-        text = await parseExcelToCsvText(file);
+        excelSheets = await parseExcelWorkbookSheets(file);
+        text = excelSheets[0]?.csvText ?? null;
       }
       const binaryBase64 = (ext === ".qvw" || ext === ".xlsx" || ext === ".xls") ? await blobToBase64(file) : undefined;
       const filePath = (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name;
@@ -194,6 +206,7 @@ export async function extractFilesFromRawList(
         text,
         parsedAsText: text !== null,
         binaryBase64,
+        excelSheets,
       });
       if (ext === ".qvd" && outputDir !== "__SKIP__") {
         const conv = await convertQvdFile(file, filePath, outputDir, dirHandle);

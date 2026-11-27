@@ -9,6 +9,7 @@ import {
   reconstructionMeasuresAsDax,
   type QlikReconstructionPlan,
 } from "./reconstruction";
+import { getConnectorDefinition, missingConnectorFields, parseConnectorReference } from "./connectors";
 
 // ============================================================
 // QLIK → Power BI Enterprise Analysis Engine
@@ -27,6 +28,10 @@ export interface ProjectFile {
   content: string;
   binaryBase64?: string;
   note: string;
+  /** Original workbook path when this file represents one extracted worksheet. */
+  sourcePath?: string;
+  /** Exact Excel worksheet/table name selected by the Qlik load statement. */
+  sheetName?: string;
 }
 
 export interface Operation {
@@ -60,6 +65,7 @@ export interface Operation {
   executableProducer?: boolean;
   generatorCountExpression?: string;
   whileExpression?: string;
+  sourceSheetName?: string;
 }
 
 export interface TableProfile {
@@ -349,7 +355,8 @@ function unqRef(x: string): string {
 function parseFields(body: string): [string[], string[], Record<string, string>] {
   const m = body.trim().match(/^(LOAD|SELECT)\s+(.*)/is);
   if (!m) return [[], [], {}];
-  const rest = m[2];
+  // DISTINCT is a LOAD modifier in Qlik, not part of the first field expression.
+  const rest = m[2].replace(/^\s*DISTINCT\b\s*/i, '');
   const b = rest.search(/\b(FROM|RESIDENT|INLINE|AUTOGENERATE|WHERE|WHILE|GROUP\s+BY|ORDER\s+BY)\b/i);
   const txt = b >= 0 ? rest.slice(0, b).trim() : rest.trim();
   if (txt === '*') return [['*'], [], { '*': '*' }];
@@ -654,6 +661,7 @@ function parseLoad(raw: string, resolved: string, file: string, start: number, e
   }
   const autogenerateMatch = body.match(/\bAUTOGENERATE\s+([\s\S]*?)(?=\bWHILE\b|$)/i);
   const whileExpression = parseClause(body, 'WHILE', ['GROUP BY', 'ORDER BY']);
+  const sourceSheetName = body.match(/\(\s*(?:ooxml|biff|html|xml)[\s\S]*?\btable\s+is\s+([^,)]+)[\s\S]*?\)/i)?.[1]?.trim().replace(/^['"\[]|['"\]]$/g, '');
   if (autogenerateMatch) {
     opType = 'autogenerate';
     role = 'temporary_generator';
@@ -670,6 +678,7 @@ function parseLoad(raw: string, resolved: string, file: string, start: number, e
     executableProducer: Boolean(autogenerateMatch || resident.length || sources.length || inlineCols.length),
     generatorCountExpression: autogenerateMatch ? autogenerateMatch[1].trim() : undefined,
     whileExpression: whileExpression || undefined,
+    sourceSheetName: sourceSheetName || undefined,
   };
 }
 
@@ -1015,19 +1024,27 @@ export function detectTables(operations: Operation[]): Record<string, TableProfi
 export function connector(path: string): string {
   const p = (path || '').trim().toLowerCase().replace(/^["']|["']$/g, '');
   const noQuery = p.split('?')[0];
-  // Detect semicolon-delimited key=value DB connection strings (e.g. Server=...;Database=...)
-  // These come from the dynamic mapping UI and may have any key casing
   if (p.includes(';') && (p.includes('server=') || p.includes('host=') || p.includes('database=') || p.includes('db='))) {
+    if (p.includes('warehouse=')) return 'Snowflake';
+    if (p.includes('httppath=')) return 'Databricks';
     return 'Database/SQL';
   }
+  if (p.includes('mongodburi=')) return 'MongoDB Atlas SQL';
+  if (p.includes('connectionstring=')) return 'ODBC';
   if (p.startsWith('odbc') || p.startsWith('oledb') || p.startsWith('sql:') || p.startsWith('server=') || p.startsWith('database=') || p.includes('dsn=')) return 'Database/SQL';
+  if (/docs\.google\.com\/spreadsheets\//.test(p)) return 'Google Sheets';
+  if (/\.blob\.core\.windows\.net/.test(p)) return 'Azure Blob Storage';
+  if (/\.dfs\.core\.windows\.net/.test(p)) return 'Azure Data Lake Gen2';
+  if (/^s3:\/\//.test(p) || /s3\.amazonaws\.com/.test(p)) return 'Amazon S3';
+  if (/sharepoint\.com/.test(p)) return 'SharePoint';
   if (/^[a-z]+:\/\//.test(p) && !p.startsWith('lib://')) {
     if (noQuery.endsWith('.csv') || noQuery.endsWith('.txt') || noQuery.endsWith('.tsv') || noQuery.endsWith('.dat')) return 'CSV/Text';
     if (noQuery.endsWith('.xlsx') || noQuery.endsWith('.xls') || noQuery.endsWith('.xlsm')) return 'Excel';
     if (noQuery.endsWith('.parquet')) return 'Parquet';
     if (noQuery.endsWith('.json')) return 'JSON';
     if (noQuery.endsWith('.xml')) return 'XML';
-    return 'Web/API';
+    if (noQuery.endsWith('.pdf')) return 'PDF';
+    return 'Web';
   }
   if (p.includes('$(') || p.startsWith('lib://')) {
     if (noQuery.endsWith('.csv') || noQuery.endsWith('.txt') || noQuery.endsWith('.tsv') || noQuery.endsWith('.dat')) return 'CSV/Text';
@@ -1035,6 +1052,7 @@ export function connector(path: string): string {
     if (noQuery.endsWith('.parquet')) return 'Parquet';
     if (noQuery.endsWith('.json')) return 'JSON';
     if (noQuery.endsWith('.xml')) return 'XML';
+    if (noQuery.endsWith('.pdf')) return 'PDF';
     if (noQuery.endsWith('.qvd')) return 'QVD - map to supported source';
     return 'Unknown';
   }
@@ -1043,6 +1061,7 @@ export function connector(path: string): string {
   if (noQuery.endsWith('.parquet')) return 'Parquet';
   if (noQuery.endsWith('.json')) return 'JSON';
   if (noQuery.endsWith('.xml')) return 'XML';
+  if (noQuery.endsWith('.pdf')) return 'PDF';
   if (noQuery.endsWith('.qvd')) return 'QVD - map to supported source';
   if (p.endsWith('/') || p.endsWith('\\')) return 'Folder';
   if (/^[a-zA-Z_][\w$#@-]*(\.[a-zA-Z_][\w$#@-]*){1,3}$/.test((path || '').trim())) return 'Database/SQL';
@@ -1116,10 +1135,10 @@ function physicalStatus(ref: string, mapped: string, ct: string, explicitStatus 
   ct = ct || connector(mapped || rawRef);
   const stillQlikLogical = mapped === rawRef && (mapped.includes('$(') || mapped.toLowerCase().startsWith('lib://'));
   const unsupported = ['Unknown','QVD - map to supported source'].includes(ct);
-  const dbIncomplete = ct === 'Database/SQL' && !(mapped.toLowerCase().includes('server=') && mapped.toLowerCase().includes('database='));
-  if (explicitStatus && explicitStatus !== 'Needs review' && !dbIncomplete) return explicitStatus;
-  if (mapped && mapped !== rawRef && !unsupported && !mapped.toLowerCase().endsWith('.qvd') && !dbIncomplete) return 'Mapped';
-  return (unsupported || stillQlikLogical || dbIncomplete) ? 'Needs review' : 'Mapped';
+  const connectorIncomplete = missingConnectorFields(ct, parseConnectorReference(mapped, ct)).length > 0;
+  if (explicitStatus && explicitStatus !== 'Needs review' && !connectorIncomplete) return explicitStatus;
+  if (mapped && mapped !== rawRef && !unsupported && !mapped.toLowerCase().endsWith('.qvd') && !connectorIncomplete) return 'Mapped';
+  return (unsupported || stillQlikLogical || connectorIncomplete) ? 'Needs review' : 'Mapped';
 }
 
 export function buildSourceMappings(operations: Operation[], updates: Record<string, { mappedRef?: string; connectorType?: string; status?: string; notes?: string; sheetName?: string }> = {}, files: ProjectFile[] = []): SourceMap[] {
@@ -1444,6 +1463,10 @@ function inferDataType(columnName: string, expression = ''): string {
   if (/(date|dt$|datetime|timestamp|created|modified|shipdate|orderdate|hiredate)/.test(name) || expr.includes('date#') || expr.includes('date(')) {
     return /(time|timestamp|datetime)/.test(name) ? 'Date/Time' : 'Date';
   }
+  if (/\bnum\s*\(/.test(expr)) return 'Decimal Number';
+  if (/\bif\s*\([\s\S]*?,\s*-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?\s*\)/.test(expr)) {
+    return /\.\d+/.test(expr) ? 'Decimal Number' : 'Whole Number';
+  }
   if (/(qty|quantity|count|orders|units|age|days|hours|minutes|seq|index)$/.test(name)) return 'Whole Number';
   if (/(amount|sales|cost|profit|margin|discount|price|rate|ratio|percent|pct|latitude|longitude|usd|value|total|balance|revenue|salary)/.test(name)) return 'Decimal Number';
   if (/(^is_|^has_|flag$|active$|enabled$|valid$)/.test(name)) return 'True/False';
@@ -1541,10 +1564,15 @@ function buildRawSampleRows(
       ...(mappingByTable.get(operation.table) || []).flatMap((mapping) => [mapping.originalRef, mapping.mappedRef, mapping.effectiveRef]),
     ].filter(Boolean);
     const refKeys = new Set(refs.flatMap((ref) => [canonicalRef(ref), basenameRef(ref), normalizeSampleKey(ref)]));
-    const match = fileCandidates.find(({ file }) => {
-      const keys = [canonicalRef(file.path), basenameRef(file.path), normalizeSampleKey(file.path), canonicalRef(file.path.replace(/^.*[/\\]/, ""))];
+    const requestedSheet = String(operation.sourceSheetName || "").trim().toLowerCase();
+    const matchesRef = (file: ProjectFile) => {
+      const sourcePath = projectFileSourcePath(file);
+      const keys = [canonicalRef(sourcePath), basenameRef(sourcePath), normalizeSampleKey(sourcePath), canonicalRef(sourcePath.replace(/^.*[/\\]/, ""))];
       return keys.some((key) => refKeys.has(key));
-    });
+    };
+    const match = (requestedSheet
+      ? fileCandidates.find(({ file }) => matchesRef(file) && String(file.sheetName || "").trim().toLowerCase() === requestedSheet)
+      : null) || (!requestedSheet ? fileCandidates.find(({ file }) => matchesRef(file)) : undefined);
     if (match) result[operation.table] = { sourceName: match.file.path, rows: match.rows };
   }
 
@@ -1552,7 +1580,10 @@ function buildRawSampleRows(
     if (result[table]) continue;
     const refs = mappingsForTable.flatMap((mapping) => [mapping.originalRef, mapping.mappedRef, mapping.effectiveRef]).filter(Boolean);
     const refKeys = new Set(refs.flatMap((ref) => [canonicalRef(ref), basenameRef(ref), normalizeSampleKey(ref)]));
-    const match = fileCandidates.find(({ file }) => [canonicalRef(file.path), basenameRef(file.path), normalizeSampleKey(file.path)].some((key) => refKeys.has(key)));
+    const match = fileCandidates.find(({ file }) => {
+      const sourcePath = projectFileSourcePath(file);
+      return [canonicalRef(sourcePath), basenameRef(sourcePath), normalizeSampleKey(sourcePath)].some((key) => refKeys.has(key));
+    });
     if (match) result[table] = { sourceName: match.file.path, rows: match.rows };
   }
   return result;
@@ -1940,25 +1971,71 @@ function inlineExpression(op: Operation): string {
 }
 
 function dbSourceExpression(mappedRef: string, connectorType: string): string | { dbExpr: string; navExpr: (dbStep: string) => string } {
-  const parts: Record<string, string> = {};
+  const configured = parseConnectorReference(mappedRef, connectorType);
+  const raw: Record<string, string> = {};
   for (const piece of (mappedRef || '').split(/;|\n/)) {
-    if (piece.includes('=')) { const [k, v] = piece.split('=', 2); parts[k.trim().toLowerCase()] = v.trim().replace(/^["']|["']$/g, ''); }
+    const separator = piece.indexOf('=');
+    if (separator > 0) raw[piece.slice(0, separator).trim().toLowerCase()] = piece.slice(separator + 1).trim().replace(/^["']|["']$/g, '');
   }
-  let server = parts['server'] || parts['host'] || parts['data source'];
-  const database = parts['database'] || parts['db'] || parts['initial catalog'];
-  const query = parts['query'] || parts['sql'];
-  const schema = parts['schema'] || 'dbo';
-  const table = parts['table'] || parts['item'];
-  if (!server || !database) return `error Error.Record("QLIK2PBI.SourceMapping", "Database source requires Server and Database values.", [Source=${esc(mappedRef)}])`;
+  let server = configured.Server || raw.server || raw.host || raw['data source'];
+  const database = configured.Database || raw.database || raw.db || raw['initial catalog'];
+  const query = configured.Query || raw.query || raw.sql;
+  const schema = configured.Schema || raw.schema || (connectorType === 'PostgreSQL' || connectorType === 'Supabase' ? 'public' : 'dbo');
+  const table = configured.Table || raw.table || raw.item;
+  const missing = missingConnectorFields(connectorType, configured);
+  if (missing.length) return `error Error.Record("QLIK2PBI.SourceMapping", "${connectorType} requires ${missing.join(', ')}.", [Source=${esc(mappedRef)}])`;
 
   // Fix SQL Server instance names that mistakenly use a forward slash instead of a backslash
-  if (server && ['SQL Server', 'Database/SQL'].includes(connectorType)) {
+  if (server && ['SQL Server', 'Azure SQL Database', 'Azure Synapse Analytics', 'Database/SQL'].includes(connectorType)) {
     server = server.replace(/\//g, '\\');
   }
 
   let dbFunc = 'Sql.Database';
-  if (connectorType === 'PostgreSQL') dbFunc = 'PostgreSQL.Database';
-  else if (connectorType === 'MySQL') dbFunc = 'MySQL.Database';
+  if (['PostgreSQL', 'Azure Database for PostgreSQL', 'Supabase'].includes(connectorType)) dbFunc = 'PostgreSQL.Database';
+  else if (['MySQL', 'Azure Database for MySQL'].includes(connectorType)) dbFunc = 'MySQL.Database';
+
+  if (connectorType === 'MariaDB') {
+    const source = `${server}${database ? `;${database}` : ''}`;
+    const dbExpr = `MariaDB.Contents(${esc(source)}, ${database ? esc(database) : 'null'})`;
+    return table ? { dbExpr, navExpr: (step) => `let _exact = try ${step}{[Name=${esc(table)}]}[Data] otherwise null in if _exact <> null then _exact else Table.SelectRows(${step}, each Text.Lower(Record.FieldOrDefault(_, "Name", Record.FieldOrDefault(_, "Item", ""))) = Text.Lower(${esc(table)})){0}[Data]` } : dbExpr;
+  }
+  if (['Oracle', 'IBM Db2', 'Teradata', 'SAP HANA'].includes(connectorType)) {
+    const dbExpr = connectorType === 'Oracle' ? `Oracle.Database(${esc(server)}, [${query ? `Query=${esc(query)}` : 'CreateNavigationProperties=true'}])`
+      : connectorType === 'IBM Db2' ? `DB2.Database(${esc(server)}, ${esc(database)}, [${query ? `Query=${esc(query)}` : 'CreateNavigationProperties=true'}])`
+      : connectorType === 'Teradata' ? `Teradata.Database(${esc(server)}, [${query ? `Query=${esc(query)}` : 'CreateNavigationProperties=true'}])`
+      : `SapHana.Database(${esc(server)}, [${query ? `Query=${esc(query)}` : 'Implementation="2.0"'}])`;
+    return table && !query
+      ? { dbExpr, navExpr: (step) => `let _exact = try ${step}{[Schema=${esc(schema)},Item=${esc(table)}]}[Data] otherwise null in if _exact <> null then _exact else Table.SelectRows(${step}, each Text.Lower(Record.FieldOrDefault(_, "Schema", "")) = Text.Lower(${esc(schema)}) and Text.Lower(Record.FieldOrDefault(_, "Item", Record.FieldOrDefault(_, "Name", ""))) = Text.Lower(${esc(table)})){0}[Data]` }
+      : dbExpr;
+  }
+  if (connectorType === 'Amazon Redshift') {
+    const dbExpr = `AmazonRedshift.Database(${esc(server)}, ${esc(database)}, [Implementation="2.0"])`;
+    if (!table) return dbExpr;
+    return { dbExpr, navExpr: (step) => `${step}{[Name=${esc(schema)}]}[Data]{[Name=${esc(table)}]}[Data]` };
+  }
+  if (connectorType === 'MongoDB Atlas SQL') {
+    const uri = configured.MongoDBURI;
+    const options = query ? `, [Query=${esc(query)}]` : '';
+    return `MongoDBAtlasODBC.Contents(${esc(uri)}, ${esc(database)}${options})`;
+  }
+  if (connectorType === 'Snowflake') {
+    const warehouse = configured.Warehouse;
+    const role = configured.Role;
+    const optionItems = [role ? `Role=${esc(role)}` : '', database ? `Database=${esc(database)}` : ''].filter(Boolean);
+    const dbExpr = `Snowflake.Databases(${esc(server)}, ${esc(warehouse)}${optionItems.length ? `, [${optionItems.join(', ')}]` : ''})`;
+    if (!table) return dbExpr;
+    if (!database || !configured.Schema) return `error Error.Record("QLIK2PBI.SourceMapping", "Snowflake table navigation requires Database and Schema.", [Source=${esc(mappedRef)}])`;
+    return { dbExpr, navExpr: (step) => `${step}{[Name=${esc(database)},Kind="Database"]}[Data]{[Name=${esc(schema)},Kind="Schema"]}[Data]{[Name=${esc(table)},Kind="Table"]}[Data]` };
+  }
+  if (connectorType === 'Databricks') {
+    const httpPath = configured.HTTPPath;
+    const catalog = configured.Catalog;
+    const optionItems = [`Implementation="2.0"`, catalog ? `Catalog=${esc(catalog)}` : '', database ? `Database=${esc(database)}` : ''].filter(Boolean);
+    const dbExpr = `Databricks.Catalogs(${esc(server)}, ${esc(httpPath)}, [${optionItems.join(', ')}])`;
+    if (!table) return dbExpr;
+    if (!catalog || !database) return `error Error.Record("QLIK2PBI.SourceMapping", "Databricks table navigation requires Catalog and Database/schema.", [Source=${esc(mappedRef)}])`;
+    return { dbExpr, navExpr: (step) => `${step}{[Name=${esc(catalog)},Kind="Database"]}[Data]{[Name=${esc(database)},Kind="Schema"]}[Data]{[Name=${esc(table)},Kind="Table"]}[Data]` };
+  }
 
   if (query) return `${dbFunc}(${esc(server)}, ${esc(database)}, [Query=${esc(query)}])`;
   if (table) {
@@ -1971,7 +2048,7 @@ function dbSourceExpression(mappedRef: string, connectorType: string): string | 
         ? `let _exact = try ${dbStep}{[Item=${tEsc}]}[Data] otherwise null in if _exact <> null then _exact else Table.SelectRows(${dbStep}, each Text.Lower(Record.FieldOrDefault(_, "Item", "")) = Text.Lower(${tEsc})){0}[Data]`
         : `let _exact = try ${dbStep}{[Schema=${sEsc},Item=${tEsc}]}[Data] otherwise null in if _exact <> null then _exact else Table.SelectRows(${dbStep}, each Text.Lower(Record.FieldOrDefault(_, "Schema", "")) = Text.Lower(${sEsc}) and Text.Lower(Record.FieldOrDefault(_, "Item", "")) = Text.Lower(${tEsc})){0}[Data]`;
 
-    if (connectorType === 'MySQL') {
+    if (['MySQL', 'Azure Database for MySQL'].includes(connectorType)) {
       if (schema && schema !== 'dbo') {
         return { dbExpr: `${dbFunc}(${esc(server)}, ${esc(database)})`, navExpr: (dbStep) => buildNav(dbStep, false) };
       }
@@ -1991,6 +2068,56 @@ function sharepointSourceExpression(mappedRef: string): string {
   const url = parts['siteurl'] || parts['url'] || mappedRef;
   if (!url) return `error Error.Record("QLIK2PBI.SourceMapping", "SharePoint source requires a site URL.", [Source=${esc(mappedRef)}])`;
   return `SharePoint.Files(${esc(url)}, [ApiVersion = 15])`;
+}
+
+function mRecordKey(value: string): string { return `#"${String(value).replace(/"/g, '""')}"`; }
+
+function webSourceExpression(mappedRef: string, legacyJsonOnly = false): string {
+  const parts = parseConnectorReference(mappedRef, 'Web');
+  const url = parts.URL || (!mappedRef.includes('=') ? mappedRef : '');
+  if (!/^https?:\/\//i.test(url)) return `error Error.Record("QLIK2PBI.SourceMapping", "Web connector requires an absolute HTTP or HTTPS base URL.", [Source=${esc(mappedRef)}])`;
+  const options: string[] = [];
+  if (parts.RelativePath) options.push(`RelativePath=${esc(parts.RelativePath.replace(/^\//, ''))}`);
+  if (parts.Query) {
+    const query = parts.Query.split('&').map((pair) => {
+      const separator = pair.indexOf('=');
+      const key = decodeURIComponent(separator >= 0 ? pair.slice(0, separator) : pair);
+      const value = decodeURIComponent(separator >= 0 ? pair.slice(separator + 1) : '');
+      return `${mRecordKey(key)}=${esc(value)}`;
+    }).join(', ');
+    if (query) options.push(`Query=[${query}]`);
+  }
+  if (parts.ApiKeyName) options.push(`ApiKeyName=${esc(parts.ApiKeyName)}`);
+  const timeout = Number(parts.TimeoutSeconds || 0);
+  if (Number.isFinite(timeout) && timeout > 0) options.push(`Timeout=#duration(0, 0, ${Math.floor(timeout / 60)}, ${Math.floor(timeout % 60)})`);
+  const request = `Web.Contents(${esc(url)}${options.length ? `, [${options.join(', ')}]` : ''})`;
+  const responseType = legacyJsonOnly ? 'JSON' : (parts.ResponseType || 'Auto');
+  if (responseType === 'JSON') return `let _json = Json.Document(${request}) in if Value.Is(_json, type list) then Table.FromRecords(_json) else if Value.Is(_json, type record) then Record.ToTable(_json) else error Error.Record("QLIK2PBI.SourceShape", "Web JSON response must contain a record or list.", [Source=${esc(url)}])`;
+  if (responseType === 'CSV') return `Table.PromoteHeaders(Csv.Document(${request}, [Delimiter=",", Encoding=65001, QuoteStyle=QuoteStyle.Csv]), [PromoteAllScalars=true])`;
+  if (responseType === 'XML') return `Xml.Tables(${request})`;
+  if (responseType === 'HTML') return `Web.Page(${request})`;
+  return `let _binary = Binary.Buffer(${request}), _json = try Json.Document(_binary) otherwise null, _xml = if _json = null then try Xml.Tables(_binary) otherwise null else null, _csv = if _json = null and _xml = null then try Table.PromoteHeaders(Csv.Document(_binary, [Delimiter=",", Encoding=65001, QuoteStyle=QuoteStyle.Csv]), [PromoteAllScalars=true]) otherwise null else null in if _json <> null then (if Value.Is(_json, type list) then Table.FromRecords(_json) else if Value.Is(_json, type record) then Record.ToTable(_json) else error Error.Record("QLIK2PBI.SourceShape", "Web response JSON has an unsupported shape.", [Source=${esc(url)}])) else if _xml <> null then _xml else if _csv <> null then _csv else error Error.Record("QLIK2PBI.SourceShape", "Web response was not recognized as JSON, XML, or CSV. Choose an explicit response type.", [Source=${esc(url)}])`;
+}
+
+function cloudSourceExpression(mappedRef: string, connectorType: string): string | { dbExpr: string; navExpr: (dbStep: string) => string } {
+  const parts = parseConnectorReference(mappedRef, connectorType);
+  const missing = missingConnectorFields(connectorType, parts);
+  if (missing.length) return `error Error.Record("QLIK2PBI.SourceMapping", "${connectorType} requires ${missing.join(', ')}.", [Source=${esc(mappedRef)}])`;
+  if (connectorType === 'Azure Blob Storage') return `AzureStorage.Blobs(${esc(parts.AccountURL)})`;
+  if (connectorType === 'Azure Data Lake Gen2') return `AzureStorage.DataLake(${esc(parts.URL)})`;
+  if (connectorType === 'Amazon S3') return `AmazonS3.Contents(${esc(parts.BucketURL)})`;
+  if (connectorType === 'Google Sheets') return `GoogleSheets.Contents(${esc(parts.URL)})`;
+  if (connectorType === 'OData Feed') return `OData.Feed(${esc(parts.URL)}, null, [Implementation="2.0"])`;
+  if (connectorType === 'Salesforce Objects') return `Salesforce.Data(${esc(parts.URL || 'https://login.salesforce.com')}, [CreateNavigationProperties=false])`;
+  if (connectorType === 'Google BigQuery') {
+    const billing = parts.BillingProject ? `, BillingProject=${esc(parts.BillingProject)}` : '';
+    const dbExpr = `GoogleBigQuery.Database([Implementation="2.0"${billing}])`;
+    if (!parts.Table) return dbExpr;
+    const project = parts.Project || parts.BillingProject;
+    if (!project || !parts.Dataset) return `error Error.Record("QLIK2PBI.SourceMapping", "Google BigQuery table navigation requires Project (or BillingProject) and Dataset.", [Source=${esc(mappedRef)}])`;
+    return { dbExpr, navExpr: (step) => `${step}{[Name=${esc(project)}]}[Data]{[Name=${esc(parts.Dataset)}]}[Data]{[Name=${esc(parts.Table)}]}[Data]` };
+  }
+  return `error Error.Record("QLIK2PBI.UnsupportedSource", "Unsupported cloud connector.", [Connector=${esc(connectorType)}])`;
 }
 
 
@@ -2017,6 +2144,10 @@ function sourceReferenceKeys(value: string): Set<string> {
   return new Set([canonical, base, stem].filter(Boolean));
 }
 
+function projectFileSourcePath(file: ProjectFile): string {
+  return file.sourcePath || file.path.replace(/#sheet=.*$/i, "");
+}
+
 function findUploadedSourceFile(
   files: ProjectFile[],
   operation: Operation,
@@ -2032,9 +2163,24 @@ function findUploadedSourceFile(
   const exactKeys = new Set(referenceValues.map(canonicalRef).filter(Boolean));
   const looseKeys = new Set(referenceValues.flatMap((value) => [...sourceReferenceKeys(value)]));
   const candidates = files.filter((file) => EMBEDDABLE_SOURCE_EXTENSIONS.has(String(file.ext || "").toLowerCase()) && ((file.isText && Boolean(file.content)) || Boolean(file.binaryBase64)));
-  const exact = candidates.find((file) => exactKeys.has(canonicalRef(file.path)));
+  const requestedSheet = String(mapping?.sheetName || operation.sourceSheetName || "").trim().toLowerCase();
+  const workbookMatches = (file: ProjectFile) => {
+    const sourcePath = projectFileSourcePath(file);
+    return exactKeys.has(canonicalRef(sourcePath))
+      || [...sourceReferenceKeys(sourcePath)].some((key) => looseKeys.has(key));
+  };
+  if (requestedSheet) {
+    const exactSheet = candidates.find((file) => workbookMatches(file) && String(file.sheetName || "").trim().toLowerCase() === requestedSheet);
+    if (exactSheet) return exactSheet;
+    // If no extracted sheet CSV matched, allow binaryBase64 Excel workbook to handle sheet selection
+    const binaryExcel = candidates.find((file) => workbookMatches(file) && Boolean(file.binaryBase64));
+    if (binaryExcel) return binaryExcel;
+    // Never silently substitute the first worksheet when Qlik requested a named sheet.
+    if (candidates.some(workbookMatches)) return null;
+  }
+  const exact = candidates.find((file) => exactKeys.has(canonicalRef(projectFileSourcePath(file))));
   if (exact) return exact;
-  const byName = candidates.find((file) => [...sourceReferenceKeys(file.path)].some((key) => looseKeys.has(key)));
+  const byName = candidates.find((file) => [...sourceReferenceKeys(projectFileSourcePath(file))].some((key) => looseKeys.has(key)));
   if (byName) return byName;
   const tableStem = cleanName(operation.table).toLowerCase();
   return candidates.find((file) => normalizeSampleKey(file.path) === tableStem) || null;
@@ -2071,25 +2217,40 @@ function embeddedProjectFileSourceExpression(file: ProjectFile, connectorType: s
 }
 
 function sourceExpression(m: SourceMap | null, table: string, uploadedFile: ProjectFile | null = null, sheetHint = ""): string | { dbExpr: string; navExpr: (dbStep: string) => string } {
-  const isDb = m?.connectorType && ['Database/SQL', 'SQL Server', 'PostgreSQL', 'MySQL'].includes(m.connectorType);
+  const databaseConnectors = new Set(['Database/SQL', 'SQL Server', 'Azure SQL Database', 'Azure Synapse Analytics', 'PostgreSQL', 'Azure Database for PostgreSQL', 'Supabase', 'MySQL', 'Azure Database for MySQL', 'MariaDB', 'Oracle', 'IBM Db2', 'Teradata', 'SAP HANA', 'Snowflake', 'Databricks', 'Amazon Redshift', 'MongoDB Atlas SQL']);
+  const isDb = Boolean(m?.connectorType && databaseConnectors.has(m.connectorType));
   const embedded = (!isDb && uploadedFile) ? embeddedProjectFileSourceExpression(uploadedFile, m?.connectorType || connector(uploadedFile.path), sheetHint || table) : null;
   if (embedded) return embedded;
   if (!m || m.status !== 'Mapped') {
     return `error Error.Record("QLIK2PBI.SourceMapping", "No executable source mapping is available for table ${table}.", [Table=${esc(table)}, Source=${esc(m?.originalRef || "unmapped")}])`;
   }
-  const rawPath = (m.mappedRef || '').trim().replace(/^["']|["']$/g, '');
+  const configured = parseConnectorReference(m.mappedRef || '', m.connectorType);
+  const rawPath = (configured.FilePath || m.mappedRef || '').trim().replace(/^["']|["']$/g, '');
   const p = esc(rawPath);
   const contentFn = /^[a-z]+:\/\//.test(rawPath.toLowerCase()) ? 'Web.Contents' : 'File.Contents';
   const ct = m.connectorType;
   if (ct === 'CSV/Text') return `Table.PromoteHeaders(Csv.Document(${contentFn}(${p}), [Delimiter=",", Encoding=65001, QuoteStyle=QuoteStyle.Csv]), [PromoteAllScalars=true])`;
-  if (ct === 'Excel') return `let _book = Excel.Workbook(${contentFn}(${p}), null, true), _candidates = Table.SelectRows(_book, each [Kind] = "Table" or [Kind] = "Sheet"), _data = if Table.RowCount(_candidates) = 0 then error Error.Record("QLIK2PBI.SourceShape", "The Excel source contains no table or sheet.", [Source=${p}]) else _candidates{0}[Data] in Table.PromoteHeaders(_data, [PromoteAllScalars=true])`;
+  if (ct === 'Excel') {
+    const requested = String(sheetHint || "").trim();
+    const selection = requested
+      ? `Table.SelectRows(_book, each ([Kind] = "Table" or [Kind] = "Sheet") and Text.Lower(Text.From([Item])) = Text.Lower(${esc(requested)}))`
+      : `Table.SelectRows(_book, each [Kind] = "Table" or [Kind] = "Sheet")`;
+    const missingMessage = requested ? `The requested Excel worksheet '${requested.replace(/'/g, "''")}' was not found.` : "The Excel source contains no table or sheet.";
+    return `let _book = Excel.Workbook(${contentFn}(${p}), null, true), _candidates = ${selection}, _data = if Table.RowCount(_candidates) = 0 then error Error.Record("QLIK2PBI.SourceShape", ${esc(missingMessage)}, [Source=${p}, RequestedSheet=${esc(requested)}]) else _candidates{0}[Data] in Table.PromoteHeaders(_data, [PromoteAllScalars=true])`;
+  }
   if (ct === 'Parquet') return `Parquet.Document(${contentFn}(${p}))`;
   if (ct === 'JSON') return `let _json = Json.Document(${contentFn}(${p})) in if Value.Is(_json, type list) then Table.FromRecords(_json) else if Value.Is(_json, type record) then Record.ToTable(_json) else error Error.Record("QLIK2PBI.SourceShape", "JSON source must contain a record or list of records.", [Source=${p}])`;
   if (ct === 'XML') return `Xml.Tables(${contentFn}(${p}))`;
-  if (ct === 'Web/API') return `let _json = Json.Document(Web.Contents(${p})) in if Value.Is(_json, type list) then Table.FromRecords(_json) else if Value.Is(_json, type record) then Record.ToTable(_json) else error Error.Record("QLIK2PBI.SourceShape", "Web API response must contain a record or list of records.", [Source=${p}])`;
+  if (ct === 'PDF') return `Pdf.Tables(${contentFn}(${p}))`;
+  if (ct === 'Web' || ct === 'Web/API') return webSourceExpression((m.mappedRef || '').trim(), ct === 'Web/API');
   if (ct === 'Folder') return `Folder.Files(${p})`;
-  if (ct === 'Database/SQL' || ct === 'SQL Server' || ct === 'PostgreSQL' || ct === 'MySQL') return dbSourceExpression((m.mappedRef || '').trim(), ct);
+  if (databaseConnectors.has(ct)) return dbSourceExpression((m.mappedRef || '').trim(), ct);
+  if (ct === 'ODBC') {
+    const connection = configured.ConnectionString;
+    return configured.Query ? `Odbc.Query(${esc(connection)}, ${esc(configured.Query)})` : `Odbc.DataSource(${esc(connection)}, [HierarchicalNavigation=true])`;
+  }
   if (ct === 'SharePoint') return sharepointSourceExpression((m.mappedRef || '').trim());
+  if (['Azure Blob Storage', 'Azure Data Lake Gen2', 'Amazon S3', 'Google Sheets', 'Google BigQuery', 'OData Feed', 'Salesforce Objects'].includes(ct)) return cloudSourceExpression((m.mappedRef || '').trim(), ct);
   return `error Error.Record("QLIK2PBI.UnsupportedSource", "Unsupported source connector for table ${table}.", [Table=${esc(table)}, Connector=${esc(ct || "Unknown")}, Source=${p}])`;
 }
 
@@ -2174,7 +2335,8 @@ function buildSourceStagingPlan(
       }
       const rawQuery = `let
     // QLIK2PBI SOURCE MODE: ${sourceModeByQuery[queryName]}
-    // QLIK2PBI SOURCE REF: ${String(uploadedFile?.path || mapping?.mappedRef || sourceRef).replace(/\r?\n/g, " ")}
+    // QLIK2PBI SOURCE REF: ${String(uploadedFile ? projectFileSourcePath(uploadedFile) : mapping?.mappedRef || sourceRef).replace(/\r?\n/g, " ")}
+    // QLIK2PBI EXCEL SHEET: ${String(uploadedFile?.sheetName || explicitSheet || operation.sourceSheetName || "n/a").replace(/\r?\n/g, " ")}
 ${queryBody}`;
       // Source staging queries must preserve the raw uploaded values. Final-model
       // datatype contracts belong to the table compiler, not the physical source
@@ -4141,6 +4303,10 @@ function validate(profiles: Record<string, TableProfile>, mappings: SourceMap[],
     if (m.bypassQvd || m.status === 'Bypassed' || m.connectorType === 'QVD bypassed via lineage') continue;
     if (m.status !== 'Mapped') issues.push({ severity: 'Error', area: 'Source Mapping', objectName: m.originalRef, message: 'Required source mapping is not confirmed.', recommendation: 'Update connector type and mapped path.' });
     if (m.connectorType.includes('QVD')) issues.push({ severity: 'Error', area: 'Source Mapping', objectName: m.originalRef, message: 'Unresolved QVD cannot be loaded directly by standard Power Query.', recommendation: 'Upload the QVD generator script or map this QVD to CSV/Excel/Parquet/SQL.' });
+    const missing = missingConnectorFields(m.connectorType, parseConnectorReference(m.mappedRef, m.connectorType));
+    if (missing.length) issues.push({ severity: 'Error', area: 'Source Mapping', objectName: m.originalRef, message: `${m.connectorType} mapping is missing required fields: ${missing.join(', ')}.`, recommendation: 'Complete every required connector field before export.' });
+    if (/:\/\/[^/@\s]+:[^/@\s]+@/i.test(m.mappedRef)) issues.push({ severity: 'Error', area: 'Source Mapping', objectName: m.originalRef, message: 'Credentials must not be embedded in a connector URL or URI.', recommendation: 'Remove the user name/password and configure credentials in Power BI Data source settings.' });
+    if (/[?;&](?:api[_-]?key|access[_-]?token|token|password|secret)=[^;&\s]+/i.test(m.mappedRef)) issues.push({ severity: 'Error', area: 'Source Mapping', objectName: m.originalRef, message: 'Secret values must not be embedded in source mappings.', recommendation: 'Use ApiKeyName for Web requests and configure the credential value in Power BI Data source settings.' });
   }
   const allowedTypes = new Set(TYPE_OPTIONS);
   for (const [table, cols] of Object.entries(columnTypes || {})) {

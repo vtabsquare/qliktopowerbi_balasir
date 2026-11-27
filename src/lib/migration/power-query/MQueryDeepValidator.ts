@@ -195,6 +195,20 @@ export async function deepValidatePowerQueries(
     }
 
     const stripped = stripMStringsAndComments(query);
+    const fatalGeneratedExpression = /(?:^|[,\n]\s*)[A-Za-z_][A-Za-z0-9_]*\s*=\s*error\s+Error\.Record\s*\(\s*"QLIK2PBI\.(UnsupportedExpression|SourceMapping|UnsupportedSource)"/im.exec(query);
+    if (fatalGeneratedExpression) {
+      const location = lineColumnAt(query, fatalGeneratedExpression.index);
+      addIssue(
+        issues,
+        queryName,
+        "blocking-error",
+        `GENERATED_${fatalGeneratedExpression[1].replace(/([a-z])([A-Z])/g, "$1_$2").toUpperCase()}`,
+        "semantic",
+        `The generated query contains an unconditional QLIK2PBI.${fatalGeneratedExpression[1]} error step.`,
+        "Resolve the source mapping or Qlik expression before exporting. Fatal placeholder expressions cannot be shipped to Power BI Desktop.",
+        { ...location, evidence: fatalGeneratedExpression[0].trim().slice(0, 240) },
+      );
+    }
     const rawQlikFunction = /(?<![A-Za-z0-9_.])(Abs|Fabs|ApplyMap|RangeSum|Aggr|Date#|Num#|Pick|Match|WildMatch)\s*\(/i.exec(stripped);
     if (rawQlikFunction) {
       const location = lineColumnAt(stripped, rawQlikFunction.index);
@@ -310,7 +324,7 @@ export async function deepValidatePowerQueries(
       addIssue(
         issues,
         queryName,
-        "warning",
+        /QLIK2PBI SOURCE MODE:\s*embedded-upload/i.test(query) ? "blocking-error" : "warning",
         "PREVIEW_SOURCE_UNAVAILABLE",
         "preview",
         "No parseable uploaded source sample was available for local 10-row output validation.",

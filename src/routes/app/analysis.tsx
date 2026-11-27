@@ -60,9 +60,22 @@ export function AnalysisPage() {
   const files = enterpriseFiles;
 
   function toProjectFiles(files: typeof enterpriseFiles) {
-    return files
-      .filter(f => f.parsedAsText || Boolean(f.binaryBase64))
-      .map(f => ({
+    return files.flatMap(f => {
+      if (f.excelSheets?.length) {
+        return f.excelSheets.map(sheet => ({
+          path: `${f.path || f.name}#sheet=${encodeURIComponent(sheet.name)}`,
+          sourcePath: f.path || f.name,
+          sheetName: sheet.name,
+          ext: ".csv",
+          size: sheet.csvText.length,
+          isText: true,
+          content: sheet.csvText,
+          binaryBase64: f.binaryBase64,
+          note: `Excel worksheet ${sheet.name} from ${f.name}`,
+        }));
+      }
+      if (!f.parsedAsText && !f.binaryBase64) return [];
+      return [{
         path: f.path || f.name,
         ext: f.extension || "",
         size: Math.round((f.sizeKb || 0) * 1024),
@@ -70,7 +83,8 @@ export function AnalysisPage() {
         content: f.text || "",
         binaryBase64: f.binaryBase64,
         note: "",
-      }));
+      }];
+    });
   }
 
   const runAnalysis = useCallback(async (

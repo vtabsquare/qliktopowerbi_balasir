@@ -36,6 +36,7 @@ import { repairDaxDependencies, repairStandaloneDaxExpression } from "@/lib/migr
 import { validateDaxMeasures, type DaxValidationResult } from "@/lib/migration/dax/DaxValidation";
 import { requestAiDaxRepair } from "@/lib/migration/dax/DaxAiRepair";
 import { isQlikEnvironmentVariable } from "@/lib/migration/expression";
+import { CONNECTOR_DEFINITIONS, getConnectorDefinition } from "@/lib/migration/connectors";
 
 import { generatePbipZip } from "@/lib/migration/pbip-generator";
 // ────────────────────────────────────────────────────────────────
@@ -431,9 +432,22 @@ function DataTable({ rows, columns }: { rows: Record<string, unknown>[]; columns
 // ────────────────────────────────────────────────────────────────
 
 function toProjectFiles(files: ExtractedFile[]): ProjectFile[] {
-  return files
-    .filter(f => f.parsedAsText || Boolean(f.binaryBase64))
-    .map(f => ({
+  return files.flatMap(f => {
+    if (f.excelSheets?.length) {
+      return f.excelSheets.map(sheet => ({
+        path: `${f.path || f.name}#sheet=${encodeURIComponent(sheet.name)}`,
+        sourcePath: f.path || f.name,
+        sheetName: sheet.name,
+        ext: ".csv",
+        size: sheet.csvText.length,
+        isText: true,
+        content: sheet.csvText,
+        binaryBase64: f.binaryBase64,
+        note: `Excel worksheet ${sheet.name} from ${f.name}`,
+      }));
+    }
+    if (!f.parsedAsText && !f.binaryBase64) return [];
+    return [{
       path: f.path || f.name,
       ext: f.extension || "",
       size: Math.round((f.sizeKb || 0) * 1024),
@@ -441,7 +455,8 @@ function toProjectFiles(files: ExtractedFile[]): ProjectFile[] {
       content: f.text || "",
       binaryBase64: f.binaryBase64,
       note: "",
-    }));
+    }];
+  });
 }
 
 // ────────────────────────────────────────────────────────────────
@@ -612,7 +627,7 @@ function matchSourceFileForRow(row: Pick<MappingRow, "table" | "originalRef">, c
 function DynamicMappingInput({ connectorType, value, onChange }: { connectorType: string; value: string; tableName?: string; originalRef?: string; onChange: (val: string) => void }) {
   const parts = parseMappedRef(value);
 
-  if (["CSV/Text", "Excel", "Parquet", "JSON", "XML", "Folder"].includes(connectorType)) {
+  if (["CSV/Text", "Excel", "Parquet", "JSON", "XML", "PDF", "Folder"].includes(connectorType)) {
     const path = (!value.includes("=") ? value : parts["FilePath"]) || "";
     return (
       <input
@@ -624,32 +639,52 @@ function DynamicMappingInput({ connectorType, value, onChange }: { connectorType
     );
   }
 
-  if (connectorType === 'SharePoint') {
-    const url = (!value.includes('=') ? value : parts['SiteURL']) || '';
-    return (
-      <input
-        value={url}
-        onChange={e => onChange(e.target.value)}
-        placeholder="Site URL"
-        className="w-full min-w-[200px] px-2 py-1 rounded border border-border bg-surface text-xs text-foreground font-mono"
-      />
-    );
+  const definition = getConnectorDefinition(connectorType);
+  if (definition && definition.fields.length === 0) {
+    return <span className="text-[10px] text-muted-foreground">No connection fields required.</span>;
   }
-
-  if (["SQL Server", "PostgreSQL", "MySQL", "Database/SQL"].includes(connectorType)) {
-    const updatePart = (k: string, v: string) => {
-      const newParts = { ...parts, [k]: v };
-      onChange(buildMappedRef(newParts));
-    };
-    
-    // When we first switch from CSV to SQL Server, the 'value' is a raw file path, so parts is empty.
-    // If parts is empty, we don't want to lose the existing value completely, but here it's fine.
+  if (definition && definition.fields.length > 0) {
+    const firstField = definition.fields[0];
+    const values = value.includes("=") ? parts : definition.fields.length === 1 ? { [firstField.key]: value } : {};
+    const updatePart = (key: string, nextValue: string) => onChange(buildMappedRef({ ...values, [key]: nextValue }));
+    if (definition.fields.length === 1) {
+      return (
+        <input
+          type={firstField.kind === "url" ? "url" : "text"}
+          value={values[firstField.key] || ""}
+          onChange={(event) => updatePart(firstField.key, event.target.value)}
+          placeholder={firstField.placeholder || firstField.label}
+          aria-label={firstField.label}
+          className="w-full min-w-[200px] rounded border border-border bg-surface px-2 py-1 font-mono text-xs text-foreground"
+        />
+      );
+    }
     return (
-      <div className="flex gap-2 min-w-[350px]">
-        <input value={parts['Server'] || ''} onChange={e => updatePart('Server', e.target.value)} placeholder="Server" className="w-1/4 px-2 py-1 rounded border border-border bg-surface text-xs text-foreground font-mono" />
-        <input value={parts['Database'] || ''} onChange={e => updatePart('Database', e.target.value)} placeholder="Database" className="w-1/4 px-2 py-1 rounded border border-border bg-surface text-xs text-foreground font-mono" />
-        <input value={parts['Schema'] || ''} onChange={e => updatePart('Schema', e.target.value)} placeholder={connectorType === "MySQL" ? "Schema (opt.)" : "Schema"} className="w-1/4 px-2 py-1 rounded border border-border bg-surface text-xs text-foreground font-mono" />
-        <input value={parts['Table'] || ''} onChange={e => updatePart('Table', e.target.value)} placeholder="Table/View" className="w-1/4 px-2 py-1 rounded border border-border bg-surface text-xs text-foreground font-mono" />
+      <div className="min-w-[360px]">
+        <div className="grid grid-cols-2 gap-1.5">
+          {definition.fields.map((field) => field.kind === "select" ? (
+            <select
+              key={field.key}
+              value={values[field.key] || field.options?.[0] || ""}
+              onChange={(event) => updatePart(field.key, event.target.value)}
+              aria-label={field.label}
+              className={cn("rounded border border-border bg-surface px-2 py-1 text-xs text-foreground", field.wide && "col-span-2")}
+            >
+              {field.options?.map((option) => <option key={option}>{option}</option>)}
+            </select>
+          ) : (
+            <input
+              key={field.key}
+              type={field.kind === "url" ? "url" : "text"}
+              value={values[field.key] || ""}
+              onChange={(event) => updatePart(field.key, event.target.value)}
+              placeholder={`${field.label}${field.required ? " *" : ""}${field.placeholder ? ` — ${field.placeholder}` : ""}`}
+              aria-label={field.label}
+              className={cn("rounded border border-border bg-surface px-2 py-1 font-mono text-xs text-foreground", field.wide && "col-span-2")}
+            />
+          ))}
+        </div>
+        <div className="mt-1 text-[9px] text-muted-foreground">Auth: {definition.authentication} (credentials are not stored).</div>
       </div>
     );
   }
@@ -1102,7 +1137,11 @@ export function TabSourceMapping({
                     {row.bypassQvd ? <Badge label={row.connectorType} variant="info" /> : (
                       <select value={row.connectorType} onChange={e => handleCellChange(i, "connectorType", e.target.value)}
                         className="px-2 py-1 rounded border border-border bg-surface text-xs text-foreground">
-                        {CONNECTOR_OPTIONS.map(o => <option key={o}>{o}</option>)}
+                        {[...new Set(CONNECTOR_DEFINITIONS.map((item) => item.category))].map((category) => (
+                          <optgroup key={category} label={category}>
+                            {CONNECTOR_DEFINITIONS.filter((item) => item.category === category).map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
+                          </optgroup>
+                        ))}
                       </select>
                     )}
                   </td>

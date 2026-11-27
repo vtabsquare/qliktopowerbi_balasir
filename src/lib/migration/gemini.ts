@@ -777,7 +777,16 @@ export async function generatePowerQueryViaAi(
       - 'SQL Server' / ODBC / OLEDB SQL → Sql.Database("TODO_Server", "TODO_Database")
       - Oracle → Oracle.Database("TODO_Server")
       - Databricks → Databricks.Catalogs("TODO_Host", "/sql/1.0/warehouses/TODO_Id")
-      - Snowflake → Snowflake.Databases("TODO_Account.snowflakecomputing.com")
+      - Snowflake → Snowflake.Databases("TODO_Account.snowflakecomputing.com", "TODO_Warehouse")
+      - MariaDB → MariaDB.Contents("TODO_Server;TODO_Database", "TODO_Database")
+      - MongoDB Atlas SQL → MongoDBAtlasODBC.Contents("TODO_MongoDB_URI", "TODO_FederatedDatabase")
+      - Amazon Redshift → AmazonRedshift.Database("TODO_Server", "TODO_Database", [Implementation="2.0"])
+      - Google BigQuery → GoogleBigQuery.Database([Implementation="2.0"])
+      - Google Sheets → GoogleSheets.Contents("TODO_Google_Sheet_URL")
+      - Azure Blob Storage → AzureStorage.Blobs("TODO_Account_URL")
+      - Azure Data Lake Gen2 → AzureStorage.DataLake("TODO_Filesystem_URL")
+      - OData Feed → OData.Feed("TODO_Service_Root", null, [Implementation="2.0"])
+      - Web → Web.Contents("TODO_Base_URL", [RelativePath="TODO_Relative_Path", Query=[page="1"]])
       - Excel (.xlsx/.xls) → Excel.Workbook(File.Contents(vSourcePath & "filename.xlsx"), null, true)
       - CSV (.csv) → Csv.Document(File.Contents(vSourcePath & "filename.csv"), [Delimiter=",", Encoding=65001])
       - QVD with no known target → use Csv.Document(File.Contents(vSourcePath & "filename.csv"), [Delimiter=",", Encoding=65001, QuoteStyle=QuoteStyle.Csv]) /* TODO: was QVD: "filename.qvd" — replace with your actual target connector */
@@ -796,9 +805,18 @@ export async function generatePowerQueryViaAi(
       - "SQL Server" or "Database/SQL" → Sql.Database("Server value", "Database value") then navigate to Schema/Table
       - "PostgreSQL" → PostgreSQL.Database("Server value", "Database value") then navigate to Schema/Item
       - "MySQL" → MySQL.Database("Server value", "Database value") then navigate to Item
+      - "MariaDB" → MariaDB.Contents("Server value;Database value", "Database value")
+      - "Supabase" → PostgreSQL.Database("Server value", "Database value") then navigate to Schema/Item
+      - "Snowflake" → Snowflake.Databases("Server value", "Warehouse value") then navigate to Database/Schema/Table
+      - "Databricks" → Databricks.Catalogs("Server value", "HTTPPath value", [Implementation="2.0"])
+      - "Amazon Redshift" → AmazonRedshift.Database("Server value", "Database value", [Implementation="2.0"])
+      - "Google BigQuery" → GoogleBigQuery.Database([Implementation="2.0"])
+      - "MongoDB Atlas SQL" → MongoDBAtlasODBC.Contents("MongoDBURI value", "Database value")
       - "SharePoint" → SharePoint.Files("SiteURL value", [ApiVersion=15])
-      - "Web/API" → Web.Contents("exact mappedRef path")
-    - For database connectors (PostgreSQL, MySQL, SQL Server), the 'mappedRef' is a semicolon-delimited string like "Server=localhost;Database=mydb;Schema=public;Table=loans". Parse each key=value pair from this string to build the correct connector call.
+      - "Web" / legacy "Web/API" → Web.Contents("URL value", with RelativePath, Query, ApiKeyName and Timeout options when supplied)
+      - "OData Feed" → OData.Feed("URL value", null, [Implementation="2.0"])
+      - "Google Sheets" → GoogleSheets.Contents("URL value")
+    - For database connectors, the 'mappedRef' is a semicolon-delimited string like "Server=localhost;Database=mydb;Schema=public;Table=loans". Parse each key=value pair from this string to build the exact connector call.
     - Example for PostgreSQL mappedRef "Server=localhost;Database=loan_management;Schema=public;Table=loans":
       Source = PostgreSQL.Database("localhost", "loan_management"),
       Loans_Table = Source{[Schema="public", Item="loans"]}[Data]

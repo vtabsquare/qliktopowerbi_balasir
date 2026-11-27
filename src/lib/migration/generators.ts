@@ -185,13 +185,22 @@ function sourceConnector(step: {
     case "Snowflake": return `Snowflake.Databases("${escapeM(requireConnection())}", "WAREHOUSE")`;
     case "PostgreSQL": return `PostgreSQL.Database("${escapeM(requireConnection())}", ${database ? `"${escapeM(database)}"` : "null"})`;
     case "MySQL": return `MySQL.Database("${escapeM(requireConnection())}", ${database ? `"${escapeM(database)}"` : "null"})`;
+    case "MariaDB": return `MariaDB.Contents("${escapeM(requireConnection())};${escapeM(database || "db")}", "${escapeM(database || "db")}")`;
+    case "Supabase": return `PostgreSQL.Database("${escapeM(requireConnection())}", ${database ? `"${escapeM(database)}"` : "null"})`;
+    case "Amazon Redshift": return `AmazonRedshift.Database("${escapeM(requireConnection())}", ${database ? `"${escapeM(database)}"` : "null"}, [Implementation="2.0"])`;
+    case "Google BigQuery": return `GoogleBigQuery.Database([Implementation="2.0"])`;
+    case "MongoDB Atlas SQL": return `MongoDBAtlasODBC.Contents("${escapeM(requireConnection())}", ${database ? `"${escapeM(database)}"` : "null"})`;
     case "Excel": return `Excel.Workbook(File.Contents("${escapeM(file || from)}"), null, true)`;
     case "CSV": return `Csv.Document(File.Contents("${escapeM(file || from)}"), [Delimiter=",", Encoding=65001, QuoteStyle=QuoteStyle.Csv])`;
     case "Parquet": return `Parquet.Document(File.Contents("${escapeM(file || from)}"))`;
     case "JSON": return `Json.Document(File.Contents("${escapeM(file || from)}"))`;
     case "XML": return `Xml.Tables(File.Contents("${escapeM(file || from)}"))`;
+    case "PDF": return `Pdf.Tables(File.Contents("${escapeM(file || from)}"))`;
+    case "Google Sheets": return `GoogleSheets.Contents("${escapeM(file || from)}")`;
     case "QVD": return `File.Contents("${escapeM(qvd || file || from)}") /* TODO: Replace with target data source (was QVD) */`;
     case "REST": return `Json.Document(Web.Contents("${escapeM(file || from)}"))`;
+    case "REST API": return `Json.Document(Web.Contents("${escapeM(file || from)}"))`;
+    case "OData": return `OData.Feed("${escapeM(file || from)}", null, [Implementation="2.0"])`;
     case "Databricks": return `Databricks.Catalogs("${escapeM(requireConnection())}", "/sql/1.0/warehouses")`;
     case "SAP": return `SapBusinessWarehouse.Cubes("${escapeM(requireConnection())}", "00", "800")`;
     case "ODBC":

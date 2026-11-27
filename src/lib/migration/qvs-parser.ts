@@ -8,6 +8,16 @@ let _id = 0;
 const uid = (p: string) => `${p}_${++_id}_${Date.now().toString(36)}`;
 
 const PLATFORM_HINTS: { match: RegExp; platform: SourcePlatform }[] = [
+  { match: /azure\s*synapse/i, platform: "Azure Synapse Analytics" },
+  { match: /azure\s*sql/i, platform: "Azure SQL Database" },
+  { match: /supabase/i, platform: "Supabase" },
+  { match: /mariadb/i, platform: "MariaDB" },
+  { match: /redshift/i, platform: "Amazon Redshift" },
+  { match: /bigquery/i, platform: "Google BigQuery" },
+  { match: /mongodb|atlas\s*sql/i, platform: "MongoDB Atlas SQL" },
+  { match: /teradata/i, platform: "Teradata" },
+  { match: /db2|ibm\s*db2/i, platform: "IBM Db2" },
+  { match: /google\s*sheets/i, platform: "Google Sheets" },
   { match: /sqlserver|mssql|sql_server|Provider=SQLOLEDB|Driver=\{SQL Server/i, platform: "SQL Server" },
   { match: /oracle|oci|tns/i, platform: "Oracle" },
   { match: /mysql/i, platform: "MySQL" },

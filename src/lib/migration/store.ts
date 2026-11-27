@@ -318,17 +318,31 @@ function touchWorkspace(projectWorkspace: ProjectWorkspace | null): ProjectWorks
 }
 
 function toEnterpriseProjectFiles(files: ExtractedFile[]) {
-  return files
-    .filter((file) => file.parsedAsText)
-    .map((file) => ({
+  return files.flatMap((file) => {
+    if (file.excelSheets?.length) {
+      return file.excelSheets.map((sheet) => ({
+        path: `${file.path || file.name}#sheet=${encodeURIComponent(sheet.name)}`,
+        sourcePath: file.path || file.name,
+        sheetName: sheet.name,
+        ext: ".csv",
+        size: sheet.csvText.length,
+        isText: true,
+        content: sheet.csvText,
+        binaryBase64: file.binaryBase64,
+        note: `Excel worksheet ${sheet.name} from ${file.name}`,
+      }));
+    }
+    if (!file.parsedAsText && !file.binaryBase64) return [];
+    return [{
       path: file.path || file.name,
       ext: file.extension || "",
       size: Math.round((file.sizeKb || 0) * 1024),
-      isText: true,
+      isText: Boolean(file.parsedAsText),
       content: file.text || "",
       binaryBase64: file.binaryBase64,
       note: "",
-    }));
+    }];
+  });
 }
 
 function mappingRowsFromAnalysis(analysis: EnterpriseAnalysis): MappingRow[] {

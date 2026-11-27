@@ -61,8 +61,14 @@ function mString(value: string): string {
   return `"${String(value).replace(/"/g, '""')}"`;
 }
 
+function canonicalFieldName(name: string): string {
+  // The enterprise parser removes Qlik's hidden-field prefix when projecting
+  // semantic columns. Apply the same rule to every downstream row reference.
+  return String(name || "").trim().replace(/^%+/, "");
+}
+
 function recordField(name: string): string {
-  return `Record.FieldOrDefault(_, ${mString(name)}, null)`;
+  return `Record.FieldOrDefault(_, ${mString(canonicalFieldName(name))}, null)`;
 }
 
 function tokenize(input: string): Token[] {
@@ -142,10 +148,12 @@ function tokenize(input: string): Token[] {
       tokens.push({ kind: "number", value, position: start });
       continue;
     }
-    if (/[A-Za-z_@]/.test(char)) {
+    // Qlik commonly prefixes hidden/key fields with %. It is part of the
+    // identifier, not a modulo operator, and must be preserved verbatim.
+    if (/[A-Za-z_@%]/.test(char)) {
       const start = index;
       let value = "";
-      while (index < input.length && /[A-Za-z0-9_.$#@]/.test(input[index])) value += input[index++];
+      while (index < input.length && /[A-Za-z0-9_.$#@%]/.test(input[index])) value += input[index++];
       tokens.push({ kind: "identifier", value, position: start });
       continue;
     }
@@ -318,7 +326,8 @@ class Parser {
     }
     if (token.kind === "field") {
       this.consume();
-      return { code: recordField(token.value), fields: [token.value], variables: [], warnings: [] };
+      const field = canonicalFieldName(token.value);
+      return { code: recordField(field), fields: [field], variables: [], warnings: [] };
     }
     if (token.kind === "variable") {
       this.consume();
@@ -337,7 +346,8 @@ class Parser {
       }
       if (low === "true" || low === "false") return { code: low, fields: [], variables: [], warnings: [] };
       if (this.match("lparen")) return this.parseFunction(token.value);
-      return { code: recordField(token.value), fields: [token.value], variables: [], warnings: [] };
+      const field = canonicalFieldName(token.value);
+      return { code: recordField(field), fields: [field], variables: [], warnings: [] };
     }
     throw new Error(`Expected an expression at position ${token.position + 1}.`);
   }
@@ -354,13 +364,14 @@ class Parser {
     const fn = name.toLowerCase();
     const all = merge(...args);
     const arg = (index: number, fallback = "null") => args[index]?.code ?? fallback;
+    if (fn === "null") return { code: "null", ...all };
     if (fn === "if") {
       if (args.length < 2) throw new Error("If() requires a condition and a true expression.");
       return { code: `if ${arg(0, "false")} then ${arg(1)} else ${arg(2)}`, ...all };
     }
     if (fn === "abs" || fn === "fabs") return { code: `(try Number.Abs(Number.From(${arg(0, "0")})) otherwise null)`, ...all };
     if (fn === "round") return { code: `(try Number.Round(Number.From(${arg(0, "0")})${args[1] ? `, Int64.From(${arg(1)})` : ""}) otherwise null)`, ...all };
-    if (fn === "floor") return { code: `(try Number.RoundDown(Number.From(${arg(0, "0")})) otherwise null)`, ...all };
+    if (fn === "floor") return { code: `(let _value = ${arg(0, "0")}, _date = try Date.From(_value) otherwise try Date.FromText(Text.From(_value), [Culture="en-US"]) otherwise null in if _date <> null then _date else try Number.RoundDown(Number.From(_value)) otherwise null)`, ...all };
     if (fn === "ceil" || fn === "ceiling") return { code: `(try Number.RoundUp(Number.From(${arg(0, "0")})) otherwise null)`, ...all };
     if (fn === "len") return { code: `(try Text.Length(Text.From(${arg(0, '""')})) otherwise null)`, ...all };
     if (fn === "trim") return { code: `(try Text.Trim(Text.From(${arg(0, '""')})) otherwise null)`, ...all };
